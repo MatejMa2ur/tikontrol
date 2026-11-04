@@ -75,6 +75,7 @@ const QUERIES: &[Q] = &[
     q("routes", "/ip/route/print", &["dst-address", "gateway", "distance", "routing-table", "active", "dynamic", "static", "comment", "disabled"]),
     q("dnsStatic", "/ip/dns/static/print", &["name", "address", "type", "comment", "disabled"]),
     one("dnsCfg", "/ip/dns/print", &["servers", "use-doh-server", "allow-remote-requests", "mdns-repeat-ifaces"]).arrays(&["servers", "mdns-repeat-ifaces"]),
+    q("dnsCache", "/ip/dns/cache/print", &["name", "type", "data", "ttl"]),
     q("queues", "/queue/simple/print", &["name", "target", "max-limit", "disabled", "comment"]).arrays(&["target"]),
     q("hotspot", "/ip/hotspot/print", &["name", "interface", "address-pool", "profile", "disabled"]),
     q("users", "/user/print", &["name", "group", "last-logged-in", "disabled", "comment"]),
@@ -260,6 +261,10 @@ fn trim(out: &mut Map<String, Value>) {
         log.retain(|l| l["message"].as_str().is_some_and(|m| !m.contains("via ssh") && !m.contains("publickey accepted") && !m.contains("via api")));
         let n = log.len().saturating_sub(40);
         log.drain(..n);
+    }
+    if let Some(Value::Array(c)) = out.get_mut("dnsCache") {
+        c.retain(|x| matches!(x["type"].as_str(), Some("A" | "AAAA")));
+        c.truncate(300);
     }
 }
 

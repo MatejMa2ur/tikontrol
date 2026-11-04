@@ -11,7 +11,7 @@ Clean-room: we copy the behaviour, never the assets.
 **Backing:** `ROS` = RouterOS API on the router · `CMR` = MikroTik CMR server · `tik` = our own logic/DB · `✗` = nothing can back it
 
 <!-- progress:start -->
-**Progress:** 6 ✅ · 74 🟨 · 116 🎨 · 22 ⬜ · 8 ➖ (226 items, 3% done)
+**Progress:** 6 ✅ · 77 🟨 · 113 🎨 · 22 ⬜ · 8 ➖ (226 items, 3% done)
 <!-- progress:end -->
 
 ---
@@ -143,9 +143,9 @@ Clean-room: we copy the behaviour, never the assets.
 | Feature | Backing | Phase | Status |
 |---|---|---|---|
 | Traffic by application / category | CMR apptraffic | 3 |🎨 |
-| Traffic by client over time | tik | 2 |🎨 |
-| Top domains | ROS DNS cache + tik | 3 |🎨 |
-| Flow log (src, dst, port, bytes) | ROS traffic-flow (IPFIX) → tik collector | 3 |🎨 |
+| Traffic by client over time | tik | 2 | 🟨 |
+| Top domains | ROS DNS cache + tik | 3 | 🟨 |
+| Flow log (src, dst, port, bytes) | ROS traffic-flow (IPFIX) → tik collector | 3 | 🟨 |
 | Traffic by country | tik GeoIP on flows | 4 |🎨 |
 | Blocked threats view | ✗ (no IDS) | – | ➖ |
 

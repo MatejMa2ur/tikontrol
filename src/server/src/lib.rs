@@ -4,6 +4,7 @@ pub mod app;
 pub mod apply;
 pub mod auth;
 pub mod features;
+pub mod flows;
 pub mod http;
 pub mod intents;
 pub mod live;

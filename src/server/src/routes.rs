@@ -32,6 +32,19 @@ pub fn extra(app: &Arc<App>, req: &Req, s: &Session) -> Option<Resp> {
             Resp::json(200, &json!(v))
         }
         ("GET", "/api/v1/events") => events(app, req),
+        ("GET", "/api/v1/flows") => {
+            let mut v = lock(crate::flows::agg()).top(20);
+            // name destinations from the router's DNS cache when we have it
+            let snap = app.snap.read().unwrap_or_else(|e| e.into_inner());
+            let names: std::collections::HashMap<&str, &str> = snap.data.as_deref().and_then(|d| d["dnsCache"].as_array()).map(|a| a.iter().filter_map(|c| Some((c["data"].as_str()?, c["name"].as_str()?))).collect()).unwrap_or_default();
+            if let Some(ds) = v["destinations"].as_array_mut() {
+                for d in ds {
+                    let n = d["ip"].as_str().and_then(|ip| names.get(ip)).map(|s| s.to_string());
+                    d["name"] = json!(n);
+                }
+            }
+            Resp::json(200, &v)
+        }
         _ => return crate::features::route(app, req, s),
     })
 }
