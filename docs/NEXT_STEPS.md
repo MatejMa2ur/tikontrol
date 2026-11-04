@@ -35,6 +35,7 @@ From [FEASIBILITY.md](FEASIBILITY.md):
 - How does `/safe-mode` behave over the binary API?
 - Which device mode is the router in? (`/system/device-mode/print`)
 - What does polling cost on small hardware?
+- How does a RouterOS App appear in WinBox, and is its link clickable? (See [research/winbox_integration.md](research/winbox_integration.md))
 
 ## Gates before writing a backend
 
@@ -47,6 +48,7 @@ From [FEASIBILITY.md](FEASIBILITY.md):
 - Replace "UniFi-inspired" in the README with neutral wording? The study suggests it.
 - Update `PLAN.md`: home server first, CMR optional, read-only first, MCP as a phase.
 - Choose a license. The repo has none yet.
+- Decide how users open tikontrol from RouterOS.
 
 ## Open checks
 

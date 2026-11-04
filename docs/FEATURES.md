@@ -11,7 +11,7 @@ Clean-room: we copy the behaviour, never the assets.
 **Backing:** `ROS` = RouterOS API on the router · `CMR` = MikroTik CMR server · `tik` = our own logic/DB · `✗` = nothing can back it
 
 <!-- progress:start -->
-**Progress:** 0 ✅ · 0 🟨 · 178 🎨 · 36 ⬜ · 8 ➖ (222 items, 0% done)
+**Progress:** 0 ✅ · 0 🟨 · 178 🎨 · 40 ⬜ · 8 ➖ (226 items, 0% done)
 <!-- progress:end -->
 
 ---
@@ -307,6 +307,16 @@ Not a UniFi feature: this is our own addition. Light or dark, the colour theme a
 | MikroTik-style colour theme: own palette based on MikroTik's current look, no logos or implied endorsement | tik | 2 | ⬜ |
 | Theme picker with live preview, saved per user | tik | 2 | ⬜ |
 | Every theme meets WCAG 2.2 AA contrast | tik | 2 | ⬜ |
+
+## Opening tikontrol from RouterOS
+Not a UniFi feature: this is our own addition. We want a way to reach tikontrol from RouterOS, and the method is still undecided. A real tab inside WinBox looks impossible: no plugin or extension system was found, though this is untested. Findings are in [research/winbox_integration.md](research/winbox_integration.md).
+
+| Feature | Backing | Phase | Status |
+|---|---|---|---|
+| Decide how users open tikontrol from RouterOS | tik | 2 | ⬜ |
+| Package tikontrol as a custom RouterOS App, with a `ui-url` link | ROS `/app` (arm64, x86) | 4 | ⬜ |
+| Link with our own icon on the WebFig login page (`show-in-webfig`) | ROS `/app` | 4 | ⬜ |
+| Check on hardware how an App appears in WinBox and what opening it does | ROS | 0 | ⬜ |
 
 ## Read-only mode
 Not a UniFi feature: this is our own addition. The router enforces it, not tikontrol. tikontrol connects with a RouterOS user that has no `write` policy, so RouterOS refuses edits even if the app has a bug or is compromised.
