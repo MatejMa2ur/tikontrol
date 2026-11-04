@@ -3,7 +3,7 @@ import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import { test } from 'node:test'
 import { simulateBe3 } from '../src/ui/src/lib/be3.ts'
-import { bandLabel, detectHardware, normalizeWifi, standardOf } from '../src/ui/src/lib/hardware.ts'
+import { bandLabel, detectHardware, normalizeWifi, parseChannel, standardOf } from '../src/ui/src/lib/hardware.ts'
 
 const sample = JSON.parse(readFileSync(new URL('../src/ui/src/lib/sample.json', import.meta.url), 'utf8'))
 
@@ -57,4 +57,12 @@ test('the committed sample is fictional', () => {
 test('maps RouterOS band names', () => {
   assert.deepEqual(['2ghz-b/g/n', '5ghz-a/n/ac', '5ghz-ax', '6ghz-be'].map(standardOf), ['WiFi 4', 'WiFi 5', 'WiFi 6', 'WiFi 7'])
   assert.deepEqual(['2ghz-be', '5ghz-be', '6ghz-be'].map(bandLabel), ['2.4 GHz', '5 GHz', '6 GHz'])
+})
+
+test('parses monitor channel strings', () => {
+  assert.deepEqual(parseChannel('5640/20-eCee/ac/DP(24dBm)'), { freq: 5640, channel: 128, width: 80, dfs: true, txPower: 24 })
+  assert.deepEqual(parseChannel('5180/20-Ceee/ac(23dBm)'), { freq: 5180, channel: 36, width: 80, dfs: false, txPower: 23 })
+  assert.deepEqual(parseChannel('2437/20/gn(17dBm)'), { freq: 2437, channel: 6, width: 20, dfs: false, txPower: 17 })
+  assert.deepEqual(parseChannel('5500/ax/eC'), { freq: 5500, channel: 100, width: 40, dfs: true, txPower: undefined })
+  assert.equal(parseChannel(undefined).freq, undefined)
 })

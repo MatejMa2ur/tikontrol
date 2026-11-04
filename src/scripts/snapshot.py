@@ -35,6 +35,7 @@ Q = {
     "radios": "[/interface/wireless/monitor [find] once as-value]",
     # newer boards use the `wifi` package instead; each router answers one of the two sets
     "wifiNew": "[/interface/wifi/print as-value proplist=name,channel.band,channel.width,configuration.ssid,running,disabled]",
+    "radiosNew": "[/interface/wifi/monitor [find] once as-value]",
     "stationsNew": "[/interface/wifi/registration-table/print as-value proplist=interface,mac-address,signal,tx-rate,rx-rate,uptime,bytes,last-ip,band,ssid]",
     # --- settings pages (explicit proplists: never keys, passphrases or script bodies) ---
     "wireguard": "[/interface/wireguard/print as-value proplist=name,listen-port,mtu,running,disabled,comment]",
@@ -63,7 +64,7 @@ Q = {
     "loggingRules": "[/system/logging/print as-value proplist=topics,action,disabled]",
     "neighbors": "[/ip/neighbor/print as-value proplist=interface,address,mac-address,identity,platform,board,version]",
     "secProfiles": "[/interface/wireless/security-profiles/print as-value proplist=name,mode,authentication-types,management-protection]",
-    "accessList": "[/interface/wireless/access-list/print as-value proplist=mac-address,interface,authentication,forwarding,comment]",
+    "accessList": "[/interface/wireless/access-list/print as-value proplist=mac-address,interface,signal-range,authentication,forwarding,comment]",
     "trafficFlow": '({"enabled"=[/ip/traffic-flow/get enabled]})',
     "ovpn": "[/interface/ovpn-server/server/print as-value]",
     "l2tp": '({"enabled"=[/interface/l2tp-server/server/get enabled]})',
@@ -104,6 +105,8 @@ if isinstance(snap.get("dnsCache"), list):
 if isinstance(snap.get("radios"), list):
     keep = ("name", "channel", "noise-floor", "overall-tx-ccq", "registered-clients", "status")
     snap["radios"] = [{k: r.get(k) for k in keep} for r in snap["radios"]]
+if isinstance(snap.get("radiosNew"), list):
+    snap["radiosNew"] = [{k: r.get(k) for k in ("channel", "state", "registered-peers", "tx-power")} for r in snap["radiosNew"]]
 
 if isinstance(snap.get("log"), list):
     # drop this script's own ssh logins, they'd drown the event list

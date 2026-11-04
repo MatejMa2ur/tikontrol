@@ -20,10 +20,28 @@ export function normalizeWifi(raw: any) {
       disabled: w.disabled,
     })),
     stations: legacy.length ? list(raw.stations) : list(raw.stationsNew).map((s) => ({ ...s, 'signal-strength': String(s.signal) })),
-    radios: list(raw.radios),
+    // ponytail: the wifi monitor's field names are from the manual, unverified on hardware
+    radios: legacy.length ? list(raw.radios) : list(raw.radiosNew),
     linkQuality: list(raw.linkQuality),
     secProfiles: list(raw.secProfiles),
     accessList: list(raw.accessList),
+  }
+}
+
+// Monitor channel string -> numbers. Legacy `wireless`: "5640/20-eCee/ac/DP(24dBm)" (extension letters give the
+// width, 1 letter = 20 MHz; flag D = DFS). The `wifi` package: "5180/ax/Ceee". Unknown parts stay undefined.
+export function parseChannel(s: unknown) {
+  const parts = String(s ?? '').split('/')
+  const freq = parseInt(parts[0]) || undefined
+  const ext = parts.map((p) => p.match(/^(?:\d+-)?([Ce]+)$/)?.[1]).find((x) => x?.includes('C'))
+  const dbm = String(s ?? '').match(/\((\d+)dBm\)/)?.[1]
+  return {
+    freq,
+    channel: freq ? (freq < 3000 ? (freq - 2407) / 5 : freq > 5900 ? (freq - 5950) / 5 : (freq - 5000) / 5) : undefined,
+    width: ext ? 20 * ext.length : freq && parts[1] === '20' ? 20 : undefined,
+    // 5260-5720 MHz (channels 52-144) need radar detection everywhere
+    dfs: freq ? parts.some((p) => /^[A-Z]*D[A-Z]*(\(|$)/.test(p)) || (freq >= 5260 && freq <= 5720) : undefined,
+    txPower: dbm ? +dbm : undefined,
   }
 }
 

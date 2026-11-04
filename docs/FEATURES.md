@@ -130,7 +130,7 @@ Clean-room: we copy the behaviour, never the assets.
 | Feature | Backing | Phase | Status |
 |---|---|---|---|
 | Radio list per AP: band, channel, width, tx power, clients | ROS wireless/wifi · CMR | 3 | 🟨 |
-| Channel utilisation | ROS monitor (driver dependent) | 3 | ⬜ |
+| Channel utilisation (channel, width, DFS, tx power, noise, CCQ; busy time not reported by RouterOS) | ROS monitor (driver dependent) | 3 | 🟨 |
 | Neighbouring networks / interference scan | ROS `scan` (duration-limited) | 3 |🎨 |
 | Signal strength distribution | tik from reg-table | 3 | 🟨 |
 | WiFi connectivity success (association / auth / DHCP / DNS) | tik from log + leases | 2 | 🟨 |

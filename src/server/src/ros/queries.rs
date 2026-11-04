@@ -98,7 +98,7 @@ const QUERIES: &[Q] = &[
     q("neighbors", "/ip/neighbor/print", &["interface", "address", "mac-address", "identity", "platform", "board", "version"]),
     // no wpa/wpa2 pre-shared keys
     q("secProfiles", "/interface/wireless/security-profiles/print", &["name", "mode", "authentication-types", "management-protection"]).arrays(&["authentication-types"]),
-    q("accessList", "/interface/wireless/access-list/print", &["mac-address", "interface", "authentication", "forwarding", "comment"]),
+    q("accessList", "/interface/wireless/access-list/print", &["mac-address", "interface", "signal-range", "authentication", "forwarding", "comment"]),
     one("trafficFlow", "/ip/traffic-flow/print", &["enabled"]),
     q("ovpn", "/interface/ovpn-server/server/print", &["name", "disabled", "port", "protocol"]),
     one("l2tp", "/interface/l2tp-server/server/print", &["enabled"]),
@@ -224,12 +224,16 @@ pub fn snapshot(r: &mut dyn Router, with_latency: bool) -> Value {
     let names = |key: &str| -> Vec<String> {
         out.get(key).and_then(Value::as_array).map(|a| a.iter().filter_map(|x| x["name"].as_str().map(String::from)).collect()).unwrap_or_default()
     };
-    let (eth, wl) = (names("ethernet"), names("wifi"));
+    let (eth, wl, wn) = (names("ethernet"), names("wifi"), names("wifiNew"));
     if !eth.is_empty() {
         run(&mut out, "etherMon", Cmd::new("/interface/ethernet/monitor").arg("numbers", &eth.join(",")).arg("once", "").proplist(&["name", "status", "rate", "full-duplex", "auto-negotiation"]), Shape::List, &[]);
     }
     if !wl.is_empty() {
         run(&mut out, "radios", Cmd::new("/interface/wireless/monitor").arg("numbers", &wl.join(",")).arg("once", "").proplist(&["channel", "noise-floor", "overall-tx-ccq", "registered-clients", "status"]), Shape::List, &[]);
+    }
+    if !wn.is_empty() {
+        // ponytail: field names from the wifi manual, unverified over the API; missing ones are just absent
+        run(&mut out, "radiosNew", Cmd::new("/interface/wifi/monitor").arg("numbers", &wn.join(",")).arg("once", "").proplist(&["channel", "state", "registered-peers", "tx-power"]), Shape::List, &[]);
     }
 
     trim(&mut out);

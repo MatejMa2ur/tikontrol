@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { radios, clients, events, signalQuality, hw } from '../lib/data'
+  import { radios, clients, events, signalQuality } from '../lib/data'
   import { displayName } from '../lib/live.svelte'
   import { review } from '../lib/apply.svelte'
   import Icon from '../lib/Icon.svelte'
@@ -26,15 +26,17 @@
 <div class="grid">
   <div class="cols">
     {#each radios as r}
-      <Section title="{r.band} · {r.name}" desc="SSID {r.ssid}">
+      <Section title="{r.band} · {r.name}" desc="SSID {r.ssid}" ros="/interface/{r.pkg}/monitor {r.name} once">
         {#snippet actions()}<span class="pill {r.running ? 'ok' : ''}">{r.running ? 'Broadcasting' : 'Off'}</span>{/snippet}
         <dl>
-          <dt>Channel</dt><dd>{r.channel ?? 'auto'} · {r.width ?? '—'} MHz <span class="muted">(max {r.maxWidth})</span></dd>
-          <dt>TX power</dt><dd>{r.txPower ?? '—'} dBm</dd>
-          <dt>Noise floor</dt><dd>{r.noise ?? '—'} dBm</dd>
-          <dt>Link quality (CCQ)</dt><dd>{r.ccq ?? '—'}%</dd>
+          <dt>Channel</dt><dd>{r.channel ?? '—'}{r.freq ? ` (${r.freq} MHz)` : ''} · {r.auto ? 'picked automatically' : 'fixed'}</dd>
+          <dt>Width</dt><dd>{r.width ?? '—'} MHz <span class="muted">(max {r.maxWidth})</span></dd>
+          {#if r.dfs != null}<dt>DFS (radar) channel</dt><dd>{#if r.dfs}<span class="pill warn">Yes</span> <span class="muted small">radar can force a move, clients drop</span>{:else}No{/if}</dd>{/if}
+          {#if r.txPower != null}<dt>TX power</dt><dd>{r.txPower} dBm</dd>{/if}
+          {#if r.noise != null}<dt>Noise floor</dt><dd>{r.noise} dBm</dd>{/if}
+          {#if r.ccq != null}<dt>Overall CCQ</dt><dd>{r.ccq}%{#if r.ccq < 50}<span class="muted small"> · low: many retries</span>{/if}</dd>{/if}
           <dt>Clients</dt><dd>{r.clients}</dd>
-          <dt>Utilisation</dt><dd class="muted">{hw.wifiPackage === 'wifi' ? 'Not collected yet' : 'Not reported by the legacy wireless driver'}</dd>
+          <dt>Utilisation</dt><dd class="muted small">Not reported: RouterOS's {r.pkg} monitor gives no channel busy time. Noise floor, CCQ and a neighbour scan are the closest signs of a crowded channel.</dd>
         </dl>
         <div class="row">
           <button class="btn" onclick={() => (scanning = r.name)}><Icon name="search" size={14} /> Scan neighbours</button>

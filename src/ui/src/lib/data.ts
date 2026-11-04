@@ -3,7 +3,7 @@
 // without it the mockup falls back to snapshot.json / sample.json. `load()` swaps in a fresh snapshot.
 
 import { simulateBe3 } from './be3'
-import { bandLabel, detectHardware, normalizeWifi, standardOf } from './hardware'
+import { bandLabel, detectHardware, normalizeWifi, parseChannel, standardOf } from './hardware'
 import { preload } from './backend'
 
 const files = import.meta.glob('./*.json', { eager: true, import: 'default' }) as Record<string, any>
@@ -249,19 +249,19 @@ const insights: Insight[] = [
     : []),
 ]
 
-// ---------- radios (legacy wireless monitor; order matches /interface/wireless [find]) ----------
+// ---------- radios (monitor; order matches the print order, src/server/src/ros/queries.rs) ----------
 const radios = wifi.map((w, i) => {
   const m = (raw.radios ?? [])[i] ?? {}
-  // "5180/20-Ceee/ac(23dBm)" -> freq 5180, extension letters give the real width (1 letter = 20 MHz)
-  const ch = String(m.channel ?? '').match(/^(\d+)\/20-([A-Za-z]+)\/[^(]*(?:\((\d+)dBm\))?/)
-  const width = ch ? 20 * ch[2].length : undefined
-  const freq = ch ? +ch[1] : undefined
-  const channel = freq ? (freq < 3000 ? (freq - 2407) / 5 : freq > 5900 ? (freq - 5950) / 5 : (freq - 5000) / 5) : undefined
+  const ch = parseChannel(m.channel)
   return {
     name: w.name, ssid: w.ssid, band: bandOf(w.name)!, running: w.running,
     widths: w.band.startsWith('2') ? [20, 40] : w.band.startsWith('6') ? [20, 40, 80, 160, 320] : [20, 40, 80, 160],
     maxWidth: +(String(w['channel-width']).match(/(\d+)mhz/)?.[1] ?? 20),
-    width, channel, txPower: ch?.[3] ? +ch[3] : undefined,
+    widthSetting: w['channel-width'] as string | undefined,
+    auto: w.frequency == null || w.frequency === 'auto',
+    pkg: (w.pkg ?? 'wireless') as 'wireless' | 'wifi',
+    width: ch.width, channel: ch.channel, freq: ch.freq, dfs: ch.dfs,
+    txPower: ch.txPower ?? (typeof m['tx-power'] === 'number' ? m['tx-power'] : undefined),
     noise: m['noise-floor'] as number | undefined, ccq: m['overall-tx-ccq'] as number | undefined,
     clients: clients.filter((c) => c.port === w.name).length,
   }
