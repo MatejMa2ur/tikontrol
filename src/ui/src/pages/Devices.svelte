@@ -20,6 +20,9 @@
   let identity = $state(router.identity)
   let led = $state(true)
   let ssh = $state(true)
+  const firstPort: string = (raw.ethernet ?? [])[0]?.name ?? 'ether1'
+  let blinkPort = $state(firstPort)
+  const q = (v: string) => `"${v.replace(/["\\$]/g, (c) => '\\' + c)}"`
   let adoptOpen = $state(false)
 
   // fleet upgrade rule (CMR /cmr/upgrade)
@@ -70,7 +73,7 @@
           <td><b>{identity}</b></td><td>{router.version}</td><td>{router.channel}</td>
           <td>{router.firmware}{#if router.firmware !== router.firmwareUpgrade} → <b>{router.firmwareUpgrade}</b>{/if}</td>
           <td class="r"><button class="btn small" onclick={() => review('Check for updates', '/system/package/update/check-for-updates')}>Check</button>
-            {#if router.firmware !== router.firmwareUpgrade}<button class="btn primary small" onclick={() => review('Upgrade RouterBOOT', ['/system/routerboard/upgrade', '/system/reboot'])}>Upgrade firmware</button>{/if}</td>
+            {#if router.firmware !== router.firmwareUpgrade}<button class="btn primary small" onclick={() => review('Upgrade RouterBOOT', ['/system/routerboard/upgrade'], { kind: 'routerboot-upgrade' })}>Upgrade firmware</button>{/if}</td>
         </tr></tbody>
       </table>
     </Section>
@@ -120,16 +123,17 @@
         <dt>Firmware</dt><dd>{router.firmware}{router.firmware !== router.firmwareUpgrade ? ` → ${router.firmwareUpgrade} pending` : ''}</dd>
       </dl>
       <div class="actions">
-        <button class="btn" onclick={() => review('Locate device', ':for i from=1 to=5 do={/system/leds/settings/set all-leds-off=immediate; :delay 1s; /system/leds/settings/set all-leds-off=never; :delay 1s}')}>Locate (blink)</button>
-        <button class="btn" onclick={() => review('Restart device', '/system/reboot')}>Restart</button>
+        <select bind:value={blinkPort} aria-label="Port to blink">{#each (raw.ethernet ?? [{ name: firstPort }]) as e}<option>{e.name}</option>{/each}</select>
+        <button class="btn" onclick={() => review('Locate device', [`/interface/ethernet/blink [find name=${q(blinkPort)}] duration=10s`], { kind: 'locate', interface: blinkPort })}>Locate (blink)</button>
+        <button class="btn" onclick={() => review('Restart device', ['/system/reboot'], { kind: 'reboot' })}>Restart</button>
       </div>
     {:else if dtab === 'ports'}
       <Ports compact />
     {:else}
-      <Field label="Name"><input type="text" bind:value={identity} /></Field>
-      <Field label="LEDs"><Toggle bind:checked={led} label="LEDs" /></Field>
+      <Field label="Name"><input type="text" bind:value={identity} aria-label="Device name" /><button class="btn small" onclick={() => review('Device name', [`/system/identity/set name=${q(identity)}`], { kind: 'site-settings', identity })}>Save</button></Field>
+      <Field label="LEDs"><Toggle bind:checked={led} label="LEDs" /><button class="btn small" onclick={() => review(led ? 'Turn the LEDs on' : 'Turn the LEDs off', [`/system/leds/settings/set all-leds-off=${led ? 'never' : 'immediate'}`], { kind: 'set-leds', all_leds_off: led ? 'never' : 'immediate' })}>Save</button></Field>
       <Field label="Device SSH" help="Key-based SSH for admins"><Toggle bind:checked={ssh} label="SSH" /></Field>
-      <div class="r"><button class="btn primary" onclick={() => review('Device settings', [`/system/identity/set name="${identity}"`, `/system/leds/settings/set all-leds-off=${led ? 'never' : 'immediate'}`, `/ip/service/${ssh ? 'enable' : 'disable'} ssh`])}>Save</button></div>
+      <div class="r"><button class="btn" onclick={() => review('Device SSH', [`/ip/service/set ssh disabled=${ssh ? 'no' : 'yes'}`])}>Show SSH command</button></div>
     {/if}
   </aside>
 {/if}
