@@ -15,6 +15,7 @@ All settings are environment variables.
 | `TIK_TLS_CERT`, `TIK_TLS_KEY` | – | Your own certificate and key (PEM). Without them a self-signed certificate is created on first start and its SHA-256 is printed in the log. |
 | `TIK_HTTP` | – | Plain HTTP, loopback addresses only (a local reverse proxy, development). |
 | `TIK_POLL` | `30` | Seconds between router snapshots (5–3600). Lower costs router CPU. |
+| `TIK_DEBUG_API` | – | Log each RouterOS API command path and the reply types it got (no values). For diagnosing a router that behaves differently. |
 | `TIK_DEMO` | – | Path to a snapshot JSON (for example `src/ui/src/lib/sample.json`) to serve instead of a router. |
 
 ## First start

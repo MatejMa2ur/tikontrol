@@ -319,6 +319,7 @@ pub fn spawn(app: Arc<App>, path: PathBuf) {
     std::thread::spawn(move || {
         let mut conn: Option<Box<dyn Router + Send>> = None;
         let mut last_save = now();
+        let mut last_err: Option<String> = None;
         loop {
             let watching = *lock(&app.live.subscribers) > 0;
             if app.router_cfg().is_some() && app.snap.read().map(|s| s.data.is_some()).unwrap_or(false) {
@@ -339,7 +340,14 @@ pub fn spawn(app: Arc<App>, path: PathBuf) {
                 if let Some(c) = conn.as_mut() {
                     match read(c.as_mut(), &wan_if) {
                         Ok(rd) => app.live.ingest(now(), rd, &names),
-                        Err(_) => conn = None,
+                        Err(e) => {
+                            // say why once per distinct error, so a reconnect loop is visible without flooding the log
+                            if last_err.as_deref() != Some(e.as_str()) {
+                                eprintln!("tikontrol: live read failed, reconnecting: {e}");
+                                last_err = Some(e);
+                            }
+                            conn = None
+                        }
                     }
                 }
             }

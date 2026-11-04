@@ -171,7 +171,7 @@ impl Conn {
                 Kind::Trap if r.attrs.get("category").map(String::as_str) == Some("2") => {} // interrupted by our /cancel
                 Kind::Trap => return Err(r.attrs.get("message").cloned().unwrap_or_else(|| "router error".into())),
                 Kind::Fatal => return Err(format!("router ended the session: {}", r.attrs.get("message").map_or("", |s| s))),
-                Kind::Done | Kind::Empty if r.tag.as_deref() == Some("1") => return Ok(()),
+                Kind::Done if r.tag.as_deref() == Some("1") => return Ok(()),
                 _ => {}
             }
         }
@@ -181,21 +181,38 @@ impl Conn {
 impl Router for Conn {
     fn run(&mut self, cmd: &Cmd) -> Result<Vec<Row>, String> {
         self.send(cmd.words()?)?;
-        let mut rows = Vec::new();
-        let mut err = None;
-        loop {
+        let dbg = std::env::var_os("TIK_DEBUG_API").is_some();
+        collect(|| {
             let r = parse_reply(&self.recv()?)?;
-            match r.kind {
-                Kind::Re => rows.push(r.attrs),
-                Kind::Trap => err = Some(r.attrs.get("message").cloned().unwrap_or_else(|| "router error".into())),
-                Kind::Fatal => return Err(format!("router ended the session: {}", r.attrs.get("message").map_or("", |s| s))),
-                Kind::Done | Kind::Empty => {
-                    // `/ping` and `/login` put values on !done; keep them as a row
-                    if r.kind == Kind::Done && !r.attrs.is_empty() && rows.is_empty() {
-                        rows.push(r.attrs);
-                    }
-                    return err.map_or(Ok(rows), Err);
+            if dbg {
+                // reply types only, never values
+                eprintln!("api {} <- {:?} tag={:?} keys={}", cmd.path(), r.kind, r.tag, r.attrs.len());
+            }
+            Ok(r)
+        })
+    }
+}
+
+/// Reads the replies of one command, up to and including its `!done`.
+fn collect(mut next: impl FnMut() -> Result<super::proto::Reply, String>) -> Result<Vec<Row>, String> {
+    let mut rows = Vec::new();
+    let mut err = None;
+    loop {
+        let r = next()?;
+        match r.kind {
+            Kind::Re => rows.push(r.attrs),
+            Kind::Trap => err = Some(r.attrs.get("message").cloned().unwrap_or_else(|| "router error".into())),
+            Kind::Fatal => return Err(format!("router ended the session: {}", r.attrs.get("message").map_or("", |s| s))),
+            // 7.18+ answers an empty result with !empty and *then* !done ("the last reply for every
+            // sentence is !done"). Stopping at !empty leaves the !done behind, and every later command
+            // reads the previous command's answer.
+            Kind::Empty => {}
+            Kind::Done => {
+                // `/ping` and `/login` put values on !done; keep them as a row
+                if !r.attrs.is_empty() && rows.is_empty() {
+                    rows.push(r.attrs);
                 }
+                return err.map_or(Ok(rows), Err);
             }
         }
     }
@@ -264,6 +281,20 @@ mod tests {
         let ok = Target { host: "127.0.0.1".into(), port: port2, pin: fp2 };
         assert!(Conn::connect(&ok, "reader", "pw").is_ok());
         assert_eq!(h2.join().unwrap(), ["/login", "=name=reader", "=password=pw"]);
+    }
+
+    #[test]
+    fn empty_result_consumes_its_done_so_the_next_command_stays_in_step() {
+        let w = |v: &[&str]| parse_reply(&v.iter().map(|x| x.to_string()).collect::<Vec<_>>()).unwrap();
+        // two commands back to back: an empty answer (7.18+), then a normal one
+        let mut q = std::collections::VecDeque::from([w(&["!empty"]), w(&["!done"]), w(&["!re", "=group=g"]), w(&["!done"])]);
+        assert!(collect(|| Ok(q.pop_front().unwrap())).unwrap().is_empty());
+        let second = collect(|| Ok(q.pop_front().unwrap())).unwrap();
+        assert_eq!(second[0]["group"], "g", "the second command must get its own row, not the first one's !done");
+        assert!(q.is_empty());
+        // pre-7.18 style (just !done) and errors still work
+        let mut q = std::collections::VecDeque::from([w(&["!trap", "=message=no such command"]), w(&["!done"])]);
+        assert_eq!(collect(|| Ok(q.pop_front().unwrap())).unwrap_err(), "no such command");
     }
 
     #[test]

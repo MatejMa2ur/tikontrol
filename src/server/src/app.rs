@@ -110,7 +110,8 @@ impl App {
         }
         match f(g.as_mut().unwrap().as_mut()) {
             Ok(v) => Ok(v),
-            Err(_) => {
+            Err(e) => {
+                eprintln!("tikontrol: reader connection failed, reconnecting: {e}");
                 *g = Some(self.open(As::Reader)?);
                 f(g.as_mut().unwrap().as_mut())
             }

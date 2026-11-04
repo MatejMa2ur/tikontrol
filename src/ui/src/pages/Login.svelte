@@ -24,11 +24,11 @@
   <form class="card" onsubmit={submit}>
     <div class="logo" aria-hidden="true">tik</div>
     <h1>Sign in to tikontrol</h1>
-    <p class="muted small">Use your MikroTik account (or tikontrol's local account). Your router group decides what you can do.</p>
+    <p class="muted small">Sign in with your <b>MikroTik username and password</b>, the same as in WinBox. Your router group decides what you can do. If the router is unreachable, use tikontrol's local account instead.</p>
     <label>Username<input type="text" autocomplete="username" bind:value={name} required maxlength="64" /></label>
     <label>Password<input type="password" autocomplete="current-password" bind:value={password} required maxlength="256" /></label>
     {#if error}<p class="err" role="alert">{error}</p>{/if}
-    <button class="btn primary" disabled={busy || !name || !password}>{busy ? 'Signing in…' : 'Sign in'}</button>
+    <button class="btn primary" disabled={busy}>{busy ? 'Signing in…' : 'Sign in'}</button>
   </form>
 </main>
 
