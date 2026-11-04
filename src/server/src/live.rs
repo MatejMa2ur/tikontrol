@@ -34,6 +34,11 @@ pub struct Point {
     pub ms: f64,
     #[serde(default)]
     pub down: bool,
+    /// memory use in %, and the board temperature in °C when `/system/health` has a sensor
+    #[serde(default)]
+    pub mem: f64,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub temp: Option<f64>,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
@@ -107,6 +112,7 @@ impl History {
         let end = now() / step * step;
         let src: Vec<Point> = if step == 3600 { self.hours.iter().chain(self.minutes.iter().filter(|m| m.t >= end)).copied().collect() } else { self.minutes.iter().copied().collect() };
         let (mut t, mut cl, mut rx, mut tx): (Vec<u64>, Vec<Option<f64>>, Vec<Option<f64>>, Vec<Option<f64>>) = (vec![], vec![], vec![], vec![]);
+        let (mut cpu, mut mem, mut temp): (Vec<Option<f64>>, Vec<Option<f64>>, Vec<Option<f64>>) = (vec![], vec![], vec![]);
         for i in 0..n {
             let start = end - (n - 1 - i) * step;
             let pts: Vec<Point> = src.iter().filter(|p| p.t >= start && p.t < start + step).copied().collect();
@@ -116,12 +122,18 @@ impl History {
                 cl.push(None);
                 rx.push(None);
                 tx.push(None);
+                cpu.push(None);
+                mem.push(None);
+                temp.push(None);
                 continue;
             }
             let a = avg(&pts, start);
             cl.push(Some(a.clients.round()));
             rx.push(Some(a.rx.round()));
             tx.push(Some(a.tx.round()));
+            cpu.push(Some(a.cpu.round()));
+            mem.push(Some(a.mem.round()));
+            temp.push(a.temp.map(|x| x.round()));
         }
         // peak minute average in this range and over all stored history (minutes + hours)
         // ponytail: minute averages, not raw 2 s samples; store a per-minute max in Point if short bursts matter
@@ -129,7 +141,7 @@ impl History {
         let start = end - (n - 1) * step;
         let (prx, ptx) = peak(&mut src.iter().filter(|p| p.t >= start));
         let (arx, atx) = peak(&mut self.hours.iter().chain(self.minutes.iter()));
-        json!({ "t": t, "clients": cl, "rx": rx, "tx": tx, "samples": src.len(), "peak": { "rx": prx.round(), "tx": ptx.round() }, "peakAll": { "rx": arx.round(), "tx": atx.round() } })
+        json!({ "t": t, "clients": cl, "rx": rx, "tx": tx, "cpu": cpu, "mem": mem, "temp": temp, "samples": src.len(), "peak": { "rx": prx.round(), "tx": ptx.round() }, "peakAll": { "rx": arx.round(), "tx": atx.round() } })
     }
 
     /// Internet health bar: the last 12 h in 48 slots of 15 min. ok / warn (slow) / bad (down) / none.
@@ -173,7 +185,19 @@ fn avg(pts: &[Point], t: u64) -> Point {
         clients: pts.iter().map(|p| p.clients).fold(0.0, f64::max),
         ms: pts.iter().map(|p| p.ms).fold(0.0, f64::max),
         down: pts.iter().any(|p| p.down),
+        mem: pts.iter().map(|p| p.mem).sum::<f64>() / n,
+        temp: {
+            let ts: Vec<f64> = pts.iter().filter_map(|p| p.temp).collect();
+            (!ts.is_empty()).then(|| ts.iter().sum::<f64>() / ts.len() as f64)
+        },
     }
+}
+
+/// Board temperature from `/system/health/print` rows (name, value). Boards differ: prefer the CPU
+/// sensor, then any "temperature" row. None when the board has no sensor (or no health menu).
+pub fn temperature(rows: &[Row]) -> Option<f64> {
+    let val = |want: &dyn Fn(&str) -> bool| rows.iter().find(|r| r.get("name").is_some_and(|n| want(n))).and_then(|r| r.get("value")?.parse::<f64>().ok());
+    val(&|n| n == "cpu-temperature").or_else(|| val(&|n| n == "temperature")).or_else(|| val(&|n| n.contains("temperature")))
 }
 
 /// Parses the registration table's "rx,tx" byte counter.
@@ -190,6 +214,8 @@ pub struct Reading {
     pub rx: f64,
     pub tx: f64,
     pub cpu: f64,
+    pub mem: f64,
+    pub temp: Option<f64>,
     pub wan_running: bool,
     /// mac -> (interface, bytes counter as seen by the AP: rx = client upload, tx = client download)
     pub stations: Stations,
@@ -199,7 +225,9 @@ pub fn read(r: &mut dyn Router, wan_if: &str) -> Result<Reading, String> {
     let m = r.run(&Cmd::new("/interface/monitor-traffic").arg("interface", wan_if).arg("once", "").proplist(&["rx-bits-per-second", "tx-bits-per-second"]))?;
     let m = m.first().cloned().unwrap_or_default();
     let num = |row: &Row, k: &str| row.get(k).and_then(|v| v.parse::<f64>().ok()).unwrap_or(0.0);
-    let res = r.run(&Cmd::new("/system/resource/print").proplist(&["cpu-load"]))?;
+    let res = r.run(&Cmd::new("/system/resource/print").proplist(&["cpu-load", "free-memory", "total-memory"]))?;
+    // feature-detect: not every board has /system/health or a temperature sensor
+    let temp = r.run(&Cmd::new("/system/health/print").proplist(&["name", "value"])).ok().and_then(|rows| temperature(&rows));
     let running = r.run(&Cmd::new("/interface/print").proplist(&["running"]).query("name", wan_if))?;
     let mut stations = BTreeMap::new();
     for path in ["/interface/wireless/registration-table/print", "/interface/wifi/registration-table/print"] {
@@ -217,6 +245,11 @@ pub fn read(r: &mut dyn Router, wan_if: &str) -> Result<Reading, String> {
         rx: num(&m, "rx-bits-per-second"),
         tx: num(&m, "tx-bits-per-second"),
         cpu: res.first().map_or(0.0, |r| num(r, "cpu-load")),
+        mem: res.first().map_or(0.0, |r| {
+            let total = num(r, "total-memory");
+            if total > 0.0 { (1.0 - num(r, "free-memory") / total) * 100.0 } else { 0.0 }
+        }),
+        temp,
         wan_running: running.first().and_then(|r| r.get("running")).is_none_or(|v| v == "true"),
         stations,
     })
@@ -290,9 +323,9 @@ impl Live {
             *up = Some(rd.wan_running);
         }
         let ms = *lock(&self.latency_ms);
-        h.add(Point { t, rx: rd.rx, tx: rd.tx, cpu: rd.cpu, clients: rd.stations.len() as f64, ms, down: !rd.wan_running });
+        h.add(Point { t, rx: rd.rx, tx: rd.tx, cpu: rd.cpu, clients: rd.stations.len() as f64, ms, down: !rd.wan_running, mem: rd.mem, temp: rd.temp });
         drop(h);
-        let frame = json!({ "t": t, "rx": rd.rx, "tx": rd.tx, "cpu": rd.cpu, "wanUp": rd.wan_running, "rate": rates });
+        let frame = json!({ "t": t, "rx": rd.rx, "tx": rd.tx, "cpu": rd.cpu, "mem": rd.mem, "temp": rd.temp, "wanUp": rd.wan_running, "rate": rates });
         let mut f = lock(&self.frame);
         f.0 += 1;
         f.1 = frame.to_string();
@@ -371,7 +404,7 @@ mod tests {
     use super::*;
 
     fn rd(st: &[(&str, &str, u64, u64)], up: bool) -> Reading {
-        Reading { rx: 1000.0, tx: 500.0, cpu: 5.0, wan_running: up, stations: st.iter().map(|(m, i, d, u)| (m.to_string(), (i.to_string(), *d, *u))).collect() }
+        Reading { rx: 1000.0, tx: 500.0, cpu: 5.0, mem: 40.0, temp: None, wan_running: up, stations: st.iter().map(|(m, i, d, u)| (m.to_string(), (i.to_string(), *d, *u))).collect() }
     }
 
     #[test]
@@ -427,6 +460,14 @@ mod tests {
         assert!(s["rx"].as_array().unwrap().iter().all(Value::is_null), "no data is a gap, not a zero");
         assert_eq!(h.health().len(), 48);
         assert!(h.health().iter().all(|x| *x == "none"));
+    }
+
+    #[test]
+    fn temperature_prefers_cpu_sensor() {
+        use crate::ros::queries::tests::row;
+        assert_eq!(temperature(&[row(&[("name", "voltage"), ("value", "24.1")]), row(&[("name", "board-temperature1"), ("value", "41")]), row(&[("name", "cpu-temperature"), ("value", "52")])]), Some(52.0));
+        assert_eq!(temperature(&[row(&[("name", "board-temperature1"), ("value", "41")])]), Some(41.0));
+        assert_eq!(temperature(&[row(&[("name", "fan1-speed"), ("value", "x")])]), None);
     }
 
     #[test]

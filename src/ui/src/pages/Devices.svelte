@@ -1,5 +1,6 @@
 <script lang="ts">
-  import { router, internet, clients, radios, raw, bytes, dur, hw } from '../lib/data'
+  import { router, internet, clients, radios, raw, bytes, dur, hw, isBackend } from '../lib/data'
+  import { api } from '../lib/backend'
   import { live } from '../lib/live.svelte'
   import { review } from '../lib/apply.svelte'
   import Icon from '../lib/Icon.svelte'
@@ -12,8 +13,24 @@
   import Radios from './Radios.svelte'
 
   let { tab = 'list' }: { tab?: string } = $props()
-  const neighbors: any[] = raw.neighbors ?? []
-  const memPct = Math.round((1 - router.memFree / router.memTotal) * 100)
+  const neighbors: any[] = Array.isArray(raw.neighbors) ? raw.neighbors : []
+  const memPct = $derived(live.mem ?? Math.round((1 - router.memFree / router.memTotal) * 100))
+  // /system/health is feature-detected: missing menu or no sensor = no temperature (same rule as the server's live.rs)
+  const health: { name: string; value: unknown }[] = Array.isArray(raw.health) ? raw.health : []
+  const sensor = (want: (n: string) => boolean) => health.find((h) => want(String(h.name)))?.value
+  const snapTemp = Number(sensor((n) => n === 'cpu-temperature') ?? sensor((n) => n === 'temperature') ?? sensor((n) => n.includes('temperature')) ?? NaN)
+  const temp = $derived(live.temp ?? (Number.isFinite(snapTemp) ? snapTemp : null))
+
+  // 24 h CPU / memory / temperature from the server's history (15-minute averages)
+  type Hist = { t: number[]; cpu?: (number | null)[]; mem?: (number | null)[]; temp?: (number | null)[] }
+  let hist = $state<Hist | null>(null)
+  $effect(() => { if (drawer && isBackend && !hist) api<Hist>('/history?range=1D').then((h) => (hist = h)).catch(() => {}) })
+  function spark(v: (number | null)[] | undefined, max = 100) {
+    if (!v?.some((x) => x != null)) return ''
+    const hi = Math.max(max, ...v.map((x) => x ?? 0))
+    return v.map((x, i) => (x == null ? null : `${((i / Math.max(v.length - 1, 1)) * 200).toFixed(1)},${(30 - (x / hi) * 28).toFixed(1)}`)).filter(Boolean).join(' ')
+  }
+  const last = (v?: (number | null)[]) => v?.filter((x) => x != null).at(-1)
 
   let drawer = $state(false)
   let dtab = $state<'overview' | 'ports' | 'settings'>('overview')
@@ -27,7 +44,6 @@
 
   // fleet upgrade rule (CMR /cmr/upgrade)
   let rule = $state({ channel: 'stable', time: '03:00', strategy: 'sequential', fail: 'stop', auto: false })
-  let baseline = $state<string | null>(null)
 </script>
 
 <div class="grid">
@@ -77,7 +93,7 @@
         </tr></tbody>
       </table>
     </Section>
-    <Section title="Scheduled upgrades" desc="Rolling upgrades across the fleet in an auto-update window. Runs through a CMR upgrade rule." ros="/cmr/upgrade/add">
+    <Section title="Scheduled upgrades" desc="Rolling upgrades across the fleet in an auto-update window. Needs the CMR server (a CMR upgrade rule)." ros="/cmr/upgrade/add">
       <Field label="Automatic upgrades"><Toggle bind:checked={rule.auto} label="Automatic upgrades" /></Field>
       <Field label="Channel"><select bind:value={rule.channel}><option>stable</option><option>long-term</option><option>testing</option><option>development</option></select></Field>
       <Field label="Time of day"><input type="text" bind:value={rule.time} /></Field>
@@ -86,14 +102,11 @@
       <div class="r"><button class="btn primary" onclick={() => review('Upgrade rule', `/cmr/upgrade/add name=nightly labels=all channel=${rule.channel} schedule-time="${rule.time}:00" strategy=${rule.strategy} fail-policy=${rule.fail}`)}>Save rule</button></div>
     </Section>
   {:else if tab === 'supervisor'}
-    <Section title="Device Supervisor" desc="Health anomalies across devices: offline, high CPU/memory, failed upgrades. Backed by CMR state alerts." ros="/cmr/alert/print">
+    <Section title="Device Supervisor" desc="Health anomalies across devices: offline, high CPU/memory, failed upgrades. Needs the CMR server; for this router, CPU and memory alerts are in Logs & Alarms." ros="/cmr/alert/print">
       <div class="row sup"><span class="dot ok"></span> {identity}: online, CPU {live.cpu}%, memory <span class={memPct > 75 ? 'warnc' : ''}>{memPct}%</span>{#if memPct > 75}<span class="pill warn">memory high</span>{/if}</div>
     </Section>
-    <Section title="Config drift" desc="Take a baseline of the configuration, then see what changed since (Blueprints / Drift Inspector)." ros="/export terse">
-      {#if baseline}
-        <div class="row small"><Icon name="check" size={14} /> Baseline taken {baseline}. No drift detected.</div>
-      {:else}<div class="muted small">No baseline yet.</div>{/if}
-      <div class="r"><button class="btn" onclick={() => (baseline = new Date().toLocaleString())}>Take baseline</button></div>
+    <Section title="Config drift" desc="Compare the configuration with a stored baseline (Blueprints / Drift Inspector)." ros="/export show-sensitive=no">
+      <div class="muted small">Not built yet. tikontrol's reader account has no <code>sensitive</code> policy, and reading <code>/export</code> over the API with only <code>read</code> is not verified yet (a 7.21 pre-release leaked keys in a hide-sensitive export). Until that is tested on CHR, no baseline is taken.</div>
     </Section>
   {/if}
 </div>
@@ -119,9 +132,23 @@
         <dt>CPU</dt><dd>{router.cpuCount} cores · {live.cpu}%</dd>
         <dt>Memory</dt><dd>{bytes(router.memFree)} free of {bytes(router.memTotal)}</dd>
         <dt>Storage</dt><dd>{bytes(router.hddFree)} free of {bytes(router.hddTotal)}</dd>
-        <dt>Temperature</dt><dd class="muted">No sensor on this model</dd>
+        <dt>Temperature</dt>{#if temp != null}<dd>{temp} °C</dd>{:else}<dd class="muted">No sensor on this model</dd>{/if}
         <dt>Firmware</dt><dd>{router.firmware}{router.firmware !== router.firmwareUpgrade ? ` → ${router.firmwareUpgrade} pending` : ''}</dd>
       </dl>
+      <h3 class="small">Last 24 hours</h3>
+      {#if !isBackend}
+        <p class="muted small">History is recorded by the tikontrol server.</p>
+      {:else if !hist}
+        <p class="muted small">Loading…</p>
+      {:else}
+        {#each [{ k: 'CPU', v: hist.cpu, unit: '%', max: 100 }, { k: 'Memory', v: hist.mem, unit: '%', max: 100 }, { k: 'Temperature', v: hist.temp, unit: ' °C', max: 60 }] as s}
+          {@const pts = spark(s.v, s.max)}
+          <div class="hrow"><span class="muted small">{s.k}</span>
+            {#if pts}<svg viewBox="0 0 200 30" preserveAspectRatio="none" role="img" aria-label="{s.k} over the last 24 hours"><polyline points={pts} /></svg><span class="small mono">{last(s.v)}{s.unit}</span>
+            {:else}<span class="muted small">{s.k === 'Temperature' ? 'No sensor' : 'No samples yet'}</span><span></span>{/if}
+          </div>
+        {/each}
+      {/if}
       <div class="actions">
         <select bind:value={blinkPort} aria-label="Port to blink">{#each (raw.ethernet ?? [{ name: firstPort }]) as e}<option>{e.name}</option>{/each}</select>
         <button class="btn" onclick={() => review('Locate device', [`/interface/ethernet/blink [find name=${q(blinkPort)}] duration=10s`], { kind: 'locate', interface: blinkPort })}>Locate (blink)</button>
@@ -165,6 +192,11 @@
   .dt { margin: 16px 0; }
   dl { display: grid; grid-template-columns: 110px 1fr; gap: 8px 12px; }
   dt { color: var(--muted); } dd { margin: 0; }
+  h3 { margin: 18px 0 6px; }
+  .hrow { display: grid; grid-template-columns: 90px 1fr 60px; gap: 10px; align-items: center; padding: 3px 0; }
+  .hrow svg { width: 100%; height: 30px; }
+  .hrow polyline { fill: none; stroke: var(--accent); stroke-width: 1.5; vector-effect: non-scaling-stroke; }
+  .hrow .mono { text-align: right; }
   .actions { display: flex; gap: 8px; margin-top: 16px; }
   .steps { line-height: 1.8; padding-left: 18px; }
   code { font: 11.5px var(--mono); background: var(--panel2); padding: 1px 5px; border-radius: 4px; }

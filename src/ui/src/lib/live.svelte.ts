@@ -19,6 +19,9 @@ export const live = $state({
   rx: history(internet.rx || 1e6),
   tx: history(internet.tx || 2e5),
   cpu: router.cpuLoad,
+  /** memory % and board temperature (°C, null = no sensor) from the server's sampler */
+  mem: null as number | null,
+  temp: null as number | null,
   rate: Object.fromEntries(clients.map((c) => [c.mac, { rx: 0, tx: 0 }])) as Record<string, { rx: number; tx: number }>,
   wanUp: true,
 })
@@ -38,6 +41,8 @@ if (isBackend) {
       const f = JSON.parse(m.data)
       push(f.rx, f.tx, f.t)
       live.cpu = f.cpu
+      live.mem = typeof f.mem === 'number' ? Math.round(f.mem) : null
+      live.temp = typeof f.temp === 'number' ? Math.round(f.temp) : null
       live.wanUp = f.wanUp
       // rates are keyed by MAC from the router: only numbers are taken from them
       for (const [mac, r] of Object.entries(f.rate ?? {}) as [string, any][]) live.rate[mac] = { rx: +r.rx || 0, tx: +r.tx || 0 }

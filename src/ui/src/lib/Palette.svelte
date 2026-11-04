@@ -1,6 +1,6 @@
 <script lang="ts">
-  // ⌘K / Ctrl+K: jump to any page or client
-  import { clients } from './data'
+  // ⌘K / Ctrl+K: jump to any page, settings page, client, device or SSID
+  import { clients, ssids, router, raw } from './data'
   import { displayName } from './live.svelte'
   import Icon from './Icon.svelte'
 
@@ -9,11 +9,18 @@
   let q = $state('')
   let idx = $state(0)
 
+  // ponytail: mirrors the tabs in pages/Settings.svelte; keep in sync when a settings page is added
+  const settings = [['wifi', 'WiFi', 'wifi'], ['networks', 'Networks', 'topology'], ['internet', 'Internet', 'globe'], ['vpn', 'VPN', 'vpn'], ['security', 'Security', 'shield'], ['routing', 'Routing', 'route'], ['profiles', 'Profiles', 'gauge'], ['control', 'Control Plane', 'key'], ['system', 'System', 'settings']]
+  const neighbors: any[] = Array.isArray(raw.neighbors) ? raw.neighbors : []
   const items = $derived(
     [
-      ...pages.map((p) => ({ label: p.label, hint: 'Page', icon: p.icon, href: `#/${p.id}` })),
-      ...clients.map((c) => ({ label: displayName(c), hint: c.ip, icon: c.kind, href: `#/clients/${c.mac}` })),
-    ].filter((i) => !q || `${i.label} ${i.hint}`.toLowerCase().includes(q.toLowerCase())).slice(0, 9),
+      ...pages.map((p) => ({ label: p.label, hint: 'Page', icon: p.icon, href: `#/${p.id}`, extra: '' })),
+      ...settings.map(([id, label, icon]) => ({ label: `Settings › ${label}`, hint: 'Settings', icon, href: `#/settings/${id}`, extra: '' })),
+      ...clients.map((c) => ({ label: displayName(c), hint: c.ip, icon: c.kind, href: `#/clients/${c.mac}`, extra: `${c.mac} ${c.name}` })),
+      { label: router.identity, hint: `Device · ${router.board}`, icon: 'devices', href: '#/devices/list', extra: router.model },
+      ...neighbors.map((n) => ({ label: String(n.identity ?? n['mac-address'] ?? ''), hint: `Device · ${n.address ?? ''}`, icon: 'devices', href: '#/devices/list', extra: `${n.board ?? ''} ${n['mac-address'] ?? ''}` })),
+      ...ssids.map((s) => ({ label: s.ssid, hint: `SSID · ${s.clients} clients`, icon: 'wifi', href: '#/settings/wifi', extra: '' })),
+    ].filter((i) => !q || `${i.label} ${i.hint} ${i.extra}`.toLowerCase().includes(q.toLowerCase())).slice(0, 9),
   )
   const go = (href: string) => { location.hash = href; open = false; q = '' }
   function key(e: KeyboardEvent) {
@@ -33,7 +40,7 @@
   <button class="scrim" aria-label="Close search" onclick={() => (open = false)}></button>
   <div class="pal" role="dialog" aria-label="Search">
     <!-- svelte-ignore a11y_autofocus -->
-    <input type="text" placeholder="Jump to a page or client…" bind:value={q} oninput={() => (idx = 0)} autofocus />
+    <input type="text" placeholder="Search clients, devices, SSIDs, settings…" bind:value={q} oninput={() => (idx = 0)} autofocus />
     {#each items as it, i}
       <button class="item row" class:on={i === idx} onmouseenter={() => (idx = i)} onclick={() => go(it.href)}>
         <Icon name={it.icon} size={15} /> <span>{it.label}</span> <span class="muted small hint">{it.hint}</span>

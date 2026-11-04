@@ -108,6 +108,8 @@ const QUERIES: &[Q] = &[
     // no wpa/wpa2 pre-shared keys
     q("secProfiles", "/interface/wireless/security-profiles/print", &["name", "mode", "authentication-types", "management-protection"]).arrays(&["authentication-types"]),
     q("accessList", "/interface/wireless/access-list/print", &["mac-address", "interface", "signal-range", "authentication", "forwarding", "comment"]),
+    // optional: boards without sensors return nothing (or an error) for this key
+    q("health", "/system/health/print", &["name", "value", "type"]),
     one("trafficFlow", "/ip/traffic-flow/print", &["enabled"]),
     q("ovpn", "/interface/ovpn-server/server/print", &["name", "disabled", "port", "protocol"]),
     one("l2tp", "/interface/l2tp-server/server/print", &["enabled"]),
