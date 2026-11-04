@@ -25,12 +25,15 @@
   let pinOk = $state(false)
   let write = $state(false)
   let confirmWrite = $state(false)
+  // 'me': changes run as the MikroTik admin who is logged in, nothing is stored. 'stored': a separate writer user.
+  let writeAs = $state<'me' | 'stored'>('me')
+  const stored = $derived(write && writeAs === 'stored')
   let tikIp = $state('')
   let reader = $state({ user: 'tikontrol-read', password: '' })
   let writer = $state({ user: 'tikontrol-write', password: '' })
   let commands = $state<string[]>([])
   $effect(() => {
-    const q = `?write=${write ? 1 : 0}${tikIp ? `&ip=${encodeURIComponent(tikIp)}` : ''}`
+    const q = `?write=${stored ? 1 : 0}${tikIp ? `&ip=${encodeURIComponent(tikIp)}` : ''}`
     api<{ commands: string[] }>(`/router/setup-commands${q}`).then((r) => (commands = r.commands)).catch(() => {})
   })
 
@@ -41,7 +44,7 @@
   }) }
   const probe = () => run(async () => { pinOk = false; pin = (await api<{ pin: string }>('/router/probe', { method: 'POST', body: { host, port } })).pin })
   const save = (e: SubmitEvent) => { e.preventDefault(); run(async () => {
-    await api('/router', { method: 'POST', body: { host, port, pin, mode: write ? 'read-write' : 'read-only', reader, writer: write ? writer : null, confirm_write: confirmWrite } })
+    await api('/router', { method: 'POST', body: { host, port, pin, mode: write ? 'read-write' : 'read-only', reader, writer: stored ? writer : null, confirm_write: confirmWrite } })
     location.reload()
   }) }
   const pretty = (p: string) => p.match(/.{1,2}/g)?.join(':') ?? p
@@ -107,12 +110,19 @@
       <div class="grid2">
         <label>Reader user<input type="text" bind:value={reader.user} required autocomplete="off" /></label>
         <label>Reader password<input type="password" bind:value={reader.password} required autocomplete="new-password" /></label>
-        {#if write}
+        {#if stored}
           <label>Writer user<input type="text" bind:value={writer.user} required autocomplete="off" /></label>
           <label>Writer password<input type="password" bind:value={writer.password} required autocomplete="new-password" /></label>
         {/if}
       </div>
-      {#if write}<label class="check warn"><input type="checkbox" bind:checked={confirmWrite} /> I understand the writer credential can change or break the whole router, and tikontrol will store it encrypted.</label>{/if}
+      {#if write}
+        <fieldset class="modes">
+          <legend class="small">Who makes the changes</legend>
+          <label class="mode" class:on={writeAs === 'me'}><input type="radio" name="writeAs" checked={writeAs === 'me'} onchange={() => (writeAs = 'me')} /> <b>The admin who is logged in</b> (recommended)<span class="muted small">Sign in with your MikroTik account; changes run as you. Your password stays in memory for your session only, so tikontrol stores no write password.</span></label>
+          <label class="mode" class:on={writeAs === 'stored'}><input type="radio" name="writeAs" checked={writeAs === 'stored'} onchange={() => (writeAs = 'stored')} /> <b>A stored writer user</b><span class="muted small">Lets local tikontrol accounts make changes. Its password is stored encrypted and can change the whole router.</span></label>
+        </fieldset>
+        <label class="check warn"><input type="checkbox" bind:checked={confirmWrite} /> {stored ? 'I understand the writer credential can change or break the whole router, and tikontrol will store it encrypted.' : 'I understand that admins who sign in with their MikroTik account can change the router through tikontrol.'}</label>
+      {/if}
       {#if error}<p class="err" role="alert">{error}</p>{/if}
       <button class="btn primary" disabled={busy || !pin || !pinOk || (write && !confirmWrite) || me?.role !== 'admin'}>{busy ? 'Checking…' : 'Check policies and connect'}</button>
       <p class="muted small">tikontrol logs in, reads the user's real group policies and refuses read-only mode if the reader could change anything.</p>

@@ -161,16 +161,35 @@ fn login(app: &App, req: &Req) -> Resp {
         return Resp::error(429, "too many failed logins, try again later").with("retry-after", wait.to_string());
     }
     let admins = lock(&app.store).state.admins.clone();
-    match auth::verify(&admins, &b.name, &b.password) {
-        Some(a) => {
+    if let Some(a) = auth::verify(&admins, &b.name, &b.password) {
+        lock(&app.limiter).success(ip);
+        return start_session(app, &a.name, a.role.clone());
+    }
+    // not a local account: try it as a MikroTik account (local names always win, so they can't be shadowed)
+    if !admins.iter().any(|a| a.name == b.name) {
+        if let Some((role, ros)) = router_login(app, &b.name, &b.password) {
             lock(&app.limiter).success(ip);
-            start_session(app, &a.name, a.role.clone())
-        }
-        None => {
-            lock(&app.limiter).fail(ip);
-            Resp::error(401, "wrong username or password")
+            let (token, s) = lock(&app.sessions).create_with(&b.name, role, ros);
+            return Resp::json(200, &json!({ "user": s.user, "role": s.role, "csrf": s.csrf, "mikrotik": true })).with("set-cookie", auth::session_cookie(&token, app.tls));
         }
     }
+    lock(&app.limiter).fail(ip);
+    Resp::error(401, "wrong username or password")
+}
+
+/// Checks a MikroTik account by logging in to the router. The password is never stored: it stays in the
+/// in-memory session only when the account can write, so that user's changes run as them.
+/// Role: `write` policy → admin, otherwise viewer.
+fn router_login(app: &App, user: &str, pw: &str) -> Option<(Role, Option<auth::Secret>)> {
+    if app.demo.is_some() || user.is_empty() || user.len() > 64 || user.chars().any(char::is_control) || pw.is_empty() || pw.len() > auth::MAX_PASSWORD {
+        return None;
+    }
+    let mut r = app.open_as(user, pw).ok()?;
+    let p = policy::detect(r.as_mut(), user).ok()?;
+    if !p.can_read() {
+        return None;
+    }
+    if p.has("write") { Some((Role::Admin, Some(auth::Secret(pw.into())))) } else { Some((Role::Viewer, None)) }
 }
 
 fn start_session(app: &App, user: &str, role: Role) -> Resp {
@@ -187,7 +206,8 @@ fn me(app: &App, s: &Session) -> Resp {
         &json!({
             "user": s.user, "role": s.role, "csrf": s.csrf,
             "router": if app.demo.is_some() { Some(json!({ "host": "demo", "mode": Mode::ReadOnly })) } else { r.map(|r| json!({ "host": r.host, "mode": r.mode })) },
-            "readOnly": r.is_none_or(|r| r.mode == Mode::ReadOnly) || s.role != Role::Admin,
+            "readOnly": r.is_none_or(|r| r.mode == Mode::ReadOnly || (r.writer.is_none() && s.ros.is_none())) || s.role != Role::Admin,
+            "mikrotik": s.ros.is_some(),
             "policies": snap.policies,
             "error": snap.error,
         }),
@@ -313,7 +333,7 @@ fn set_router(app: &App, req: &Req) -> Resp {
     let write = b.mode == Mode::ReadWrite;
     match (&b.writer, write) {
         (Some(_), false) => return Resp::error(400, "read-only mode stores no write credential"),
-        (None, true) => return Resp::error(400, "read-write mode needs a separate writer user"),
+        // read-write without a stored writer: changes run as the admin logged in with their MikroTik account
         _ => {}
     }
     if write && b.writer.as_ref().is_some_and(|w| w.user == b.reader.user) {

@@ -50,6 +50,14 @@ fn state_json(c: &Change) -> serde_json::Value {
     json!({ "title": c.plan.title, "risk": c.plan.risk, "state": state, "deadline": deadline, "user": c.user, "created": c.created, "error": error })
 }
 
+/// The logged-in MikroTik account if there is one, otherwise the stored writer.
+fn writer(app: &App, s: &Session) -> Result<Box<dyn crate::ros::conn::Router + Send>, String> {
+    match &s.ros {
+        Some(pw) => app.open_as(&s.user, &pw.0),
+        None => app.open(As::Writer),
+    }
+}
+
 fn can_write(app: &App, s: &Session) -> Result<(), &'static str> {
     if s.role != Role::Admin {
         return Err("only admins can change the router");
@@ -58,7 +66,8 @@ fn can_write(app: &App, s: &Session) -> Result<(), &'static str> {
         return Err("demo mode: nothing can be changed");
     }
     match app.router_cfg() {
-        Some(r) if r.mode == Mode::ReadWrite && r.writer.is_some() => Ok(()),
+        Some(r) if r.mode == Mode::ReadWrite && (r.writer.is_some() || s.ros.is_some()) => Ok(()),
+        Some(r) if r.mode == Mode::ReadWrite => Err("log in with your MikroTik account to make changes: tikontrol stores no write password"),
         _ => Err("read-only mode: tikontrol has no write access to this router (by design: the router user has no write policy)"),
     }
 }
@@ -126,7 +135,7 @@ pub fn route(app: &Arc<App>, req: &Req, s: &Session) -> Option<Resp> {
                     None => return Some(Resp::error(404, "no such change: preview it again")),
                 }
             };
-            let mut w = match app.open(As::Writer) {
+            let mut w = match writer(app, s) {
                 Ok(w) => w,
                 Err(e) => return Some(Resp::error(502, &format!("writer: {e}"))),
             };
@@ -168,7 +177,7 @@ pub fn route(app: &Arc<App>, req: &Req, s: &Session) -> Option<Resp> {
                     None => return Some(Resp::error(404, "no such change")),
                 }
             };
-            let mut w = match app.open(As::Writer) {
+            let mut w = match writer(app, s) {
                 Ok(w) => w,
                 Err(e) => return Some(Resp::error(502, &format!("writer: {e} (the router will still revert by itself)"))),
             };
@@ -208,6 +217,65 @@ mod tests {
             crate::http::Body::Bytes(b) => serde_json::from_slice(b).unwrap(),
             _ => serde_json::Value::Null,
         }
+    }
+
+    fn login(app: &Arc<crate::app::App>, name: &str, pw: &str) -> (u16, serde_json::Value, String) {
+        let r = handle(app, req("POST", "/api/v1/login", &format!(r#"{{"name":"{name}","password":"{pw}"}}"#)));
+        let cookie = r.headers.iter().find(|(k, _)| *k == "set-cookie").map(|(_, v)| v.split(';').next().unwrap().split_once('=').unwrap().1.to_string()).unwrap_or_default();
+        (r.status, id_of(&r), cookie)
+    }
+
+    const DNS: &str = r#"{"intent":{"kind":"dns-record","name":"nas.lan","address":"192.168.88.4"}}"#;
+
+    #[test]
+    fn mikrotik_account_with_write_logs_in_as_admin_and_changes_run_as_them() {
+        // read-write mode with no stored writer: only a MikroTik-account login can change anything
+        let app = Arc::new(app_with_router("read,write,api,test", Mode::ReadWrite));
+        let (local, local_csrf) = admin_session(&app);
+        let r = handle(&app, with_session(req("POST", "/api/v1/apply/preview", DNS), &local, &local_csrf));
+        assert_eq!(id_of(&r)["canApply"], false, "the local account has no router password");
+        assert!(id_of(&r)["reason"].as_str().unwrap().contains("MikroTik account"));
+
+        let (st, v, cookie) = login(&app, "alice", "router-pass");
+        assert_eq!(st, 200);
+        assert_eq!(v["role"], "admin");
+        assert_eq!(v["mikrotik"], true);
+        let csrf = v["csrf"].as_str().unwrap().to_string();
+        let r = handle(&app, with_session(req("POST", "/api/v1/apply/preview", DNS), &cookie, &csrf));
+        assert_eq!(id_of(&r)["canApply"], true);
+        let id = id_of(&r)["id"].as_str().unwrap().to_string();
+        let r = handle(&app, with_session(req("POST", "/api/v1/apply/start", &format!(r#"{{"id":"{id}"}}"#)), &cookie, &csrf));
+        assert_eq!(r.status, 200, "{:?}", id_of(&r));
+
+        // the password lives only in memory, never in the state file or a debug print
+        let raw = std::fs::read_to_string(lock(&app.store).dir().join("state.json")).unwrap_or_default();
+        assert!(!raw.contains("router-pass"));
+        let sess = format!("{:?}", lock(&app.sessions).get(&cookie).unwrap());
+        assert!(!sess.contains("router-pass") && sess.contains("***"));
+    }
+
+    #[test]
+    fn mikrotik_account_without_write_is_a_viewer_and_keeps_no_password() {
+        let app = Arc::new(app_with_router("read,api,test", Mode::ReadWrite));
+        admin_session(&app);
+        let (st, v, cookie) = login(&app, "viewer", "router-pass");
+        assert_eq!(st, 200);
+        assert_eq!(v["role"], "viewer");
+        assert!(lock(&app.sessions).get(&cookie).unwrap().ros.is_none());
+    }
+
+    #[test]
+    fn mikrotik_login_is_refused_for_wrong_passwords_local_names_and_read_only_mode_writes() {
+        let app = Arc::new(app_with_router("read,write,api,test", Mode::ReadOnly));
+        admin_session(&app);
+        assert_eq!(login(&app, "alice", "wrong").0, 401);
+        // the router accepts "router-pass" for any name, but a local name never falls through to the router
+        assert_eq!(login(&app, "admin", "router-pass").0, 401);
+        // read-only mode stays read-only even for a full MikroTik admin
+        let (st, v, cookie) = login(&app, "alice", "router-pass");
+        assert_eq!(st, 200);
+        let r = handle(&app, with_session(req("POST", "/api/v1/apply/preview", DNS), &cookie, v["csrf"].as_str().unwrap()));
+        assert_eq!(id_of(&r)["canApply"], false);
     }
 
     #[test]

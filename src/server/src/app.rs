@@ -96,6 +96,12 @@ impl App {
         (self.connector)(&cfg, &cred.user, &pw)
     }
 
+    /// Opens a connection with credentials the user just typed (MikroTik-account login, their own writes).
+    pub fn open_as(&self, user: &str, pw: &str) -> Result<Box<dyn Router + Send>, String> {
+        let cfg = self.router_cfg().ok_or("no router configured")?;
+        (self.connector)(&cfg, user, pw)
+    }
+
     /// Runs `f` on the shared reader connection, reconnecting once if it dropped.
     pub fn with_reader<T>(&self, f: impl Fn(&mut dyn Router) -> Result<T, String>) -> Result<T, String> {
         let mut g = lock(&self.reader);

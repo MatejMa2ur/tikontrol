@@ -64,9 +64,9 @@ paths:
   /api/v1/login:
     post:
       security: []
-      summary: Sign in (public, rate limited per IP and globally)
+      summary: 'Sign in with a local tikontrol account or, when no local account has that name, a MikroTik account checked live against the router (write policy → admin, otherwise viewer). Public, rate limited per IP and globally'
       requestBody: { content: { application/json: { schema: { type: object, required: [name, password], properties: { name: { type: string }, password: { type: string } } } } } }
-      responses: { '200': { description: sets the session cookie; body has user, role, csrf }, '401': { description: wrong credentials }, '429': { description: rate limited } }
+      responses: { '200': { description: 'sets the session cookie; body has user, role, csrf and mikrotik: true for a MikroTik-account session' }, '401': { description: wrong credentials }, '429': { description: rate limited } }
   /api/v1/logout:
     post: { security: [{ session: [], csrf: [] }], summary: End the session, responses: { '200': { description: ok } } }
   /api/v1/me:

@@ -11,7 +11,7 @@ Clean-room: we copy the behaviour, never the assets.
 **Backing:** `ROS` = RouterOS API on the router · `CMR` = MikroTik CMR server · `tik` = our own logic/DB · `✗` = nothing can back it
 
 <!-- progress:start -->
-**Progress:** 6 ✅ · 140 🟨 · 59 🎨 · 13 ⬜ · 8 ➖ (226 items, 3% done)
+**Progress:** 6 ✅ · 141 🟨 · 59 🎨 · 13 ⬜ · 8 ➖ (227 items, 3% done)
 <!-- progress:end -->
 
 ---
@@ -273,6 +273,7 @@ Clean-room: we copy the behaviour, never the assets.
 |---|---|---|---|
 | Admin users + roles | tik (own users) + ROS `/user` | 2 | 🟨 |
 | SSO / cloud account | ✗ local auth only | – | ➖ |
+| Sign in with MikroTik account (role from router group, password only in session memory, changes run as that user) | tik + ROS login | 2 | 🟨 |
 | Backups (scheduled, download, restore) | ROS `/system/backup` + `/export` | 2 | 🟨 |
 | Firmware/app updates (channel, auto-update window) | ROS / CMR | 2 | 🟨 |
 | Integrations / local API (+ API keys) | tik REST | 4 |🎨 |

@@ -73,11 +73,23 @@ pub const IDLE: Duration = Duration::from_secs(30 * 60);
 pub const ABSOLUTE: Duration = Duration::from_secs(12 * 3600);
 pub const COOKIE: &str = "tik_s";
 
+/// A RouterOS password kept only in memory for one session; never printed, logged or stored.
+#[derive(Clone)]
+pub struct Secret(pub String);
+
+impl std::fmt::Debug for Secret {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("Secret(***)")
+    }
+}
+
 #[derive(Clone, Debug)]
 pub struct Session {
     pub user: String,
     pub role: Role,
     pub csrf: String,
+    /// set when the user logged in with their MikroTik account: their changes run as them
+    pub ros: Option<Secret>,
     created: Instant,
     last: Instant,
 }
@@ -90,10 +102,14 @@ pub struct Sessions {
 
 impl Sessions {
     pub fn create(&mut self, user: &str, role: Role) -> (String, Session) {
+        self.create_with(user, role, None)
+    }
+
+    pub fn create_with(&mut self, user: &str, role: Role, ros: Option<Secret>) -> (String, Session) {
         self.sweep();
         let token = hex(&random_bytes::<32>());
         let now = Instant::now();
-        let s = Session { user: user.into(), role, csrf: hex(&random_bytes::<32>()), created: now, last: now };
+        let s = Session { user: user.into(), role, csrf: hex(&random_bytes::<32>()), ros, created: now, last: now };
         self.map.insert(sha256_hex(&token), s.clone());
         (token, s)
     }

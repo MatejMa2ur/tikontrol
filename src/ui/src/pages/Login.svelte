@@ -24,7 +24,8 @@
   <form class="card" onsubmit={submit}>
     <div class="logo" aria-hidden="true">tik</div>
     <h1>Sign in to tikontrol</h1>
-    <label>Username<input type="text" autocomplete="username" bind:value={name} required maxlength="32" /></label>
+    <p class="muted small">Use your MikroTik account (or tikontrol's local account). Your router group decides what you can do.</p>
+    <label>Username<input type="text" autocomplete="username" bind:value={name} required maxlength="64" /></label>
     <label>Password<input type="password" autocomplete="current-password" bind:value={password} required maxlength="256" /></label>
     {#if error}<p class="err" role="alert">{error}</p>{/if}
     <button class="btn primary" disabled={busy || !name || !password}>{busy ? 'Signing in…' : 'Sign in'}</button>

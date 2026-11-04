@@ -24,7 +24,12 @@ All settings are environment variables.
 3. The setup page shows the RouterOS commands that create a certificate for API-SSL, disable the plain API, and create a `tikontrol-read` group with only `read,api,test`. Run them in a RouterOS terminal and choose the passwords yourself.
 4. Enter the router address, read its certificate, compare the fingerprint with `/certificate/print detail where name=tikontrol-api`, and connect. tikontrol logs in, reads the user's real group policies, and refuses read-only mode if the user has `write`, `sensitive`, `password`, `policy` or `reboot`.
 
-Read and write needs a second, separate `tikontrol-write` user and an explicit confirmation. Treat that password like the admin password.
+Once the router is connected, anyone with a MikroTik account on it can sign in to tikontrol with that account. tikontrol checks the password by logging in to the router and never stores it. A user whose group has `write` becomes an admin, everyone else a viewer. Local tikontrol accounts always win over a router account with the same name, and keep working when the router is unreachable.
+
+Read and write has two options, both needing an explicit confirmation:
+
+- **The admin who is logged in (recommended).** Changes run as the MikroTik account you signed in with. Its password stays in memory for your session only (30 minutes idle, 12 hours at most), so tikontrol stores no write password at all. Local tikontrol accounts can then only view.
+- **A stored writer user.** A second, separate `tikontrol-write` user, stored encrypted, which lets local accounts make changes. Treat that password like the admin password.
 
 ## Docker (home server)
 
