@@ -11,7 +11,7 @@ Clean-room: we copy the behaviour, never the assets.
 **Backing:** `ROS` = RouterOS API on the router · `CMR` = MikroTik CMR server · `tik` = our own logic/DB · `✗` = nothing can back it
 
 <!-- progress:start -->
-**Progress:** 6 ✅ · 143 🟨 · 59 🎨 · 11 ⬜ · 8 ➖ (227 items, 3% done)
+**Progress:** 6 ✅ · 145 🟨 · 59 🎨 · 9 ⬜ · 8 ➖ (227 items, 3% done)
 <!-- progress:end -->
 
 ---
@@ -230,7 +230,7 @@ Clean-room: we copy the behaviour, never the assets.
 | Zone-based firewall (zone matrix) | ROS interface-lists → filter rules | 3 | 🟨 |
 | Firewall policies (custom rules) | ROS filter | 3 | 🟨 |
 | Simple app blocking | ROS tls-host + DNS · CMR app classes | 3 | 🟨 |
-| Traffic rules (block/limit by client, app, time) | ROS filter + queues + scheduler | 3 | ⬜ |
+| Traffic rules (block/limit by client, app, time) | ROS filter + queues + scheduler | 3 | 🟨 |
 | Ad blocking | ROS `/ip/dns/adlist` | 2 | 🟨 |
 | Content filtering (family, adult) | ROS adlist / DNS | 2 | 🟨 |
 | Region (country) blocking | ROS address-lists + tik feed | 4 | 🟨 |

@@ -4,6 +4,7 @@
   import { api } from '../lib/backend'
   import { live, prefs, displayName, iconOf } from '../lib/live.svelte'
   import { review } from '../lib/apply.svelte'
+  import { trafficDraft } from './settings/Security.svelte'
   import Icon from '../lib/Icon.svelte'
   import Ros from '../lib/Ros.svelte'
   import Field from '../lib/ui/Field.svelte'
@@ -76,6 +77,7 @@
       <button class="btn" onclick={() => (tab = 'settings')}><Icon name="gauge" size={14} /> Limit</button>
       <button class="btn" disabled={c.fixedIp} onclick={() => review('Fixed IP', `/ip/dhcp-server/lease/make-static [find mac-address=${c.mac}]`, { kind: 'fixed-ip', mac: c.mac })}><Icon name="pin" size={14} /> {c.fixedIp ? 'Fixed IP' : 'Fix IP'}</button>
       {#if !c.wired}<button class="btn" onclick={() => review('Reconnect client', `/interface/wireless/registration-table/remove [find mac-address=${c.mac}]`, { kind: 'kick-wifi', mac: c.mac })}><Icon name="wifi" size={14} /> Reconnect</button>{/if}
+      <button class="btn" onclick={() => { trafficDraft.mac = c.mac; location.hash = '#/settings/security' }}><Icon name="shield" size={14} /> Traffic rule</button>
       <button class="btn danger" onclick={() => review('Block client', [`/ip/firewall/address-list/add list=tik-blocked address=${c.ip} comment=${c.mac}`, '/ip/firewall/filter/add chain=forward src-address-list=tik-blocked action=drop comment="tik:block" place-before=0'], { kind: 'block-client', mac: c.mac })}><Icon name="block" size={14} /> Block</button>
     </div>
     <dl>
