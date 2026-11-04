@@ -66,3 +66,32 @@ docker save tikontrol > tikontrol.tar   # upload to the router's USB disk
 
 - Replace the binary or image and restart; `TIK_DATA` carries over.
 - Back up `TIK_DATA/key` and `TIK_DATA/state.json` together, and keep the backup private: together they decrypt the router passwords.
+
+## AI assistants (MCP)
+
+tikontrol can act as an [MCP](https://modelcontextprotocol.io) server so an AI assistant can read your network. It is off by default.
+
+- **Enable:** Settings → Control plane → AI assistants (MCP), as an admin. tikontrol creates a random token and shows it once; only its SHA-256 is stored. Turning MCP off revokes the token, and "New token" rotates it.
+- **Endpoint:** `POST https://<tikontrol>:8443/mcp`, JSON-RPC 2.0 over the Streamable HTTP transport (protocol `2025-06-18`, plain JSON answers, no SSE stream). Send `Authorization: Bearer <token>`.
+- **Who can reach it:** only peers with a loopback, private (RFC 1918), link-local or IPv6 unique-local address. Browser requests from another origin are refused, and five wrong tokens lock an address out for 15 minutes. The check uses the TCP peer address: behind a reverse proxy (`TIK_HTTP`) or Docker port publishing every request looks local, so don't expose those to the internet.
+- **Tools:** `router_status`, `list_clients`, `get_client`, `wifi_overview`, `recent_events`, `insights`, `topology`. They read tikontrol's latest snapshot and history only: no router credentials, setup token or secrets are reachable. Every result carries a note that its values are untrusted device data; strings are stripped of control characters and cut at 200 characters.
+- **Privacy mode** (on by default each time MCP is turned on): device names, SSIDs, the router name, MAC and IP addresses are replaced with pseudonyms (`device-1a2b3c4d`, `02:…` MACs, `ip-…`) derived with HMAC-SHA256 under a per-install key. They stay the same across calls, so the assistant can follow one device, but can't be turned back into the real values. Names shorter than three characters are not swapped inside free text such as log lines.
+- **Proposed changes:** in read-write mode a `propose_change` tool records a proposal (title, description, RouterOS commands as text, at most 20 kept in memory). It never applies anything: proposals appear under the MCP settings, where an admin can review them through Safe apply or dismiss them. In read-only mode the tool is not offered and calls are refused.
+
+Sample client configuration (for clients that take a JSON server list):
+
+```json
+{
+  "mcpServers": {
+    "tikontrol": {
+      "type": "http",
+      "url": "https://tikontrol.lan:8443/mcp",
+      "headers": { "Authorization": "Bearer <your MCP token>" }
+    }
+  }
+}
+```
+
+The client has to trust tikontrol's certificate (its own, or the generated one) to connect.
+
+Session routes used by the web UI: `GET /api/v1/mcp` (enabled, privacy, endpoint), `POST /api/v1/mcp/enable` (returns the token once), `POST /api/v1/mcp/disable`, `POST /api/v1/mcp/privacy` `{"privacy": true|false}`, `GET /api/v1/mcp/proposals` and `DELETE /api/v1/mcp/proposals?id=<id>`. Changes need the admin role and the CSRF header.

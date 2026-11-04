@@ -140,11 +140,14 @@ pub struct Prefs {
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, Default)]
+#[serde(default)]
 pub struct McpCfg {
     pub enabled: bool,
     /// SHA-256 of the bearer token; the token itself is shown once
     pub token_hash: String,
     pub privacy: bool,
+    /// HMAC key for privacy-mode pseudonyms, sealed with label "mcp-pseudonym-key"
+    pub key: String,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, Default)]

@@ -47,6 +47,8 @@ pub struct App {
     pub live: Live,
     /// TIK_DEMO: serve this snapshot instead of a router (trying tikontrol out, UI tests)
     pub demo: Option<Arc<Value>>,
+    /// MCP proposals and token rate limit (src/server/src/mcp.rs)
+    pub mcp: crate::mcp::Mcp,
     reader: Mutex<Option<Box<dyn Router + Send>>>,
 }
 
@@ -64,6 +66,7 @@ impl App {
         App {
             live,
             demo: None,
+            mcp: Default::default(),
             store: Mutex::new(store),
             sessions: Mutex::default(),
             limiter: Mutex::default(),
