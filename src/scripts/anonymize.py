@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """snapshot.json -> sample.json: a fictional network with the same shape as the real one.
 
-Usage: scripts/anonymize.py src/ui/src/lib/snapshot.json > src/ui/src/lib/sample.json
+Usage: src/scripts/anonymize.py src/ui/src/lib/snapshot.json > src/ui/src/lib/sample.json
 
 Only the hardware model and its specs survive, because the UI is built around them. Names, addresses,
 counters, signal levels, uptimes, timestamps, versions and service state are all replaced.

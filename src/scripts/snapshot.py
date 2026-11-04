@@ -2,7 +2,7 @@
 """Read-only snapshot of a RouterOS router into JSON for the UI mockup.
 
 ponytail: SSH + :serialize is a mockup data source only; the real backend uses the binary API.
-Usage: scripts/snapshot.py [user@host] > src/ui/src/lib/snapshot.json
+Usage: src/scripts/snapshot.py [user@host] > src/ui/src/lib/snapshot.json
 """
 import json, re, subprocess, sys
 

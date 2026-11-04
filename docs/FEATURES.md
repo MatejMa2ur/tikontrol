@@ -2,7 +2,7 @@
 
 This is the single source of truth for **what UniFi Network has** and **where tikontrol stands** on each item.
 Update the Status column whenever a feature changes state. The progress numbers at the top are recounted by
-`scripts/progress.py` (run it after editing).
+`src/scripts/progress.py` (run it after editing).
 
 Reference: UniFi Network Application 10.x (latest 10.6.109, Oct 2026), taken from public docs and release notes.
 Clean-room: we copy the behaviour, never the assets.

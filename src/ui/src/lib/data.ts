@@ -1,4 +1,4 @@
-// Normalises a RouterOS snapshot (scripts/snapshot.py) into the UI model.
+// Normalises a RouterOS snapshot (src/scripts/snapshot.py) into the UI model.
 // ponytail: mockup data source. The Rust backend will serve this same shape from the live binary API.
 
 import { simulateBe3 } from './be3'

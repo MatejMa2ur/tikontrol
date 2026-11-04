@@ -3,7 +3,7 @@
 import re, pathlib, sys
 
 STATES = ["✅", "🟨", "🎨", "⬜", "➖"]
-p = pathlib.Path(__file__).resolve().parent.parent / "docs" / "FEATURES.md"
+p = pathlib.Path(__file__).resolve().parents[2] / "docs" / "FEATURES.md"
 text = p.read_text(encoding="utf-8")
 
 counts = dict.fromkeys(STATES, 0)

@@ -59,7 +59,10 @@
 <!-- ABOUT THE PROJECT -->
 ## About The Project
 
-[![tikontrol dashboard][product-screenshot]](images/dashboard.png)
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/images/dashboard-dark.png">
+  <img src="docs/images/dashboard.png" alt="tikontrol dashboard">
+</picture>
 
 tikontrol is a clean, opinionated web UI for MikroTik routers, inspired by how UniFi Network organises a home network: dashboard, client list, networks, Wi-Fi, firewall and port forwarding, VPN, topology and alerts.
 
@@ -79,15 +82,18 @@ tikontrol is a clean, opinionated web UI for MikroTik routers, inspired by how U
 
 ### Screenshots
 
-These show the light theme with fictional sample data, so no real network appears here. The app also has a dark theme. To refresh them, run the mockup, add `?theme=light` to the URL and capture each page.
+tikontrol has a light and a dark theme. These screenshots use fictional sample data, so no real network appears here. To refresh them, run the mockup, add `?theme=light` or `?theme=dark` to the URL and capture each page.
 
-| Clients | Topology |
+| Light | Dark |
 | --- | --- |
-| [![Clients][clients-screenshot]](images/clients.png) | [![Topology][topology-screenshot]](images/topology.png) |
+| ![Dashboard, light theme](docs/images/dashboard.png) | ![Dashboard, dark theme](docs/images/dashboard-dark.png) |
+| ![Clients, light theme](docs/images/clients.png) | ![Clients, dark theme](docs/images/clients-dark.png) |
+| ![Topology, light theme](docs/images/topology.png) | ![Topology, dark theme](docs/images/topology-dark.png) |
+| ![Settings, light theme](docs/images/settings.png) | ![Settings, dark theme](docs/images/settings-dark.png) |
 
-| Settings | Simulated hAP be³ Media |
-| --- | --- |
-| [![Settings][settings-screenshot]](images/settings.png) | [![Simulated hAP be³ Media][be3-screenshot]](images/dashboard-be3.png) |
+The hAP be³ Media preview is simulated from MikroTik's spec sheet:
+
+![Simulated hAP be³ Media dashboard](docs/images/dashboard-be3.png)
 
 ### Built With
 
@@ -116,7 +122,7 @@ The planned backend is a single Rust binary with the UI embedded. See [PLAN.md �
    ```
 2. Optional: take a read-only snapshot of your router over SSH
    ```sh
-   scripts/snapshot.py > src/ui/src/lib/snapshot.json
+   src/scripts/snapshot.py > src/ui/src/lib/snapshot.json
    ```
 3. Install the dependencies and start the mockup
    ```sh
@@ -146,11 +152,10 @@ node --test tests/hardware.test.ts
 ## Project Structure
 
 ```
-docs/       Plan, research and the feature tracker
-images/     README screenshots
-scripts/    Router snapshot, anonymiser and progress counter
-src/ui/     Svelte 5 + Vite mockup
-tests/      Hardware detection tests
+docs/          Plan, research, feature tracker and screenshots
+src/scripts/   Router snapshot, anonymiser and progress counter
+src/ui/        Svelte 5 + Vite mockup
+tests/         Hardware detection tests
 ```
 
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
@@ -189,7 +194,7 @@ tests/      Hardware detection tests
 <!-- CONTRIBUTING -->
 ## Contributing
 
-Bug reports and ideas are welcome through [issues](https://github.com/MatejMa2ur/tikontrol/issues). If a change moves a feature to a new state, update its Status cell in [FEATURES.md](docs/FEATURES.md) and run `scripts/progress.py`.
+Bug reports and ideas are welcome through [issues](https://github.com/MatejMa2ur/tikontrol/issues). If a change moves a feature to a new state, update its Status cell in [FEATURES.md](docs/FEATURES.md) and run `src/scripts/progress.py`.
 
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
 
@@ -236,11 +241,6 @@ Project Link: [https://github.com/MatejMa2ur/tikontrol](https://github.com/Matej
 [stars-url]: https://github.com/MatejMa2ur/tikontrol/stargazers
 [issues-shield]: https://img.shields.io/github/issues/MatejMa2ur/tikontrol.svg?style=for-the-badge
 [issues-url]: https://github.com/MatejMa2ur/tikontrol/issues
-[product-screenshot]: images/dashboard.png
-[clients-screenshot]: images/clients.png
-[topology-screenshot]: images/topology.png
-[settings-screenshot]: images/settings.png
-[be3-screenshot]: images/dashboard-be3.png
 [Svelte]: https://img.shields.io/badge/Svelte-FF3E00?style=for-the-badge&logo=svelte&logoColor=white
 [Svelte-url]: https://svelte.dev/
 [TypeScript]: https://img.shields.io/badge/TypeScript-3178C6?style=for-the-badge&logo=typescript&logoColor=white
