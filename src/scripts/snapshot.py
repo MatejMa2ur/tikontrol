@@ -55,6 +55,7 @@ Q = {
     "health": "[/system/health/print as-value proplist=name,value,type]",
     "queues": "[/queue/simple/print as-value proplist=name,target,max-limit,disabled,comment,time]",
     "hotspot": "[/ip/hotspot/print as-value proplist=name,interface,address-pool,profile,disabled]",
+    "hotspotActive": "[/ip/hotspot/active/print as-value proplist=server,user,address,mac-address,login-by,uptime,session-time-left,bytes-in,bytes-out]",
     "users": "[/user/print as-value proplist=name,group,last-logged-in,disabled,comment]",
     "userGroups": "[/user/group/print as-value proplist=name,policy]",
     "scheduler": "[/system/scheduler/print as-value proplist=name,start-time,interval,disabled,next-run]",

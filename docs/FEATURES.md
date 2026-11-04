@@ -11,7 +11,7 @@ Clean-room: we copy the behaviour, never the assets.
 **Backing:** `ROS` = RouterOS API on the router · `CMR` = MikroTik CMR server · `tik` = our own logic/DB · `✗` = nothing can back it
 
 <!-- progress:start -->
-**Progress:** 6 ✅ · 178 🟨 · 29 🎨 · 7 ⬜ · 8 ➖ (228 items, 3% done)
+**Progress:** 6 ✅ · 179 🟨 · 28 🎨 · 7 ⬜ · 8 ➖ (228 items, 3% done)
 <!-- progress:end -->
 
 ---
@@ -267,7 +267,7 @@ Clean-room: we copy the behaviour, never the assets.
 | Vouchers (create, print, expiry) | ROS User Manager | 4 | 🟨 |
 | Terms acceptance / password portal | ROS hotspot | 4 | 🟨 |
 | Payments (Stripe etc.) | ✗ out of scope | – | ➖ |
-| Guest session overview | ROS hotspot active | 4 |🎨 |
+| Guest session overview | ROS hotspot active | 4 | 🟨 |
 
 ## Control plane / System
 | Feature | Backing | Phase | Status |

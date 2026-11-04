@@ -86,6 +86,7 @@ const QUERIES: &[Q] = &[
     q("dnsCache", "/ip/dns/cache/print", &["name", "type", "data", "ttl"]),
     q("queues", "/queue/simple/print", &["name", "target", "max-limit", "disabled", "comment", "time"]).arrays(&["target"]),
     q("hotspot", "/ip/hotspot/print", &["name", "interface", "address-pool", "profile", "disabled"]),
+    q("hotspotActive", "/ip/hotspot/active/print", &["server", "user", "address", "mac-address", "login-by", "uptime", "session-time-left", "bytes-in", "bytes-out"]),
     q("users", "/user/print", &["name", "group", "last-logged-in", "disabled", "comment"]),
     q("userGroups", "/user/group/print", &["name", "policy"]).arrays(&["policy"]),
     // no on-event: script bodies can hold secrets

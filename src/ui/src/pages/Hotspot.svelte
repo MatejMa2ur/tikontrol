@@ -9,6 +9,8 @@
 
   let { tab = 'portal' }: { tab?: string } = $props()
   const hotspots: any[] = raw.hotspot ?? []
+  const guests: any[] = raw.hotspotActive ?? []
+  const mb = (b: unknown) => `${((Number(b) || 0) / 1e6).toFixed(1)} MB`
 
   let portal = $state({ on: hotspots.length > 0, iface: 'guest-vlan', address: '10.10.10.1/24', ssid: 'Guest', title: 'Welcome', text: 'Free Wi-Fi for our guests.', color: '#2672f5', auth: 'terms', password: '', duration: '1d', limit: '20M/5M' })
 
@@ -36,7 +38,7 @@
 
 <div class="grid">
   <h1>Hotspot</h1>
-  <Tabs base="hotspot" active={tab} tabs={[{ id: 'portal', label: 'Guest portal' }, { id: 'vouchers', label: 'Vouchers', count: vouchers.length }, { id: 'guests', label: 'Guests', count: 0 }, { id: 'payments', label: 'Payments' }]} />
+  <Tabs base="hotspot" active={tab} tabs={[{ id: 'portal', label: 'Guest portal' }, { id: 'vouchers', label: 'Vouchers', count: vouchers.length }, { id: 'guests', label: 'Guests', count: guests.length }, { id: 'payments', label: 'Payments' }]} />
 
   {#if tab === 'portal'}
     <div class="two">
@@ -89,7 +91,8 @@
   {:else if tab === 'guests'}
     <Section title="Guest sessions" desc="Who's logged in to the portal right now." ros="/ip/hotspot/active/print">
       <table><thead><tr><th>Guest</th><th>IP</th><th>Login</th><th>Time left</th><th class="r">Data</th><th></th></tr></thead>
-        <tbody><tr class="nohover"><td colspan="6" class="muted">{hotspots.length ? 'No active guests.' : 'Guest portal is not set up yet.'}</td></tr></tbody></table>
+        <tbody>{#each guests as g}<tr class="nohover"><td><b>{g.user ?? '—'}</b> <span class="muted mono small">{g['mac-address'] ?? ''}</span></td><td class="mono">{g.address}</td><td>{g['login-by'] ?? ''} <span class="muted small">{g.uptime ?? ''}</span></td><td>{g['session-time-left'] || 'no limit'}</td><td class="r mono small">{mb(g['bytes-out'])} ↓ / {mb(g['bytes-in'])} ↑</td><td class="muted small">{g.server ?? ''}</td></tr>
+          {:else}<tr class="nohover"><td colspan="6" class="muted">{hotspots.length ? 'No active guests.' : 'Guest portal is not set up yet.'}</td></tr>{/each}</tbody></table>
     </Section>
   {:else}
     <Section title="Payments" desc="Paid Wi-Fi (Stripe and similar) is out of scope for tikontrol.">
