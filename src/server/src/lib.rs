@@ -1,4 +1,5 @@
 //! tikontrol library: everything the binary uses, split out so it can be unit-tested.
+pub mod alerts;
 pub mod api;
 pub mod app;
 pub mod apply;
@@ -9,6 +10,7 @@ pub mod http;
 pub mod intents;
 pub mod live;
 pub mod mcp;
+pub mod outbound;
 pub mod policy;
 pub mod ros;
 pub mod routes;

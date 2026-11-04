@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { events, clients, insights, type Event } from '../lib/data'
+  import { events, clients, insights, isBackend, type Event } from '../lib/data'
   import { review, apply } from '../lib/apply.svelte'
   import Ros from '../lib/Ros.svelte'
   import Icon from '../lib/Icon.svelte'
@@ -7,6 +7,7 @@
   import Section from '../lib/ui/Section.svelte'
   import Field from '../lib/ui/Field.svelte'
   import Toggle from '../lib/ui/Toggle.svelte'
+  import AlarmManager from '../lib/AlarmManager.svelte'
 
   let { tab = 'events' }: { tab?: string } = $props()
 
@@ -41,12 +42,13 @@
   ])
   let ch = $state({ email: '', ntfy: '', telegram: '', webhook: '' })
   let quiet = $state({ on: false, from: '23:00', to: '07:00' })
+  let unacked = $state(0) // from the server when isBackend
   let history = $state(insights.filter((i) => i.level !== 'ok').map((i, n) => ({ id: n, title: i.title, sev: i.level === 'bad' ? 'critical' : 'warning', at: 'Today', ack: false })))
 </script>
 
 <div class="grid">
   <h1>Logs & Alarms</h1>
-  <Tabs base="events" active={tab} tabs={[{ id: 'events', label: 'Events', count: all.length }, { id: 'alarms', label: 'Alarm Manager', count: history.filter((h) => !h.ack).length }, { id: 'channels', label: 'Notifications' }]} />
+  <Tabs base="events" active={tab} tabs={[{ id: 'events', label: 'Events', count: all.length }, { id: 'alarms', label: 'Alarm Manager', count: isBackend ? unacked : history.filter((h) => !h.ack).length }, { id: 'channels', label: 'Notifications' }]} />
 
   {#if tab === 'events'}
     <div class="row between wrap">
@@ -63,6 +65,9 @@
       </table>
     </section>
     <Ros cmd="/log/print follow" />
+  {:else if isBackend && (tab === 'alarms' || tab === 'channels')}
+    <AlarmManager view={tab === 'alarms' ? 'alarms' : 'channels'} bind:unacked />
+    {#if tab === 'channels'}{@render syslog()}{/if}
   {:else if tab === 'alarms'}
     <Section title="Active alarms" desc="Things that fired and haven't been acknowledged.">
       {#each history as h}
@@ -99,12 +104,16 @@
       <Field label="Webhook" help="POST JSON (works with Home Assistant)"><input type="text" bind:value={ch.webhook} placeholder="https://…" /></Field>
       <div class="r"><button class="btn">Send test</button> <button class="btn primary">Save</button></div>
     </Section>
-    <Section title="Remote syslog / SIEM" desc="Forward the router log to a syslog server." ros="/system/logging/action/set remote remote=… ; /system/logging/add topics=info action=remote">
-      <Field label="Syslog server"><input type="text" placeholder="10.0.0.50:514" id="syslog" /></Field>
-      <div class="r"><button class="btn primary" onclick={() => review('Remote syslog', ['/system/logging/action/set [find name=remote] remote=10.0.0.50 remote-port=514', '/system/logging/add topics=info action=remote', '/system/logging/add topics=critical action=remote'])}>Review & apply</button></div>
-    </Section>
+    {@render syslog()}
   {/if}
 </div>
+
+{#snippet syslog()}
+  <Section title="Remote syslog / SIEM" desc="Forward the router log to a syslog server." ros="/system/logging/action/set remote remote=… ; /system/logging/add topics=info action=remote">
+    <Field label="Syslog server"><input type="text" placeholder="10.0.0.50:514" id="syslog" /></Field>
+    <div class="r"><button class="btn primary" onclick={() => review('Remote syslog', ['/system/logging/action/set [find name=remote] remote=10.0.0.50 remote-port=514', '/system/logging/add topics=info action=remote', '/system/logging/add topics=critical action=remote'])}>Review & apply</button></div>
+  </Section>
+{/snippet}
 
 <style>
   .flush { padding: 4px 6px; overflow-x: auto; }

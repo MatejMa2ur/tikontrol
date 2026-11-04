@@ -65,6 +65,7 @@ fn main() {
         tikontrol::flows::spawn(app.clone(), &f).unwrap_or_else(|e| die(&format!("TIK_FLOWS {f}: {e}")));
         println!("tikontrol: NetFlow v5 collector on {f} (router packets only)");
     }
+    tikontrol::alerts::spawn(app.clone(), Duration::from_secs(30));
     let handler: http::Handler = {
         let app = app.clone();
         Arc::new(move |req| api::handle(&app, req))
