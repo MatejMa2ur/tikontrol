@@ -23,6 +23,7 @@ const POOL: &str = "/ip/pool";
 const DHCPS: &str = "/ip/dhcp-server";
 const DHCPN: &str = "/ip/dhcp-server/network";
 const DHCPO: &str = "/ip/dhcp-server/option";
+const V6ADDR: &str = "/ipv6/address";
 pub(crate) const FILTER: &str = "/ip/firewall/filter";
 
 #[derive(Debug, Deserialize)]
@@ -54,6 +55,9 @@ enum N {
         list: String,
         #[serde(default)]
         bridge: String,
+        /// IPv6 pool (from prefix delegation) to hand out on the VLAN with SLAAC; empty = no IPv6
+        #[serde(default)]
+        ipv6_pool: String,
     },
     RemoveNetwork { name: String },
     SetVlanFiltering { bridge: String, enabled: bool },
@@ -65,7 +69,11 @@ enum N {
         gateway: String,
         #[serde(default)]
         dns: Vec<String>,
+        /// DNS search domain for the network; Some("") clears it
+        domain: Option<String>,
     },
+    /// SLAAC on a LAN interface from a delegated IPv6 pool; empty pool removes ours.
+    Ipv6Lan { interface: String, pool: String },
     DhcpOption {
         name: String,
         code: u8,
@@ -105,6 +113,7 @@ const KINDS: &[&str] = &[
     "set-dhcp-lease",
     "set-dhcp-range",
     "set-dhcp-network",
+    "ipv6-lan",
     "dhcp-option",
     "remove-dhcp-option",
     "set-mdns-repeat",
@@ -248,7 +257,17 @@ const NET_PARTS: &[(&str, &[&str])] = &[
     (DHCPN, &["address", "gateway", "dns-server", "domain"]),
     (MEMBER, &["list", "interface"]),
     (FILTER, &["chain", "in-interface", "out-interface", "in-interface-list", "out-interface-list", "action"]),
+    (V6ADDR, &["interface", "from-pool", "advertise"]),
 ];
+
+/// An existing IPv6 pool (made by a DHCPv6 client with prefix delegation).
+fn v6_pool(r: &mut dyn Router, pool: &str) -> Result<String, String> {
+    let p = slug(pool)?;
+    if print(r, "/ipv6/pool", &["name"], Some(("name", &p)))?.is_empty() {
+        return Err(format!("no IPv6 pool {p}: turn on IPv6 on the WAN first (Internet)"));
+    }
+    Ok(p)
+}
 
 fn set1(path: &'static str, args: Vec<(&'static str, String)>) -> Op {
     Op { path, verb: "set", find: None, args }
@@ -257,7 +276,8 @@ fn set1(path: &'static str, args: Vec<(&'static str, String)>) -> Op {
 fn build(i: &N, r: &mut dyn Router) -> Result<Plan, String> {
     use N::*;
     Ok(match i {
-        CreateNetwork { name, vlan, subnet: sn, dhcp, range, lease_time, dns, domain, isolated, guest, internet, list, bridge } => {
+        CreateNetwork { name, vlan, subnet: sn, dhcp, range, lease_time, dns, domain, isolated, guest, internet, list, bridge, ipv6_pool } => {
+            let v6 = if ipv6_pool.is_empty() { None } else { Some(v6_pool(r, ipv6_pool)?) };
             let name = slug(name)?;
             if !(2..=4094).contains(vlan) {
                 return Err("VLAN ID must be 2-4094".into());
@@ -333,6 +353,9 @@ fn build(i: &N, r: &mut dyn Router) -> Result<Plan, String> {
                 ops.push(Op::add(DHCPN, tag(nw)));
             }
             ops.push(Op::add(MEMBER, tag(vec![("list", list.clone()), ("interface", ifn.clone())])));
+            if let Some(pool) = &v6 {
+                ops.push(Op::add(V6ADDR, tag(vec![("interface", ifn.clone()), ("from-pool", pool.clone()), ("advertise", "yes".into())])));
+            }
             let first = if isolated || !*internet { first_rule(r, FILTER, "forward")? } else { None };
             let place = |mut a: Vec<(&'static str, String)>| {
                 if let Some(id) = &first {
@@ -417,10 +440,10 @@ fn build(i: &N, r: &mut dyn Router) -> Result<Plan, String> {
             pl.warnings.push("Clients keep their current lease until it expires.".into());
             pl
         }
-        SetDhcpNetwork { address, gateway, dns } => {
+        SetDhcpNetwork { address, gateway, dns, domain } => {
             let (net, n) = subnet(address)?;
             let a = format!("{}/{n}", ip(net));
-            let rows = print(r, DHCPN, &["gateway", "dns-server"], Some(("address", &a)))?;
+            let rows = print(r, DHCPN, &["gateway", "dns-server", "domain"], Some(("address", &a)))?;
             let old = rows.first().ok_or("no DHCP network with that address")?;
             let mut args = vec![];
             let mut back = vec![];
@@ -437,10 +460,33 @@ fn build(i: &N, r: &mut dyn Router) -> Result<Plan, String> {
                 args.push(("dns-server", dns_list(dns)?));
                 back.push(("dns-server", old.get("dns-server").cloned().unwrap_or_default()));
             }
+            if let Some(d) = domain {
+                args.push(("domain", if d.trim().is_empty() { String::new() } else { crate::apply::dns_name(d)? }));
+                back.push(("domain", old.get("domain").cloned().unwrap_or_default()));
+            }
             if args.is_empty() {
                 return Err("nothing to change".into());
             }
             plan(format!("DHCP settings for {a}"), Risk::Low, vec![Op::on(DHCPN, "set", "address", &a, args)], vec![Op::on(DHCPN, "set", "address", &a, back)])
+        }
+        Ipv6Lan { interface, pool } => {
+            let ifn = ifname(interface)?;
+            let c = format!("tik:v6lan:{ifn}");
+            if pool.is_empty() {
+                let undo = rebuild(r, V6ADDR, &["interface", "from-pool", "advertise"], &c)?;
+                if undo.is_empty() {
+                    return Err("only IPv6 set up by tikontrol can be removed here".into());
+                }
+                plan(format!("Turn off IPv6 on {ifn}"), Risk::Low, vec![remove(V6ADDR, &c)], undo)
+            } else {
+                let pool = v6_pool(r, pool)?;
+                if !print(r, V6ADDR, &[".id"], Some(("comment", &c)))?.is_empty() {
+                    return Err(format!("{ifn} already has IPv6 from tikontrol: turn it off first"));
+                }
+                let mut p = plan(format!("IPv6 (SLAAC from {pool}) on {ifn}"), Risk::Low, vec![Op::add(V6ADDR, vec![("interface", ifn.clone()), ("from-pool", pool), ("advertise", "yes".into()), ("comment", c.clone())])], vec![remove(V6ADDR, &c)]);
+                p.warnings.push("Devices on this network get public IPv6 addresses. The default IPv6 firewall drops new inbound connections; check it is in place.".into());
+                p
+            }
         }
         DhcpOption { name, code, value_type, value, network } => {
             let name = slug(name)?;
@@ -647,7 +693,7 @@ mod tests {
         f.answers.insert("/interface/vlan/print".into(), Ok(vec![row(&[("name", "vlan30"), ("interface", "bridge"), ("vlan-id", "30")])]));
         f.answers.insert("/ip/pool/print".into(), Ok(vec![row(&[("name", "tik-net-IoT"), ("ranges", "10.0.30.10-10.0.30.254")])]));
         let p = go(json!({"kind":"remove-network","name":"IoT"}), &mut f).unwrap();
-        assert_eq!(p.ops.first().unwrap().path, FILTER);
+        assert_eq!(p.ops.first().unwrap().path, V6ADDR);
         assert_eq!(p.ops.last().unwrap().path, VLAN_IF);
         assert_eq!(p.undo[0].path, VLAN_IF);
         assert!(go(json!({"kind":"remove-network","name":"none"}), &mut Fake::default()).is_err());
@@ -686,6 +732,23 @@ mod tests {
         let p = go(json!({"kind":"dhcp-option","name":"tftp","code":66,"value_type":"text","value":"boot.lan","network":"10.0.30.0/24"}), &mut f).unwrap();
         assert!(p.cli()[0].contains("value=\"s'boot.lan'\""), "{:?}", p.cli());
         assert_eq!(p.undo.last().unwrap().path, DHCPO);
+    }
+
+    #[test]
+    fn ipv6_lan_and_domain_compile_with_undo() {
+        let mut f = fake();
+        assert!(go(json!({"kind":"ipv6-lan","interface":"vlan30","pool":"tik-v6"}), &mut f).unwrap_err().contains("no IPv6 pool"));
+        f.answers.insert("/ipv6/pool/print".into(), Ok(vec![row(&[("name", "tik-v6")])]));
+        let p = go(json!({"kind":"ipv6-lan","interface":"vlan30","pool":"tik-v6"}), &mut f).unwrap();
+        assert_eq!(p.cli(), ["/ipv6/address/add interface=vlan30 from-pool=tik-v6 advertise=yes comment=tik:v6lan:vlan30"]);
+        assert_eq!(p.undo_cli(), [r#"/ipv6/address/remove [find comment="tik:v6lan:vlan30"]"#]);
+        f.answers.insert("/ip/dhcp-server/network/print".into(), Ok(vec![row(&[("domain", "old.lan")])]));
+        let p = go(json!({"kind":"set-dhcp-network","address":"10.0.30.0/24","domain":"iot.lan"}), &mut f).unwrap();
+        assert_eq!(p.cli(), [r#"/ip/dhcp-server/network/set [find address="10.0.30.0/24"] domain=iot.lan"#]);
+        assert_eq!(p.undo_cli(), [r#"/ip/dhcp-server/network/set [find address="10.0.30.0/24"] domain=old.lan"#]);
+        for b in [json!({"kind":"ipv6-lan","interface":"vlan30","pool":"x\" ; /system/reboot"}), json!({"kind":"set-dhcp-network","address":"10.0.30.0/24","domain":"a b;c"}), json!({"kind":"ipv6-lan","interface":"vlan30","pool":""})] {
+            assert!(go(b.clone(), &mut f).is_err(), "{b}");
+        }
     }
 
     #[test]

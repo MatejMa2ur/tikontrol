@@ -11,7 +11,7 @@ Clean-room: we copy the behaviour, never the assets.
 **Backing:** `ROS` = RouterOS API on the router · `CMR` = MikroTik CMR server · `tik` = our own logic/DB · `✗` = nothing can back it
 
 <!-- progress:start -->
-**Progress:** 6 ✅ · 179 🟨 · 28 🎨 · 7 ⬜ · 8 ➖ (228 items, 3% done)
+**Progress:** 6 ✅ · 183 🟨 · 24 🎨 · 7 ⬜ · 8 ➖ (228 items, 3% done)
 <!-- progress:end -->
 
 ---
@@ -33,7 +33,7 @@ Clean-room: we copy the behaviour, never the assets.
 | P11 | System Log (events, admin activity, security, updates) | Events | 1 | 🟨 |
 | P12 | Hotspot Manager | Guest portal | 4 |🎨 |
 | P13 | Settings → WiFi | Settings · WiFi | 2 |🟨 |
-| P14 | Settings → Networks | Settings · Networks | 3 |🎨 |
+| P14 | Settings → Networks | Settings · Networks | 3 |🟨 |
 | P15 | Settings → Internet | Settings · Internet | 3 |🎨 |
 | P16 | Settings → VPN | Settings · VPN | 2 | 🟨 |
 | P17 | Settings → Security / CyberSecure | Settings · Security | 3 |🎨 |
@@ -194,11 +194,11 @@ Clean-room: we copy the behaviour, never the assets.
 | DHCP range, lease time, DNS, gateway | ROS dhcp-server | 3 | 🟨 |
 | DHCP options (custom) | ROS dhcp option | 4 | 🟨 |
 | Network isolation | ROS firewall | 3 | 🟨 |
-| IPv6 (prefix delegation, SLAAC, DHCPv6) | ROS ipv6 | 4 |🎨 |
+| IPv6 (prefix delegation, SLAAC; DHCPv6 server not yet) | ROS ipv6 | 4 |🟨 |
 | IGMP snooping / multicast | ROS bridge igmp-snooping | 4 | 🟨 |
 | mDNS reflector across networks | ROS `/ip/dns mdns-repeat-ifaces` | 3 | 🟨 |
-| Content filtering per network | ROS DNS / adlist per network (limited) | 4 |🎨 |
-| Domain name / local DNS | ROS dns static | 3 |🎨 |
+| Content filtering per network (DHCP DNS: family-safe resolver or router ad list; bypassable) | ROS DNS / adlist per network (limited) | 4 |🟨 |
+| Domain name / local DNS | ROS dhcp network domain + dns static | 3 |🟨 |
 
 ## Internet (WAN)
 | Feature | Backing | Phase | Status |

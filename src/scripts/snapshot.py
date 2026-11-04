@@ -91,6 +91,8 @@ Q = {
     "etherStats": "[/interface/print stats as-value proplist=name,rx-byte,tx-byte,rx-error,tx-error,rx-drop,tx-drop where type=ether]",
     "etherMon": "[/interface/ethernet/monitor [find] once as-value]",
     "ipv6": '({"disable-ipv6"=[/ipv6/settings/get disable-ipv6]})',
+    "ipv6Pools": "[/ipv6/pool/print as-value proplist=name,prefix,prefix-length]",
+    "ipv6Addresses": "[/ipv6/address/print as-value proplist=address,interface,from-pool,advertise,dynamic,comment]",
     "kidControl": "[/ip/kid-control/print as-value proplist=name,rate-limit,disabled]",
     "services": "[/ip/service/print as-value proplist=name,port,disabled]",
     "log": "[/log/print as-value proplist=time,topics,message]",

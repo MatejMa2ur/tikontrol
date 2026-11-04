@@ -126,6 +126,8 @@ const QUERIES: &[Q] = &[
     q("addressLists", "/ip/firewall/address-list/print", &["list", "address", "dynamic", "comment"]),
     q("etherStats", "/interface/print", &["name", "rx-byte", "tx-byte", "rx-error", "tx-error", "rx-drop", "tx-drop"]).args(&[("stats", "")]).query(&[("type", "ether")]),
     one("ipv6", "/ipv6/settings/print", &["disable-ipv6"]),
+    q("ipv6Pools", "/ipv6/pool/print", &["name", "prefix", "prefix-length"]),
+    q("ipv6Addresses", "/ipv6/address/print", &["address", "interface", "from-pool", "advertise", "dynamic", "comment"]),
     q("kidControl", "/ip/kid-control/print", &["name", "rate-limit", "disabled"]),
     q("services", "/ip/service/print", &["name", "port", "disabled", "address", "certificate"]),
     q("log", "/log/print", &["time", "topics", "message"]).arrays(&["topics"]),
