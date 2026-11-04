@@ -11,7 +11,7 @@ Clean-room: we copy the behaviour, never the assets.
 **Backing:** `ROS` = RouterOS API on the router · `CMR` = MikroTik CMR server · `tik` = our own logic/DB · `✗` = nothing can back it
 
 <!-- progress:start -->
-**Progress:** 0 ✅ · 0 🟨 · 178 🎨 · 16 ⬜ · 8 ➖ (202 items, 0% done)
+**Progress:** 0 ✅ · 0 🟨 · 178 🎨 · 22 ⬜ · 8 ➖ (208 items, 0% done)
 <!-- progress:end -->
 
 ---
@@ -296,3 +296,15 @@ Clean-room: we copy the behaviour, never the assets.
 | Runs as RouterOS container (arm/v7, arm64) | tik build | 1 | ⬜ |
 | Runs on Docker (home server) | tik build | 0 | ⬜ |
 | CHR dev/test router | – | 0 | ⬜ |
+
+## AI assistants (MCP)
+Not a UniFi feature: this is our own addition. An MCP server lets an AI assistant query tikontrol and propose changes.
+
+| Feature | Backing | Phase | Status |
+|---|---|---|---|
+| MCP server: off by default, local network only, own access token | tik | 2 | ⬜ |
+| Read-only tools: clients, Wi-Fi, events, insights, topology | tik + ROS | 2 | ⬜ |
+| Proposed changes, applied only after approval in Review & apply | tik + Safe apply | 3 | ⬜ |
+| Privacy mode: hide or swap names and addresses before data leaves tikontrol | tik | 2 | ⬜ |
+| Treat device names and SSIDs as untrusted input (prompt injection) | tik | 2 | ⬜ |
+| Never expose router credentials through MCP | tik | 2 | ⬜ |
