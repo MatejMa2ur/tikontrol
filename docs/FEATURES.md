@@ -11,7 +11,7 @@ Clean-room: we copy the behaviour, never the assets.
 **Backing:** `ROS` = RouterOS API on the router · `CMR` = MikroTik CMR server · `tik` = our own logic/DB · `✗` = nothing can back it
 
 <!-- progress:start -->
-**Progress:** 5 ✅ · 36 🟨 · 155 🎨 · 22 ⬜ · 8 ➖ (226 items, 2% done)
+**Progress:** 6 ✅ · 74 🟨 · 116 🎨 · 22 ⬜ · 8 ➖ (226 items, 3% done)
 <!-- progress:end -->
 
 ---
@@ -20,17 +20,17 @@ Clean-room: we copy the behaviour, never the assets.
 
 | # | UniFi page | tikontrol page | Phase | Status |
 |---|---|---|---|---|
-| P1 | Dashboard | Dashboard | 1 | 🎨 |
+| P1 | Dashboard | Dashboard | 1 | 🟨 |
 | P2 | UniFi Devices (list) | Devices | 3 |🎨 |
-| P3 | Topology | Topology (tab in Devices) | 2 |🎨 |
+| P3 | Topology | Topology (tab in Devices) | 2 | 🟨 |
 | P4 | Device detail (overview / ports / insights / settings) | Device drawer | 3 |🎨 |
-| P5 | Client Devices (list) | Clients | 1 | 🎨 |
-| P6 | Client detail (overview / insights / settings) | Client drawer | 1 | 🎨 |
-| P7 | Ports (port manager) | Ports | 2 | 🎨 |
+| P5 | Client Devices (list) | Clients | 1 | 🟨 |
+| P6 | Client detail (overview / insights / settings) | Client drawer | 1 | 🟨 |
+| P7 | Ports (port manager) | Ports | 2 | 🟨 |
 | P8 | Radios (Radio Manager, coverage, connectivity) | Radios | 3 |🎨 |
 | P9 | Insights / Traffic flows | Traffic | 3 |🎨 |
 | P10 | Alarm Manager | Alerts | 2 |🎨 |
-| P11 | System Log (events, admin activity, security, updates) | Events | 1 | 🎨 |
+| P11 | System Log (events, admin activity, security, updates) | Events | 1 | 🟨 |
 | P12 | Hotspot Manager | Guest portal | 4 |🎨 |
 | P13 | Settings → WiFi | Settings · WiFi | 2 |🎨 |
 | P14 | Settings → Networks | Settings · Networks | 3 |🎨 |
@@ -50,22 +50,22 @@ Clean-room: we copy the behaviour, never the assets.
 ## Dashboard
 | Feature | Backing | Phase | Status |
 |---|---|---|---|
-| Status-first summary with insights (insecure services, double NAT, low RAM, band flapping, pending firmware) | tik on ROS data | 1 | 🎨 |
+| Status-first summary with insights (insecure services, double NAT, low RAM, band flapping, pending firmware) | tik on ROS data | 1 | 🟨 |
 | Internet health (WAN up, latency, packet loss) | ROS netwatch + tik | 1 | 🟨 |
 | WAN live throughput (down/up) graph | ROS monitor-traffic | 1 | 🟨 |
 | Max download/upload speed indicators | tik | 1 | ⬜ |
-| ISP name, public IP, WAN IP | ROS `/ip/cloud`, dhcp-client | 1 | 🎨 |
-| Client count (wired / wireless / guest) | ROS | 1 | 🎨 |
-| Gateway resources (CPU, RAM, temp, uptime) | ROS `/system/resource`, health | 1 | 🎨 |
-| Top clients by traffic | ROS kid-control + tik | 1 | 🎨 |
+| ISP name, public IP, WAN IP | ROS `/ip/cloud`, dhcp-client | 1 | 🟨 |
+| Client count (wired / wireless / guest) | ROS | 1 | 🟨 |
+| Gateway resources (CPU, RAM, temp, uptime) | ROS `/system/resource`, health | 1 | 🟨 |
+| Top clients by traffic | ROS kid-control + tik | 1 | 🟨 |
 | Top applications | CMR apptraffic | 3 | ⬜ |
-| Traffic Identification card (by client now, by app once CMR is wired) | ROS reg-table bytes · CMR | 1 | 🎨 |
-| WiFi Technology card (clients by standard + band, activity, experience) | ROS reg-table | 1 | 🎨 |
-| Most active clients / access points strips | ROS + tik | 1 | 🎨 |
+| Traffic Identification card (by client now, by app once CMR is wired) | ROS reg-table bytes · CMR | 1 | 🟨 |
+| WiFi Technology card (clients by standard + band, activity, experience) | ROS reg-table | 1 | 🟨 |
+| Most active clients / access points strips | ROS + tik | 1 | 🟨 |
 | Internet Activity chart: client count cells + down/up, 1H/1D/1W | tik history | 2 | 🟨 |
-| Gateway column (WAN/gateway IP, uptime, latency to 3 resolvers, channel widths) | ROS | 1 | 🎨 |
-| WiFi experience / satisfaction score | tik (signal + rate heuristic) | 2 | 🎨 |
-| Recent critical events | ROS log + tik | 1 | 🎨 |
+| Gateway column (WAN/gateway IP, uptime, latency to 3 resolvers, channel widths) | ROS | 1 | 🟨 |
+| WiFi experience / satisfaction score | tik (signal + rate heuristic) | 2 | 🟨 |
+| Recent critical events | ROS log + tik | 1 | 🟨 |
 | Firmware update available banner | ROS / CMR | 2 | 🟨 |
 | Speed test (run + history) | tik container client | 3 | ⬜ |
 | Customisable widgets / layout | tik | 4 | ⬜ |
@@ -75,13 +75,13 @@ Clean-room: we copy the behaviour, never the assets.
 |---|---|---|---|
 | Device list (name, model, IP, version, uptime, state) | CMR `/cmr/device` | 3 |🎨 |
 | Device adoption (one-click) | CMR pairing | 3 |🎨 |
-| Auto-detect make, model, CPU, memory and WiFi capabilities | ROS `/system/resource`, `/system/routerboard` | 1 |🎨 |
+| Auto-detect make, model, CPU, memory and WiFi capabilities | ROS `/system/resource`, `/system/routerboard` | 1 | 🟨 |
 | Device detail: CPU/RAM/temperature history | CMR dashboard + tik | 3 |🎨 |
 | Device restart / locate (blink LED) | CMR reboot · ROS `/system/routerboard` LED | 3 |🎨 |
 | Firmware update per device | CMR / ROS | 3 |🎨 |
 | Scheduled / rolling fleet updates | CMR upgrade rules | 3 |🎨 |
-| Topology map (auto layout, wired + wireless links) | CMR layout · ROS neighbor + bridge host | 2 |🎨 |
-| Topology Spotlight (highlight/filter) | tik | 3 |🎨 |
+| Topology map (auto layout, wired + wireless links) | CMR layout · ROS neighbor + bridge host | 2 | 🟨 |
+| Topology Spotlight (highlight/filter) | tik | 3 | 🟨 |
 | Device Supervisor (health anomalies) | CMR state alerts | 4 |🎨 |
 | Blueprints / config drift inspector | tik (export diff) | 4 |🎨 |
 | Device SSH credentials management | ROS `/user` | 3 | ⬜ |
@@ -91,13 +91,13 @@ Clean-room: we copy the behaviour, never the assets.
 ## Client Devices
 | Feature | Backing | Phase | Status |
 |---|---|---|---|
-| Client list: name, IP, MAC, vendor, connection, uptime | ROS leases + ARP + reg-table + bridge host | 1 | 🎨 |
-| Device fingerprint / auto icon (phone, TV, PC…) | tik (OUI + hostname + DHCP heuristics) | 1 | 🎨 |
-| Wired: switch port · Wireless: SSID, band, signal, rate | ROS bridge host + reg-table | 1 | 🎨 |
+| Client list: name, IP, MAC, vendor, connection, uptime | ROS leases + ARP + reg-table + bridge host | 1 | 🟨 |
+| Device fingerprint / auto icon (phone, TV, PC…) | tik (OUI + hostname + DHCP heuristics) | 1 | 🟨 |
+| Wired: switch port · Wireless: SSID, band, signal, rate | ROS bridge host + reg-table | 1 | 🟨 |
 | Live per-client throughput | ROS kid-control / reg-table bytes | 1 | 🟨 |
 | Per-client traffic history | tik SQLite | 2 | 🟨 |
 | Per-client apps / domains | tik DNS correlation (CMR is per-device) | 3 |🎨 |
-| Rename / alias, custom icon, notes | tik | 1 | 🎨 |
+| Rename / alias, custom icon, notes | tik | 1 | 🟨 |
 | Fixed IP (reservation) | ROS lease make-static | 2 | 🟨 |
 | Local DNS record for client | ROS `/ip/dns/static` | 2 | 🟨 |
 | Block / unblock | ROS address-list + filter | 2 | 🟨 |
@@ -107,15 +107,15 @@ Clean-room: we copy the behaviour, never the assets.
 | Override network/VLAN for client | ROS (MAC-based VLAN / access list) | 4 |🎨 |
 | Offline / historical clients list | tik | 2 | 🟨 |
 | Roaming history (which AP, when) | tik (reg-table changes) · CMR wifi-logs | 3 |🎨 |
-| Filters (wired / wireless / guest / offline) and search | tik | 1 | 🎨 |
+| Filters (wired / wireless / guest / offline) and search | tik | 1 | 🟨 |
 | Client groups | tik | 3 |🎨 |
 
 ## Ports
 | Feature | Backing | Phase | Status |
 |---|---|---|---|
-| Port grid with link state, speed, duplex | ROS `/interface/ethernet` monitor | 2 | 🎨 |
-| Which client is on which port | ROS bridge host | 2 | 🎨 |
-| Per-port traffic / errors | ROS | 2 |🎨 |
+| Port grid with link state, speed, duplex | ROS `/interface/ethernet` monitor | 2 | 🟨 |
+| Which client is on which port | ROS bridge host | 2 | 🟨 |
+| Per-port traffic / errors | ROS | 2 | 🟨 |
 | PoE status / power cycle | ROS `/interface/ethernet/poe` (hw dependent) | 3 |🎨 |
 | Port profile (VLAN access/trunk, native VLAN) | ROS bridge VLAN · CMR vlan | 3 |🎨 |
 | Port disable / enable | ROS | 2 |🎨 |
@@ -129,12 +129,12 @@ Clean-room: we copy the behaviour, never the assets.
 ## Radios / WiFi monitoring
 | Feature | Backing | Phase | Status |
 |---|---|---|---|
-| Radio list per AP: band, channel, width, tx power, clients | ROS wireless/wifi · CMR | 3 | 🎨 |
+| Radio list per AP: band, channel, width, tx power, clients | ROS wireless/wifi · CMR | 3 | 🟨 |
 | Channel utilisation | ROS monitor (driver dependent) | 3 | ⬜ |
 | Neighbouring networks / interference scan | ROS `scan` (duration-limited) | 3 |🎨 |
-| Signal strength distribution | tik from reg-table | 3 | 🎨 |
-| WiFi connectivity success (association / auth / DHCP / DNS) | tik from log + leases | 2 | 🎨 |
-| Radio link quality (CCQ buckets, channel, power, noise) | ROS wireless monitor | 2 | 🎨 |
+| Signal strength distribution | tik from reg-table | 3 | 🟨 |
+| WiFi connectivity success (association / auth / DHCP / DNS) | tik from log + leases | 2 | 🟨 |
+| Radio link quality (CCQ buckets, channel, power, noise) | ROS wireless monitor | 2 | 🟨 |
 | Roaming journeys (Connectivity view) | tik · CMR wifi-logs | 3 |🎨 |
 | Coverage map / floorplan (Design Center) | tik (manual floorplan, no RF model) | 4 |🎨 |
 | WiFiman (client-side speed/coverage app) | ✗ | – | ➖ |
@@ -160,8 +160,8 @@ Clean-room: we copy the behaviour, never the assets.
 ## System Log / Events
 | Feature | Backing | Phase | Status |
 |---|---|---|---|
-| Live event stream | ROS `/log follow` | 1 | 🎨 |
-| Categories: clients, devices, admin activity, security, updates | tik (topic mapping) | 1 | 🎨 |
+| Live event stream | ROS `/log follow` | 1 | 🟨 |
+| Categories: clients, devices, admin activity, security, updates | tik (topic mapping) | 1 | 🟨 |
 | Derived events (client joined/left, WAN flap) | tik | 2 | 🟨 |
 | Search / filter / export CSV | tik | 2 | 🟨 |
 | Remote syslog / SIEM forwarding | ROS logging action | 3 |🎨 |
@@ -222,7 +222,7 @@ Clean-room: we copy the behaviour, never the assets.
 | Site-to-site (WireGuard / IPsec) | ROS | 3 |🎨 |
 | Teleport (one-click remote access) | ROS Back To Home (`/ip/cloud`) | 2 |🎨 |
 | Policy-based routing through VPN | ROS routing rules / mangle | 3 |🎨 |
-| Connected VPN users view | ROS | 2 |🎨 |
+| Connected VPN users view | ROS | 2 | 🟨 |
 
 ## Security / CyberSecure
 | Feature | Backing | Phase | Status |
@@ -239,7 +239,7 @@ Clean-room: we copy the behaviour, never the assets.
 | IDS/IPS (signature-based) | ✗ | – | ➖ |
 | Honeypot | ✗ | – | ➖ |
 | Threat intelligence feeds (CyberSecure) | tik blocklist into address-list (partial) | 4 |🎨 |
-| Security audit (telnet/ftp/http on, default creds) | tik | 2 | 🎨 |
+| Security audit (telnet/ftp/http on, default creds) | tik | 2 | 🟨 |
 
 ## Routing
 | Feature | Backing | Phase | Status |
@@ -284,15 +284,15 @@ Clean-room: we copy the behaviour, never the assets.
 | Device auth / SSH settings, service hardening | ROS `/ip/service` | 2 | 🟨 |
 | Debug tools: ping, traceroute, packet capture | ROS `/ping`, `/tool/traceroute`, sniffer | 3 |🎨 |
 | Safe apply (auto-revert) | tik + ROS scheduler | 3 | 🟨 |
-| "Show in RouterOS" for every object | tik | 2 | 🎨 |
+| "Show in RouterOS" for every object | tik | 2 | 🟨 |
 
 ## Platform
 | Feature | Backing | Phase | Status |
 |---|---|---|---|
 | Multi-site / multi-router | tik + CMR | 4 | ⬜ |
 | Mobile app | ✗ → responsive PWA instead | – | ➖ |
-| Responsive layout / PWA install | tik | 1 | 🎨 |
-| Dark / light theme | tik | 1 | 🎨 |
+| Responsive layout / PWA install | tik | 1 | 🟨 |
+| Dark / light theme | tik | 1 | ✅ |
 | Runs as RouterOS container (arm/v7, arm64) | tik build | 1 | ⬜ |
 | Runs on Docker (home server) | tik build | 0 | 🟨 |
 | CHR dev/test router | – | 0 | ⬜ |
