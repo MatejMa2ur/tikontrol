@@ -123,7 +123,13 @@ impl History {
             rx.push(Some(a.rx.round()));
             tx.push(Some(a.tx.round()));
         }
-        json!({ "t": t, "clients": cl, "rx": rx, "tx": tx, "samples": src.len() })
+        // peak minute average in this range and over all stored history (minutes + hours)
+        // ponytail: minute averages, not raw 2 s samples; store a per-minute max in Point if short bursts matter
+        let peak = |it: &mut dyn Iterator<Item = &Point>| it.fold((0.0f64, 0.0f64), |(r, x), p| (r.max(p.rx), x.max(p.tx)));
+        let start = end - (n - 1) * step;
+        let (prx, ptx) = peak(&mut src.iter().filter(|p| p.t >= start));
+        let (arx, atx) = peak(&mut self.hours.iter().chain(self.minutes.iter()));
+        json!({ "t": t, "clients": cl, "rx": rx, "tx": tx, "samples": src.len(), "peak": { "rx": prx.round(), "tx": ptx.round() }, "peakAll": { "rx": arx.round(), "tx": atx.round() } })
     }
 
     /// Internet health bar: the last 12 h in 48 slots of 15 min. ok / warn (slow) / bad (down) / none.

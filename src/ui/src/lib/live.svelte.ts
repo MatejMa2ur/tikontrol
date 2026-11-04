@@ -100,7 +100,8 @@ export const iconOf = (c: { mac: string; kind: string }) => prefs.icons[c.mac] |
 // ---------- Internet Activity history ----------
 // ponytail: synthetic until the backend stores samples (SQLite, PLAN §2). Seeded so it doesn't reshuffle on every render.
 export type Range = '1H' | '1D' | '1W'
-type Series = { t: number[]; clients: number[]; rx: number[]; tx: number[] }
+type Peak = { rx: number; tx: number }
+type Series = { t: number[]; clients: number[]; rx: number[]; tx: number[]; peak?: Peak; peakAll?: Peak }
 const stored = $state<Partial<Record<Range, Series>>>({})
 const fetched: Partial<Record<Range, number>> = {}
 function fromServer(range: Range): Series {
@@ -114,8 +115,17 @@ function fromServer(range: Range): Series {
 }
 const seeded = (seed: number) => () => ((seed = (seed * 1664525 + 1013904223) % 4294967296) / 4294967296)
 const online = clients.filter((c) => c.online).length
-export function activity(range: Range) {
-  if (isBackend) return fromServer(range)
+const peakOf = (s: { rx: (number | null)[]; tx: (number | null)[] }): Peak => ({ rx: Math.max(0, ...s.rx.map(Number)), tx: Math.max(0, ...s.tx.map(Number)) })
+/** The series plus its peak down/up (this range) and peakAll (all stored history; the mockup uses its 1W data). */
+export function activity(range: Range): Series & { peak: Peak; peakAll: Peak } {
+  if (isBackend) {
+    const s = fromServer(range)
+    return { ...s, peak: s.peak ?? peakOf(s), peakAll: s.peakAll ?? peakOf(s) }
+  }
+  const s = synth(range), p = peakOf(s), w = peakOf(synth('1W'))
+  return { ...s, peak: p, peakAll: { rx: Math.max(p.rx, w.rx), tx: Math.max(p.tx, w.tx) } }
+}
+function synth(range: Range) {
   const [n, step] = { '1H': [60, 60], '1D': [96, 900], '1W': [168, 3600] }[range]
   const rnd = seeded(n), end = Math.floor(Date.now() / 1000 / step) * step
   const t: number[] = [], cl: number[] = [], rx: number[] = [], tx: number[] = []

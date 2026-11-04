@@ -102,6 +102,7 @@
       {#if internet.publicIp}<span>Public IP</span><span class="mono">{internet.publicIp}</span>{/if}
       <span>Uptime</span><span class="good">100%</span>
       <span>Activity</span><span><span class="down">↓ {bps(live.rx.at(-1) ?? 0)}</span> <span class="up">↑ {bps(live.tx.at(-1) ?? 0)}</span></span>
+      <span title="Highest 1-minute average in tikontrol's stored history">Peak</span><span><span class="down">↓ {bps(hist.peakAll.rx)}</span> <span class="up">↑ {bps(hist.peakAll.tx)}</span></span>
     </div>
     <svg class="spark" viewBox="0 0 100 30" preserveAspectRatio="none"><polyline points={spark(live.rx)} stroke="var(--down)" /><polyline points={spark(live.tx)} stroke="var(--up)" /></svg>
     <div class="lat">
@@ -243,6 +244,7 @@
             <button class:on={mode === 'down'} onclick={() => (mode = 'down')}>Download</button>
             <button class:on={mode === 'up'} onclick={() => (mode = 'up')}>Upload</button>
           </div>
+          <span class="muted" title="Peak 1-minute average in this range">Peak <span class="down">↓ {bps(hist.peak.rx)}</span> <span class="up">↑ {bps(hist.peak.tx)}</span></span>
           <span class="down" title="Since boot">↓ {bytes(internet.bytesDown)}</span>
           <span class="up" title="Since boot">↑ {bytes(internet.bytesUp)}</span>
           <span class="row muted"><Icon name="clients" size={13} /> {online.length}</span>

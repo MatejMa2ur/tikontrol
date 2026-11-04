@@ -11,7 +11,7 @@ Clean-room: we copy the behaviour, never the assets.
 **Backing:** `ROS` = RouterOS API on the router · `CMR` = MikroTik CMR server · `tik` = our own logic/DB · `✗` = nothing can back it
 
 <!-- progress:start -->
-**Progress:** 6 ✅ · 142 🟨 · 59 🎨 · 12 ⬜ · 8 ➖ (227 items, 3% done)
+**Progress:** 6 ✅ · 143 🟨 · 59 🎨 · 11 ⬜ · 8 ➖ (227 items, 3% done)
 <!-- progress:end -->
 
 ---
@@ -53,7 +53,7 @@ Clean-room: we copy the behaviour, never the assets.
 | Status-first summary with insights (insecure services, double NAT, low RAM, band flapping, pending firmware) | tik on ROS data | 1 | 🟨 |
 | Internet health (WAN up, latency, packet loss) | ROS netwatch + tik | 1 | 🟨 |
 | WAN live throughput (down/up) graph | ROS monitor-traffic | 1 | 🟨 |
-| Max download/upload speed indicators | tik | 1 | ⬜ |
+| Max download/upload speed indicators | tik | 1 | 🟨 |
 | ISP name, public IP, WAN IP | ROS `/ip/cloud`, dhcp-client | 1 | 🟨 |
 | Client count (wired / wireless / guest) | ROS | 1 | 🟨 |
 | Gateway resources (CPU, RAM, temp, uptime) | ROS `/system/resource`, health | 1 | 🟨 |
