@@ -96,6 +96,7 @@ fn reason(s: u16) -> &'static str {
     match s {
         200 => "OK",
         201 => "Created",
+        202 => "Accepted",
         204 => "No Content",
         304 => "Not Modified",
         400 => "Bad Request",

@@ -11,7 +11,7 @@ Clean-room: we copy the behaviour, never the assets.
 **Backing:** `ROS` = RouterOS API on the router · `CMR` = MikroTik CMR server · `tik` = our own logic/DB · `✗` = nothing can back it
 
 <!-- progress:start -->
-**Progress:** 6 ✅ · 77 🟨 · 113 🎨 · 22 ⬜ · 8 ➖ (226 items, 3% done)
+**Progress:** 6 ✅ · 84 🟨 · 113 🎨 · 15 ⬜ · 8 ➖ (226 items, 3% done)
 <!-- progress:end -->
 
 ---
@@ -330,7 +330,7 @@ Not a UniFi feature: this is our own addition. The router enforces it, not tikon
 | Read-only badge, with edit controls disabled and the reason shown | tik | 1 | 🟨 |
 | Store no write credential in read-only mode | tik | 1 | ✅ |
 | Switching to read and write needs a new credential and an explicit confirmation | tik | 2 | 🟨 |
-| MCP follows the same mode: no proposed changes in read-only mode | tik | 2 | ⬜ |
+| MCP follows the same mode: no proposed changes in read-only mode | tik | 2 | 🟨 |
 | Test on CHR that the router rejects writes from the read-only user | tik | 0 | ⬜ |
 
 ## AI assistants (MCP)
@@ -338,9 +338,9 @@ Not a UniFi feature: this is our own addition. An MCP server lets an AI assistan
 
 | Feature | Backing | Phase | Status |
 |---|---|---|---|
-| MCP server: off by default, local network only, own access token | tik | 2 | ⬜ |
-| Read-only tools: clients, Wi-Fi, events, insights, topology | tik + ROS | 2 | ⬜ |
-| Proposed changes, applied only after approval in Review & apply | tik + Safe apply | 3 | ⬜ |
-| Privacy mode: hide or swap names and addresses before data leaves tikontrol | tik | 2 | ⬜ |
-| Treat device names and SSIDs as untrusted input (prompt injection) | tik | 2 | ⬜ |
-| Never expose router credentials through MCP | tik | 2 | ⬜ |
+| MCP server: off by default, local network only, own access token | tik | 2 | 🟨 |
+| Read-only tools: clients, Wi-Fi, events, insights, topology | tik + ROS | 2 | 🟨 |
+| Proposed changes, applied only after approval in Review & apply | tik + Safe apply | 3 | 🟨 |
+| Privacy mode: hide or swap names and addresses before data leaves tikontrol | tik | 2 | 🟨 |
+| Treat device names and SSIDs as untrusted input (prompt injection) | tik | 2 | 🟨 |
+| Never expose router credentials through MCP | tik | 2 | 🟨 |
