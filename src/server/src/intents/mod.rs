@@ -5,6 +5,7 @@ pub mod hotspot;
 pub mod internet;
 pub mod networks;
 pub mod profiles;
+pub mod routing;
 pub mod security;
 pub mod system;
 pub mod traffic;

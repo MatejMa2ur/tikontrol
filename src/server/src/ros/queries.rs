@@ -75,6 +75,11 @@ const QUERIES: &[Q] = &[
     // no private-key: Back To Home users carry their WireGuard keys
     q("bthUsers", "/ip/cloud/back-to-home-users/print", &["name", "allow-lan", "disabled", "comment", "expires"]),
     q("routingRules", "/routing/rule/print", &["src-address", "dst-address", "action", "table", "interface", "routing-mark", "disabled", "comment"]),
+    q("routingTables", "/routing/table/print", &["name", "fib", "comment"]),
+    // read-only views; no BGP tcp-md5-key or OSPF auth keys
+    q("ospfInstances", "/routing/ospf/instance/print", &["name", "version", "router-id", "disabled"]),
+    q("ospfNeighbors", "/routing/ospf/neighbor/print", &["instance", "address", "router-id", "state", "adjacency"]),
+    q("bgpSessions", "/routing/bgp/session/print", &["name", "remote.address", "remote.as", "local.as", "established", "uptime", "prefix-count"]),
     q("routes", "/ip/route/print", &["dst-address", "gateway", "distance", "routing-table", "active", "dynamic", "static", "comment", "disabled"]),
     q("dnsStatic", "/ip/dns/static/print", &["name", "address", "type", "comment", "disabled"]),
     one("dnsCfg", "/ip/dns/print", &["servers", "use-doh-server", "allow-remote-requests", "mdns-repeat-ifaces"]).arrays(&["servers", "mdns-repeat-ifaces"]),

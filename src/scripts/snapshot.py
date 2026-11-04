@@ -43,6 +43,11 @@ Q = {
     # no private-key: Back To Home users carry their WireGuard keys
     "bthUsers": "[/ip/cloud/back-to-home-users/print as-value proplist=name,allow-lan,disabled,comment,expires]",
     "routingRules": "[/routing/rule/print as-value proplist=src-address,dst-address,action,table,interface,routing-mark,disabled,comment]",
+    "routingTables": "[/routing/table/print as-value proplist=name,fib,comment]",
+    # read-only views; no BGP tcp-md5-key or OSPF auth keys
+    "ospfInstances": "[/routing/ospf/instance/print as-value proplist=name,version,router-id,disabled]",
+    "ospfNeighbors": "[/routing/ospf/neighbor/print as-value proplist=instance,address,router-id,state,adjacency]",
+    "bgpSessions": "[/routing/bgp/session/print as-value proplist=name,remote.address,remote.as,local.as,established,uptime,prefix-count]",
     "routes": "[/ip/route/print as-value proplist=dst-address,gateway,distance,routing-table,active,dynamic,static,comment,disabled]",
     "dnsStatic": "[/ip/dns/static/print as-value proplist=name,address,type,comment,disabled]",
     "dnsCfg": '({"servers"=[/ip/dns/get servers];"use-doh-server"=[/ip/dns/get use-doh-server];"allow-remote-requests"=[/ip/dns/get allow-remote-requests];"mdns-repeat-ifaces"=[/ip/dns/get mdns-repeat-ifaces]})',

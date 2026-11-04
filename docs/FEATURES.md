@@ -11,7 +11,7 @@ Clean-room: we copy the behaviour, never the assets.
 **Backing:** `ROS` = RouterOS API on the router · `CMR` = MikroTik CMR server · `tik` = our own logic/DB · `✗` = nothing can back it
 
 <!-- progress:start -->
-**Progress:** 6 ✅ · 153 🟨 · 54 🎨 · 7 ⬜ · 8 ➖ (228 items, 3% done)
+**Progress:** 6 ✅ · 156 🟨 · 51 🎨 · 7 ⬜ · 8 ➖ (228 items, 3% done)
 <!-- progress:end -->
 
 ---
@@ -37,7 +37,7 @@ Clean-room: we copy the behaviour, never the assets.
 | P15 | Settings → Internet | Settings · Internet | 3 |🎨 |
 | P16 | Settings → VPN | Settings · VPN | 2 | 🟨 |
 | P17 | Settings → Security / CyberSecure | Settings · Security | 3 |🎨 |
-| P18 | Settings → Routing | Settings · Routing | 2 |🎨 |
+| P18 | Settings → Routing | Settings · Routing | 2 | 🟨 |
 | P19 | Settings → Profiles | Settings · Profiles | 3 |🎨 |
 | P20 | Settings → Control Plane (admins, backups, updates, integrations, console) | Settings · System | 2 |🎨 |
 | P21 | Settings → System (site, logging, SNMP, device auth) | Settings · System | 2 |🎨 |
@@ -247,10 +247,10 @@ Clean-room: we copy the behaviour, never the assets.
 |---|---|---|---|
 | Port forwarding | ROS NAT dst-nat | 2 | 🟨 |
 | Static routes | ROS `/ip/route` | 2 | 🟨 |
-| Policy-based routes | ROS routing rules | 3 |🎨 |
+| Policy-based routes | ROS routing rules | 3 | 🟨 |
 | UPnP / NAT-PMP | ROS `/ip/upnp` | 2 | 🟨 |
 | Local DNS records | ROS dns static | 2 | 🟨 |
-| Dynamic routing (OSPF / BGP) | ROS (advanced: show only) | 4 |🎨 |
+| Dynamic routing (OSPF / BGP) | ROS (advanced: show only) | 4 | 🟨 |
 
 ## Profiles
 | Feature | Backing | Phase | Status |

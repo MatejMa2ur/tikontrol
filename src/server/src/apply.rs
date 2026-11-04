@@ -399,6 +399,7 @@ pub const AREAS: &[Area] = &[
     crate::intents::hotspot::compile,
     crate::intents::wifi::compile,
     crate::intents::vpn::compile,
+    crate::intents::routing::compile,
 ];
 
 /// Entry point for the API: core intents first, then the areas. Unknown kinds are rejected.

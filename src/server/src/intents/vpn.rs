@@ -103,7 +103,7 @@ fn subnets(v: &[String], what: &str) -> Result<Vec<String>, String> {
 }
 
 /// "10.9.0.1/30" → "10.9.0.0/30"
-fn network(c: &str) -> String {
+pub fn network(c: &str) -> String {
     let (a, n) = c.split_once('/').unwrap_or((c, "32"));
     let (a, n): (Ipv4Addr, u32) = (a.parse().unwrap_or(Ipv4Addr::UNSPECIFIED), n.parse().unwrap_or(32));
     let mask = if n == 0 { 0 } else { u32::MAX << (32 - n) };
