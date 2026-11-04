@@ -620,7 +620,7 @@ mod tests {
 
     #[test]
     fn areas_are_reached_through_compile_value() {
-        let v = serde_json::json!({"kind": "block-domain", "name": "example.com"});
+        let v = serde_json::json!({"kind": "block-domain", "domain": "example.com"});
         assert!(compile_value(&v, &mut Fake::default()).unwrap().title.contains("example.com"));
         assert!(compile_value(&serde_json::json!({"kind": "nope"}), &mut Fake::default()).is_err());
     }
