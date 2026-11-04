@@ -1,2 +1,11 @@
 //! tikontrol library: everything the binary uses, split out so it can be unit-tested.
+pub mod api;
+pub mod app;
+pub mod auth;
+pub mod http;
+pub mod mcp;
+pub mod policy;
 pub mod ros;
+pub mod routes;
+pub mod store;
+pub mod tlscert;

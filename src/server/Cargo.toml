@@ -10,6 +10,7 @@ publish = false
 ring = "0.17"
 rustls = { version = "0.23", default-features = false, features = ["ring", "std", "tls12"] }
 rustls-pemfile = "2"
+rcgen = { version = "0.13", default-features = false, features = ["ring", "pem"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 
@@ -20,5 +21,3 @@ codegen-units = 1
 panic = "abort"
 strip = true
 
-[dev-dependencies]
-rcgen = { version = "0.13", default-features = false, features = ["ring", "pem"] }
