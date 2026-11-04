@@ -152,7 +152,7 @@ node --test tests/hardware.test.ts
 ## Project Structure
 
 ```
-docs/          Plan, research, feature tracker and screenshots
+docs/          Plan, research, feasibility study, feature tracker and screenshots
 src/scripts/   Router snapshot, anonymiser and progress counter
 src/ui/        Svelte 5 + Vite mockup
 tests/         Hardware detection tests
@@ -176,7 +176,7 @@ tests/         Hardware detection tests
 <!-- ROADMAP -->
 ## Roadmap
 
-**Progress is tracked in [FEATURES.md](docs/FEATURES.md)**: every UniFi page and feature, what backs it on MikroTik, and its status. See [PLAN.md](docs/PLAN.md) for the plan and [RESEARCH.md](docs/RESEARCH.md) for prior art and platform limits.
+**Progress is tracked in [FEATURES.md](docs/FEATURES.md)**: every UniFi page and feature, what backs it on MikroTik, and its status. See [PLAN.md](docs/PLAN.md) for the plan and [RESEARCH.md](docs/RESEARCH.md) for prior art and platform limits. [FEASIBILITY.md](docs/FEASIBILITY.md) is the latest study of what is possible, with its source notes in [docs/research](docs/research).
 
 - [ ] Phase 0: Dev environment, connect to the router
 - [ ] Phase 1: Read-only dashboard and clients
