@@ -1,7 +1,7 @@
 <script lang="ts">
   import { ports, clients, raw, bytes, router } from '../lib/data'
   import { displayName } from '../lib/live.svelte'
-  import { review } from '../lib/apply.svelte'
+  import { review, type Intent } from '../lib/apply.svelte'
   import Icon from '../lib/Icon.svelte'
   import Ros from '../lib/Ros.svelte'
   import Modal from '../lib/ui/Modal.svelte'
@@ -33,7 +33,15 @@
     if (f.mirror) cmds.push(`/interface/ethernet/switch/set switch1 mirror-source=${p} mirror-target=ether5`)
     if (f.dot1x) cmds.push(`/interface/dot1x/server/add interface=${p}`)
     if (!f.lldp) cmds.push(`/ip/neighbor/discovery-settings/set discover-interface-list=!dynamic`)
-    review(`Port ${p}`, cmds)
+    // one change the server can compile → send it as an intent; mixed changes stay commands to copy
+    const bp = bports.find((b) => b.interface === p)
+    const extras = f.speed !== 'auto' || f.mirror || f.dot1x || !f.lldp
+    const enabledChanged = f.enabled === false
+    let intent: Intent | undefined
+    if (!extras && enabledChanged && f.profile === 'all') intent = { kind: 'set-port-enabled', interface: p, enabled: false }
+    else if (!extras && !enabledChanged && f.profile === 'access' && bp) intent = { kind: 'set-bridge-port', interface: p, pvid: f.pvid, frame_types: 'admit-only-untagged-and-priority-tagged' }
+    else if (!extras && !enabledChanged && f.profile === 'trunk' && bp) intent = { kind: 'port-profile', interface: p, pvid: 1, tagged: (f.tagged || '').split(',').map((v) => Number(v.trim())).filter((v) => v > 0) }
+    review(`Port ${p}`, cmds, intent)
     edit = null
   }
 </script>

@@ -11,7 +11,7 @@ Clean-room: we copy the behaviour, never the assets.
 **Backing:** `ROS` = RouterOS API on the router · `CMR` = MikroTik CMR server · `tik` = our own logic/DB · `✗` = nothing can back it
 
 <!-- progress:start -->
-**Progress:** 6 ✅ · 98 🟨 · 100 🎨 · 14 ⬜ · 8 ➖ (226 items, 3% done)
+**Progress:** 6 ✅ · 116 🟨 · 83 🎨 · 13 ⬜ · 8 ➖ (226 items, 3% done)
 <!-- progress:end -->
 
 ---
@@ -116,9 +116,9 @@ Clean-room: we copy the behaviour, never the assets.
 | Port grid with link state, speed, duplex | ROS `/interface/ethernet` monitor | 2 | 🟨 |
 | Which client is on which port | ROS bridge host | 2 | 🟨 |
 | Per-port traffic / errors | ROS | 2 | 🟨 |
-| PoE status / power cycle | ROS `/interface/ethernet/poe` (hw dependent) | 3 |🎨 |
-| Port profile (VLAN access/trunk, native VLAN) | ROS bridge VLAN · CMR vlan | 3 |🎨 |
-| Port disable / enable | ROS | 2 |🎨 |
+| PoE status / power cycle | ROS `/interface/ethernet/poe` (hw dependent) | 3 | 🟨 |
+| Port profile (VLAN access/trunk, native VLAN) | ROS bridge VLAN · CMR vlan | 3 | 🟨 |
+| Port disable / enable | ROS | 2 | 🟨 |
 | Port mirroring | ROS switch mirror | 4 |🎨 |
 | Link aggregation | ROS bonding | 4 |🎨 |
 | STP / loop protection settings | ROS bridge protocol-mode | 4 |🎨 |
@@ -189,13 +189,13 @@ Clean-room: we copy the behaviour, never the assets.
 ## Networks
 | Feature | Backing | Phase | Status |
 |---|---|---|---|
-| Create network: name, VLAN, subnet, DHCP in one form | ROS composite (Safe apply) | 3 |🎨 |
-| DHCP range, lease time, DNS, gateway | ROS dhcp-server | 3 |🎨 |
-| DHCP options (custom) | ROS dhcp option | 4 |🎨 |
-| Network isolation | ROS firewall | 3 |🎨 |
+| Create network: name, VLAN, subnet, DHCP in one form | ROS composite (Safe apply) | 3 | 🟨 |
+| DHCP range, lease time, DNS, gateway | ROS dhcp-server | 3 | 🟨 |
+| DHCP options (custom) | ROS dhcp option | 4 | 🟨 |
+| Network isolation | ROS firewall | 3 | 🟨 |
 | IPv6 (prefix delegation, SLAAC, DHCPv6) | ROS ipv6 | 4 |🎨 |
-| IGMP snooping / multicast | ROS bridge igmp-snooping | 4 |🎨 |
-| mDNS reflector across networks | ROS `/ip/dns mdns-repeat-ifaces` | 3 |🎨 |
+| IGMP snooping / multicast | ROS bridge igmp-snooping | 4 | 🟨 |
+| mDNS reflector across networks | ROS `/ip/dns mdns-repeat-ifaces` | 3 | 🟨 |
 | Content filtering per network | ROS DNS / adlist per network (limited) | 4 |🎨 |
 | Domain name / local DNS | ROS dns static | 3 |🎨 |
 
@@ -227,18 +227,18 @@ Clean-room: we copy the behaviour, never the assets.
 ## Security / CyberSecure
 | Feature | Backing | Phase | Status |
 |---|---|---|---|
-| Zone-based firewall (zone matrix) | ROS interface-lists → filter rules | 3 |🎨 |
-| Firewall policies (custom rules) | ROS filter | 3 |🎨 |
-| Simple app blocking | ROS tls-host + DNS · CMR app classes | 3 |🎨 |
+| Zone-based firewall (zone matrix) | ROS interface-lists → filter rules | 3 | 🟨 |
+| Firewall policies (custom rules) | ROS filter | 3 | 🟨 |
+| Simple app blocking | ROS tls-host + DNS · CMR app classes | 3 | 🟨 |
 | Traffic rules (block/limit by client, app, time) | ROS filter + queues + scheduler | 3 | ⬜ |
 | Ad blocking | ROS `/ip/dns/adlist` | 2 | 🟨 |
-| Content filtering (family, adult) | ROS adlist / DNS | 2 |🎨 |
-| Region (country) blocking | ROS address-lists + tik feed | 4 |🎨 |
-| IP groups / port groups | ROS address-lists | 3 |🎨 |
-| Device isolation (per client) | ROS bridge filter | 4 | ⬜ |
+| Content filtering (family, adult) | ROS adlist / DNS | 2 | 🟨 |
+| Region (country) blocking | ROS address-lists + tik feed | 4 | 🟨 |
+| IP groups / port groups | ROS address-lists | 3 | 🟨 |
+| Device isolation (per client) | ROS bridge filter | 4 | 🟨 |
 | IDS/IPS (signature-based) | ✗ | – | ➖ |
 | Honeypot | ✗ | – | ➖ |
-| Threat intelligence feeds (CyberSecure) | tik blocklist into address-list (partial) | 4 |🎨 |
+| Threat intelligence feeds (CyberSecure) | tik blocklist into address-list (partial) | 4 | 🟨 |
 | Security audit (telnet/ftp/http on, default creds) | tik | 2 | 🟨 |
 
 ## Routing
@@ -255,7 +255,7 @@ Clean-room: we copy the behaviour, never the assets.
 | Feature | Backing | Phase | Status |
 |---|---|---|---|
 | Speed limit profiles (client groups) | ROS queues | 3 |🎨 |
-| Port profiles | ROS bridge VLAN | 3 |🎨 |
+| Port profiles | ROS bridge VLAN | 3 | 🟨 |
 | RADIUS profiles | ROS `/radius` | 4 |🎨 |
 | QoS / DSCP rules | ROS mangle + queue tree | 4 |🎨 |
 
