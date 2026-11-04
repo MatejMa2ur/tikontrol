@@ -53,7 +53,7 @@ const QUERIES: &[Q] = &[
     one("update", "/system/package/update/print", &["channel", "installed-version", "latest-version"]),
     q("wan", "/ip/dhcp-client/print", &["interface", "address", "gateway", "status"]),
     // never without a proplist: /ip/cloud also holds the Back To Home private key
-    one("cloud", "/ip/cloud/print", &["public-address", "dns-name", "back-to-home-vpn"]),
+    one("cloud", "/ip/cloud/print", &["public-address", "dns-name", "back-to-home-vpn", "ddns-enabled"]),
     q("interfaces", "/interface/print", &["name", "type", "running", "disabled", "rx-byte", "tx-byte", "comment", "mac-address"]),
     q("ethernet", "/interface/ethernet/print", &["name", "running", "disabled"]),
     q("wifi", "/interface/wireless/print", &["name", "ssid", "band", "frequency", "channel-width", "running", "disabled", "mode", "master-interface", "security-profile", "hide-ssid", "default-forwarding", "default-ap-tx-limit", "default-client-tx-limit", "comment"]),
@@ -364,7 +364,7 @@ pub mod tests {
         let (c, _) = console("/ip/route print").unwrap();
         assert_eq!(c.words().unwrap()[0], "/ip/route/print");
         let (c, _) = console("/ip/cloud/print").unwrap();
-        assert_eq!(c.words().unwrap()[1], "=.proplist=public-address,dns-name,back-to-home-vpn");
+        assert_eq!(c.words().unwrap()[1], "=.proplist=public-address,dns-name,back-to-home-vpn,ddns-enabled");
         assert!(console("/interface/monitor-traffic ether1 once").is_ok());
         for bad in ["/system/reboot", "/ip/route/print; /system/reboot", "/ip/route/print detail", "/system/script/print", "/interface/wireguard/peers/print where name=x", "/interface/monitor-traffic a;b once", "/interface/monitor-traffic ether1", "/ip/address/add address=1.2.3.4", ""] {
             assert!(console(bad).is_err(), "{bad}");
@@ -395,7 +395,7 @@ pub mod tests {
             assert!(w.iter().any(|x| x.starts_with("=.proplist=")), "{w:?}");
         }
         let cloud = f.seen.iter().find(|w| w[0] == "/ip/cloud/print").unwrap();
-        assert_eq!(cloud[1], "=.proplist=public-address,dns-name,back-to-home-vpn");
+        assert_eq!(cloud[1], "=.proplist=public-address,dns-name,back-to-home-vpn,ddns-enabled");
         assert!(!f.seen.iter().flatten().any(|w| w.contains("private-key") || w.contains("on-event") || w.contains("passphrase")));
     }
 

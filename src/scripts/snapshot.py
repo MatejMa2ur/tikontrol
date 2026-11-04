@@ -16,7 +16,7 @@ Q = {
     "update": '({"channel"=[/system/package/update/get channel];"installed-version"=[/system/package/update/get installed-version];"latest-version"=[/system/package/update/get latest-version]})',
     "wan": "[/ip/dhcp-client/print as-value proplist=interface,address,gateway,status]",
     # never /ip/cloud/get without a field name: it returns the BTH private key
-    "cloud": '({"public-address"=[/ip/cloud/get public-address];"dns-name"=[/ip/cloud/get dns-name];"back-to-home-vpn"=[/ip/cloud/get back-to-home-vpn]})',
+    "cloud": '({"public-address"=[/ip/cloud/get public-address];"dns-name"=[/ip/cloud/get dns-name];"back-to-home-vpn"=[/ip/cloud/get back-to-home-vpn];"ddns-enabled"=[/ip/cloud/get ddns-enabled]})',
     "wanTraffic": "[/interface/monitor-traffic ether1 once as-value]",
     "interfaces": "[/interface/print as-value proplist=name,type,running,disabled,rx-byte,tx-byte,comment,mac-address]",
     "ethernet": "[/interface/ethernet/print as-value proplist=name,running,disabled]",

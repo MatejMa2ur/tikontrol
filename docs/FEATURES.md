@@ -34,7 +34,7 @@ Clean-room: we copy the behaviour, never the assets.
 | P12 | Hotspot Manager | Guest portal | 4 |🎨 |
 | P13 | Settings → WiFi | Settings · WiFi | 2 |🟨 |
 | P14 | Settings → Networks | Settings · Networks | 3 |🟨 |
-| P15 | Settings → Internet | Settings · Internet | 3 |🎨 |
+| P15 | Settings → Internet | Settings · Internet | 3 |🟨 |
 | P16 | Settings → VPN | Settings · VPN | 2 | 🟨 |
 | P17 | Settings → Security / CyberSecure | Settings · Security | 3 |🎨 |
 | P18 | Settings → Routing | Settings · Routing | 2 | 🟨 |
@@ -206,7 +206,7 @@ Clean-room: we copy the behaviour, never the assets.
 | WAN type: DHCP / static / PPPoE | ROS | 3 | 🟨 |
 | VLAN tagged WAN | ROS | 3 | 🟨 |
 | Multi-WAN failover | ROS routes + check-gateway / netwatch | 3 | 🟨 |
-| Load balancing | ROS PCC / ECMP | 4 |🎨 |
+| Load balancing (ECMP second default route) | ROS PCC / ECMP | 4 |🟨 |
 | Smart Queues (bufferbloat / CAKE / fq_codel) | ROS queue types | 3 | 🟨 |
 | DNS servers / DoH (encrypted DNS) | ROS `/ip/dns` use-doh-server | 2 | 🟨 |
 | Dynamic DNS | ROS `/ip/cloud` ddns | 2 | 🟨 |

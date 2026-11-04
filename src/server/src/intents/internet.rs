@@ -108,6 +108,8 @@ enum I {
     RemoveWanVlan { vlan_id: u16 },
     WanFailover { interface: String, gateway: String, #[serde(default = "two")] distance: u8 },
     RemoveWanFailover { interface: String },
+    /// ECMP: a second default route at the primary's distance, so new connections spread over both WANs.
+    WanBalance { interface: String, gateway: String },
     SmartQueue { interface: String, down: String, up: String },
     RemoveSmartQueue {},
     Ipv6Wan { interface: String, #[serde(default = "bridge")] lan: String, prefix_len: u8 },
@@ -122,7 +124,7 @@ fn bridge() -> String {
 }
 
 const KINDS: &[&str] = &[
-    "wan-dns", "ddns", "wan-type", "wan-vlan", "remove-wan-vlan", "wan-failover", "remove-wan-failover", "smart-queue", "remove-smart-queue", "ipv6-wan", "remove-ipv6-wan",
+    "wan-dns", "ddns", "wan-type", "wan-vlan", "remove-wan-vlan", "wan-failover", "remove-wan-failover", "wan-balance", "smart-queue", "remove-smart-queue", "ipv6-wan", "remove-ipv6-wan",
 ];
 
 pub fn compile(v: &Value, r: &mut dyn Router) -> Option<Result<Plan, String>> {
@@ -250,10 +252,19 @@ fn build(i: I, r: &mut dyn Router) -> Result<Plan, String> {
             undo.extend(readd(r, MEMBER, "comment", &c, &["list", "interface"])?);
             with(plan(format!("Remove tagged WAN VLAN {vlan_id}"), Risk::High, vec![rm(MEMBER, "comment", &c), rm("/interface/vlan", "comment", &c)], undo), &[HIGH_WAN])
         }
+        WanBalance { interface, gateway } => {
+            // the primary's distance: the lowest of the active default routes (a DHCP client's is 1)
+            let d = r.run(&Cmd::new("/ip/route/print").proplist(&["distance", "active"]).query("dst-address", "0.0.0.0/0"))?
+                .iter().filter(|x| x.get("active").is_some_and(|a| truthy(a))).filter_map(|x| x.get("distance")?.parse::<u8>().ok()).min().ok_or("no active default route: set up the primary WAN first")?;
+            let mut p = build(WanFailover { interface, gateway, distance: d.max(1) }, r)?;
+            p.title = p.title.replace("Failover to", "Load balance with");
+            p.warnings.push("Load balancing is per connection (ECMP hash): one download still uses one WAN, and sites that pin a login to your IP may sign you out. Remove it like failover (Remove second WAN).".into());
+            p
+        }
         WanFailover { interface, gateway, distance } => {
             let (ifn, gw) = (ros_name(&interface)?, ipv4(&gateway)?);
-            if !(2..=250).contains(&distance) {
-                return Err("distance must be 2-250 (the primary WAN uses 1)".into());
+            if !(1..=250).contains(&distance) {
+                return Err("distance must be 1-250".into());
             }
             let c = format!("tik:failover:{ifn}");
             fresh(r, ROUTE, "comment", &c, "a failover route for this port")?;
@@ -403,7 +414,28 @@ mod tests {
         assert_eq!(p.risk, Risk::High);
         assert!(p.cli()[1].contains("distance=2 check-gateway=ping comment=tik:failover:ether5"));
         assert_eq!(p.undo.len(), 3);
-        assert!(compile(&json!({"kind": "wan-failover", "interface": "ether5", "gateway": "192.0.2.1", "distance": 1}), &mut Fake::default()).unwrap().is_err());
+        assert!(compile(&json!({"kind": "wan-failover", "interface": "ether5", "gateway": "192.0.2.1", "distance": 0}), &mut Fake::default()).unwrap().is_err());
+    }
+
+    #[test]
+    fn balance_matches_the_primary_distance_and_undoes_like_failover() {
+        // answers in call order: the default routes, then "no tik:failover route yet"
+        struct Seq(Vec<Vec<crate::ros::conn::Row>>);
+        impl Router for Seq {
+            fn run(&mut self, _: &Cmd) -> Result<Vec<crate::ros::conn::Row>, String> {
+                Ok(if self.0.is_empty() { vec![] } else { self.0.remove(0) })
+            }
+        }
+        let mut f = Fake::default();
+        assert!(compile(&json!({"kind": "wan-balance", "interface": "ether5", "gateway": "192.0.2.1"}), &mut f).unwrap().is_err(), "no primary route");
+        let mut s = Seq(vec![vec![row(&[("distance", "1"), ("active", "true")]), row(&[("distance", "2"), ("active", "false")])]]);
+        let p = compile(&json!({"kind": "wan-balance", "interface": "ether5", "gateway": "192.0.2.1"}), &mut s).unwrap().unwrap();
+        assert!(p.cli()[1].contains("gateway=192.0.2.1 distance=1 check-gateway=ping comment=tik:failover:ether5"), "{:?}", p.cli());
+        assert!(p.title.starts_with("Load balance"));
+        assert_eq!(p.undo_cli()[1], r#"/ip/route/remove [find comment="tik:failover:ether5"]"#);
+        for b in [json!({"kind": "wan-balance", "interface": "ether5;/system/reboot", "gateway": "192.0.2.1"}), json!({"kind": "wan-balance", "interface": "ether5", "gateway": "x"})] {
+            assert!(compile(&b, &mut f).unwrap().is_err(), "{b}");
+        }
     }
 
     #[test]

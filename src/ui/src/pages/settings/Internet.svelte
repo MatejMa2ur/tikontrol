@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { internet, raw, bps } from '../../lib/data'
+  import { internet, raw, bps, ports } from '../../lib/data'
   import { review } from '../../lib/apply.svelte'
   import Icon from '../../lib/Icon.svelte'
   import Section from '../../lib/ui/Section.svelte'
@@ -9,11 +9,20 @@
   const dns: any = raw.dnsCfg ?? {}
   const cloud: any = raw.cloud ?? {}
   let wan = $state({ type: 'dhcp', ip: '', gw: '', user: '', pass: '', vlan: '' })
-  let wan2 = $state({ on: false, port: 'ether5', gw: '', mode: 'failover' })
-  let sq = $state({ on: false, down: 500, up: 50 })
+  // real state: tik-tagged second WAN route, Smart Queue and IPv6 pool from the snapshot
+  const routes: any[] = raw.routes ?? []
+  const primaryDist = Math.min(...routes.filter((r) => r['dst-address'] === '0.0.0.0/0' && r.active && !String(r.comment ?? '').startsWith('tik:failover:')).map((r) => +r.distance), 99)
+  const second = routes.find((r) => String(r.comment ?? '').startsWith('tik:failover:'))
+  const secondIf = second ? String(second.comment).slice(13) : ''
+  const freePorts = ports.filter((p) => !p.wan).map((p) => p.name)
+  const wanUp = (raw.wan ?? [])[0]?.status === 'bound' || routes.some((r) => r['dst-address'] === '0.0.0.0/0' && r.active)
+  const sqRow = (raw.queues ?? []).find((q: any) => q.comment === 'tik:smartqueue')
+  const mbps = (v?: string) => Math.round(parseInt(v ?? '0') / 1e6) || 0
+  let wan2 = $state({ on: !!second, port: secondIf || freePorts.at(-1) || '', gw: second?.gateway ?? '', mode: second && +second.distance <= primaryDist ? 'balance' : 'failover' })
+  let sq = $state({ on: !!sqRow, down: mbps(String(sqRow?.['max-limit'] ?? '').split('/')[1]) || 500, up: mbps(String(sqRow?.['max-limit'] ?? '').split('/')[0]) || 50 })
   const servers = Array.isArray(dns.servers) ? dns.servers : String(dns.servers ?? '').split(',').filter(Boolean)
   let d = $state({ servers: servers.join(', '), doh: dns['use-doh-server'] ?? '', ddns: cloud['ddns-enabled'] === true || cloud['ddns-enabled'] === 'yes' || !!cloud['dns-name'] })
-  let v6 = $state({ on: false, pd: 56 })
+  let v6 = $state({ on: (raw.ipv6Pools ?? []).some((p: any) => p.name === 'tik-v6'), pd: 56 })
 
   // the interface the connection type applies to: the tagged VLAN when one is set
   const wanIf = $derived(wan.vlan ? `wan-vlan${wan.vlan}` : internet.wanIf)
@@ -27,7 +36,7 @@
 </script>
 
 <Section title="Primary WAN · Port {internet.wanPort}" desc="How this router reaches the internet." ros="/ip/dhcp-client/print; /ip/route/print where dst-address=0.0.0.0/0">
-  {#snippet actions()}<span class="pill ok"><span class="dot ok"></span>Connected</span>{/snippet}
+  {#snippet actions()}{#if wanUp}<span class="pill ok"><span class="dot ok"></span>Connected</span>{:else}<span class="pill bad"><span class="dot bad"></span>No default route</span>{/if}{/snippet}
   <div class="kv small">
     <span class="muted">WAN IP</span><span class="mono">{internet.wanIp}</span>
     <span class="muted">Gateway</span><span class="mono">{internet.gateway}</span>
@@ -46,19 +55,20 @@
   <div class="r"><button class="btn primary" onclick={() => review('WAN settings', wanCmds(), wanIntent())}>Review & apply</button></div>
 </Section>
 
-<Section title="Second WAN" desc="Failover to another port (e.g. a 4G/5G modem) when the primary gateway stops answering.">
+<Section title="Second WAN" desc="Failover to another port (e.g. a 4G/5G modem) when the primary gateway stops answering, or load balancing over both." ros="/ip/route/print where comment~&quot;tik:failover&quot;">
+  {#if second}<div class="muted small">Active: {+second.distance <= primaryDist ? 'load balancing' : 'failover'} via <span class="mono">{second.gateway}</span> on {secondIf}. <button class="btn small" onclick={() => review('Remove second WAN', [`/ip/route/remove [find comment="${second.comment}"]`], { kind: 'remove-wan-failover', interface: secondIf })}>Remove</button></div>{/if}
   <Field label="Enabled"><Toggle bind:checked={wan2.on} label="Second WAN" /></Field>
   {#if wan2.on}
-    <Field label="Port"><select bind:value={wan2.port}><option>ether4</option><option>ether5</option></select></Field>
+    <Field label="Port"><select bind:value={wan2.port}>{#each freePorts as p}<option>{p}</option>{/each}</select></Field>
     <Field label="Its gateway"><input type="text" bind:value={wan2.gw} placeholder="192.168.8.1" /></Field>
     <Field label="Mode"><div class="seg"><button class:on={wan2.mode === 'failover'} onclick={() => (wan2.mode = 'failover')}>Failover</button><button class:on={wan2.mode === 'balance'} onclick={() => (wan2.mode = 'balance')}>Load balance</button></div></Field>
     <div class="r">
       {#if wan2.mode === 'failover'}
-        <button class="btn primary" disabled={!wan2.gw} onclick={() => review('Second WAN failover', [
+        <button class="btn primary" disabled={!wan2.gw || !!second} onclick={() => review('Second WAN failover', [
           `/interface/list/member/add list=WAN interface=${wan2.port}`, `/ip/route/add dst-address=0.0.0.0/0 gateway=${wan2.gw} distance=2 check-gateway=ping`, `/tool/netwatch/add host=${wan2.gw} type=icmp interval=10s`,
         ], { kind: 'wan-failover', interface: wan2.port, gateway: wan2.gw })}>Review & apply</button>
       {:else}
-        <button class="btn primary" onclick={() => review('Load balancing', ['/ip/firewall/mangle/add chain=prerouting in-interface-list=LAN connection-state=new per-connection-classifier=both-addresses:2/0 action=mark-connection new-connection-mark=wan1', '/ip/firewall/mangle/add chain=prerouting in-interface-list=LAN connection-state=new per-connection-classifier=both-addresses:2/1 action=mark-connection new-connection-mark=wan2'])}>Show commands</button>
+        <button class="btn primary" disabled={!wan2.gw || !!second} onclick={() => review('Load balancing', [`/interface/list/member/add list=WAN interface=${wan2.port}`, `/ip/route/add dst-address=0.0.0.0/0 gateway=${wan2.gw} distance=${primaryDist === 99 ? 1 : primaryDist} check-gateway=ping`], { kind: 'wan-balance', interface: wan2.port, gateway: wan2.gw })}>Review & apply</button>
       {/if}
     </div>
   {/if}
@@ -101,5 +111,6 @@
   .warnbox { display: flex; gap: 8px; align-items: center; padding: 8px 10px; border-radius: 8px; background: color-mix(in srgb, var(--warn) 14%, transparent); color: var(--warn); margin: 8px 0; }
   .r { text-align: right; margin-top: 10px; }
   .small { font-size: 12px; }
+  .btn.small { padding: 3px 9px; }
   .down { color: var(--down); } .up { color: var(--up); }
 </style>
