@@ -2,7 +2,8 @@
 //!
 //! Settings come from the environment (see docs/DEPLOY.md):
 //! TIK_DATA (default ./data), TIK_LISTEN (HTTPS, default 0.0.0.0:8443), TIK_HTTP (plain HTTP, loopback only),
-//! TIK_TLS_CERT + TIK_TLS_KEY (own certificate), TIK_POLL (seconds between snapshots, default 30).
+//! TIK_TLS_CERT + TIK_TLS_KEY (own certificate), TIK_POLL (seconds between snapshots, default 30),
+//! TIK_DEMO (path to a snapshot JSON to serve instead of a router).
 
 use std::net::{SocketAddr, TcpListener};
 use std::path::PathBuf;
@@ -48,11 +49,18 @@ fn main() {
         die("nothing to listen on: set TIK_LISTEN or TIK_HTTP");
     }
 
-    let app = Arc::new(app::App::new(st, app::real_connector(), tls_on));
+    let mut a = app::App::new(st, app::real_connector(), tls_on);
+    if let Some(f) = env("TIK_DEMO") {
+        let snap = std::fs::read(&f).ok().and_then(|b| serde_json::from_slice(&b).ok()).unwrap_or_else(|| die(&format!("TIK_DEMO: cannot read {f}")));
+        println!("tikontrol: demo mode, serving {f} instead of a router");
+        a.demo = Some(Arc::new(snap));
+    }
+    let app = Arc::new(a);
     if let Some(t) = app::lock(&app.setup_token).as_ref() {
         println!("tikontrol: first start. Create the admin account in the browser with setup token {t}");
     }
     app.spawn_poller(Duration::from_secs(poll));
+    tikontrol::live::spawn(app.clone(), data.join("history.json"));
     let handler: http::Handler = {
         let app = app.clone();
         Arc::new(move |req| api::handle(&app, req))

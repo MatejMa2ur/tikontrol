@@ -177,6 +177,10 @@ impl Store {
         Ok(Store { path, sealer, state })
     }
 
+    pub fn dir(&self) -> PathBuf {
+        self.path.parent().map(Path::to_path_buf).unwrap_or_default()
+    }
+
     pub fn save(&self) -> std::io::Result<()> {
         write_private(&self.path, &serde_json::to_vec_pretty(&self.state).map_err(std::io::Error::other)?)
     }

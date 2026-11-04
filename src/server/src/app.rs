@@ -1,6 +1,7 @@
 //! Shared app state and the background poller that keeps the router snapshot fresh.
 
 use crate::auth::{Limiter, Sessions};
+use crate::live::Live;
 use crate::policy::{self, Policies};
 use crate::ros::conn::{Conn, Router, Target};
 use crate::ros::queries;
@@ -43,6 +44,9 @@ pub struct App {
     pub snap: RwLock<Snap>,
     pub connector: Connector,
     pub tls: bool,
+    pub live: Live,
+    /// TIK_DEMO: serve this snapshot instead of a router (trying tikontrol out, UI tests)
+    pub demo: Option<Arc<Value>>,
     reader: Mutex<Option<Box<dyn Router + Send>>>,
 }
 
@@ -56,7 +60,10 @@ pub fn real_connector() -> Connector {
 impl App {
     pub fn new(store: Store, connector: Connector, tls: bool) -> App {
         let setup = store.state.admins.is_empty().then(|| crate::store::hex(&crate::store::random_bytes::<16>()));
+        let live = Live::load(&store.dir().join("history.json"));
         App {
+            live,
+            demo: None,
             store: Mutex::new(store),
             sessions: Mutex::default(),
             limiter: Mutex::default(),
@@ -107,6 +114,11 @@ impl App {
 
     /// One poll: check the reader's real policies, then read the snapshot.
     pub fn poll(&self, with_latency: bool) {
+        if let Some(d) = &self.demo {
+            let p = Policies { user: "demo".into(), group: "demo".into(), policy: policy::READER.iter().map(|s| s.to_string()).collect() };
+            *self.snap.write().unwrap_or_else(|e| e.into_inner()) = Snap { data: Some(d.clone()), at: now(), error: None, policies: Some(p) };
+            return;
+        }
         let Some(cfg) = self.router_cfg() else { return };
         let result = self.with_reader(|r| {
             let p = policy::detect(r, &cfg.reader.user)?;
@@ -122,6 +134,10 @@ impl App {
         let mut s = self.snap.write().unwrap_or_else(|e| e.into_inner());
         match result {
             Ok((p, data)) => {
+                if let Some(lat) = data.get("latency").and_then(Value::as_object) {
+                    let worst = lat.values().filter_map(|v| v["ms"].as_f64()).fold(0.0, f64::max);
+                    *lock(&self.live.latency_ms) = worst;
+                }
                 *s = Snap { data: Some(Arc::new(data)), at: now(), error: None, policies: Some(p) };
             }
             Err(e) => {

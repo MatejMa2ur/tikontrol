@@ -186,7 +186,7 @@ fn me(app: &App, s: &Session) -> Resp {
         200,
         &json!({
             "user": s.user, "role": s.role, "csrf": s.csrf,
-            "router": r.map(|r| json!({ "host": r.host, "mode": r.mode })),
+            "router": if app.demo.is_some() { Some(json!({ "host": "demo", "mode": Mode::ReadOnly })) } else { r.map(|r| json!({ "host": r.host, "mode": r.mode })) },
             "readOnly": r.is_none_or(|r| r.mode == Mode::ReadOnly) || s.role != Role::Admin,
             "policies": snap.policies,
             "error": snap.error,
@@ -202,7 +202,7 @@ fn snapshot(app: &App) -> Resp {
             r.headers.push(("cache-control", "no-store".into()));
             r.with("x-snapshot-age", crate::app::now().saturating_sub(s.at).to_string())
         }
-        None => Resp::error(503, s.error.as_deref().unwrap_or(if app.router_cfg().is_some() { "first poll still running" } else { "no router configured" })),
+        None => Resp::error(503, s.error.as_deref().unwrap_or(if app.router_cfg().is_some() || app.demo.is_some() { "first poll still running" } else { "no router configured" })),
     }
 }
 
