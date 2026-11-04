@@ -50,6 +50,8 @@ pub struct Agg {
     pub talkers: HashMap<Ipv4Addr, (u64, u64)>,
     pub dests: HashMap<Ipv4Addr, u64>,
     pub ports: HashMap<(u8, u16), u64>,
+    /// (client, remote) -> bytes, for "which sites does this client talk to"
+    pub pairs: HashMap<(Ipv4Addr, Ipv4Addr), u64>,
     pub flows: u64,
 }
 
@@ -71,6 +73,9 @@ impl Agg {
         if self.dests.len() < MAX_KEYS || self.dests.contains_key(&remote) {
             *self.dests.entry(remote).or_default() += f.bytes;
         }
+        if self.pairs.len() < MAX_KEYS * 4 || self.pairs.contains_key(&(lan, remote)) {
+            *self.pairs.entry((lan, remote)).or_default() += f.bytes;
+        }
         let port = if up { f.dport } else { f.sport };
         if self.ports.len() < MAX_KEYS || self.ports.contains_key(&(f.proto, port)) {
             *self.ports.entry((f.proto, port)).or_default() += f.bytes;
@@ -81,6 +86,13 @@ impl Agg {
         let mut t: Vec<_> = self.talkers.iter().map(|(ip, (d, u))| json!({ "ip": ip.to_string(), "down": d, "up": u })).collect();
         t.sort_by_key(|v| std::cmp::Reverse(v["down"].as_u64().unwrap_or(0) + v["up"].as_u64().unwrap_or(0)));
         t.truncate(n);
+        // ponytail: scans all pairs per talker (≤ 20k × 20); index by client if pairs grow
+        for v in &mut t {
+            let ip: Ipv4Addr = v["ip"].as_str().and_then(|s| s.parse().ok()).unwrap_or(Ipv4Addr::UNSPECIFIED);
+            let mut ds: Vec<_> = self.pairs.iter().filter(|((l, _), _)| *l == ip).map(|((_, r), b)| (*r, *b)).collect();
+            ds.sort_by_key(|x| std::cmp::Reverse(x.1));
+            v["destinations"] = json!(ds.iter().take(5).map(|(r, b)| json!({ "ip": r.to_string(), "bytes": b })).collect::<Vec<_>>());
+        }
         let mut d: Vec<_> = self.dests.iter().collect();
         d.sort_by_key(|x| std::cmp::Reverse(*x.1));
         let mut p: Vec<_> = self.ports.iter().collect();
@@ -121,6 +133,54 @@ pub fn service(port: u16) -> &'static str {
         1194 => "OpenVPN",
         _ => "",
     }
+}
+
+/// Opt-in, offline GeoIP: IPv4 ranges from a user-supplied CSV (TIK_GEOIP). Accepts
+/// `start,end,CC` rows with dotted (DB-IP lite) or decimal, quoted (IP2Location LITE DB1) addresses;
+/// IPv6 and malformed rows are skipped. Nothing is downloaded.
+pub struct Geo(Vec<(u32, u32, [u8; 2])>);
+
+impl Geo {
+    pub fn parse(csv: &str) -> Geo {
+        let ip = |s: &str| s.parse::<Ipv4Addr>().map(u32::from).ok().or_else(|| s.parse::<u32>().ok());
+        let mut v: Vec<_> = csv
+            .lines()
+            .filter_map(|l| {
+                let mut f = l.split(',').map(|x| x.trim().trim_matches('"'));
+                let (a, b, cc) = (ip(f.next()?)?, ip(f.next()?)?, f.next()?.as_bytes());
+                (a <= b && cc.len() == 2 && cc.iter().all(u8::is_ascii_uppercase)).then(|| (a, b, [cc[0], cc[1]]))
+            })
+            .collect();
+        v.sort_unstable();
+        Geo(v)
+    }
+    pub fn len(&self) -> usize {
+        self.0.len()
+    }
+    pub fn is_empty(&self) -> bool {
+        self.0.is_empty()
+    }
+    pub fn country(&self, ip: Ipv4Addr) -> Option<&str> {
+        let n = u32::from(ip);
+        let i = self.0.partition_point(|r| r.0 <= n).checked_sub(1)?;
+        let (_, end, cc) = &self.0[i];
+        (n <= *end).then(|| std::str::from_utf8(cc).ok()).flatten()
+    }
+    /// Bytes per country over every destination seen; unknown addresses are counted as "??".
+    pub fn countries(&self, a: &Agg) -> Value {
+        let mut m: HashMap<&str, u64> = HashMap::new();
+        for (ip, b) in &a.dests {
+            *m.entry(self.country(*ip).unwrap_or("??")).or_default() += b;
+        }
+        let mut v: Vec<_> = m.into_iter().collect();
+        v.sort_by_key(|x| std::cmp::Reverse(x.1));
+        json!(v.iter().map(|(c, b)| json!({ "country": c, "bytes": b })).collect::<Vec<_>>())
+    }
+}
+
+pub fn geo() -> &'static OnceLock<Geo> {
+    static G: OnceLock<Geo> = OnceLock::new();
+    &G
 }
 
 pub fn agg() -> &'static Mutex<Agg> {
@@ -185,6 +245,18 @@ mod tests {
         assert_eq!(t["talkers"][0]["up"], 1000);
         assert_eq!(t["ports"][0]["service"], "HTTPS");
         assert_eq!(t["destinations"].as_array().unwrap().len(), 1);
+        assert_eq!(t["talkers"][0]["destinations"][0]["bytes"], 10000);
+    }
+
+    #[test]
+    fn geoip_csv_lookup() {
+        let g = Geo::parse("1.0.0.0,1.0.0.255,AU\n\"3405803776\",\"3405804031\",\"AU\",\"Australia\"\n2001:db8::,2001:db8::ff,DK\n9.9.9.0,9.9.9.255,-\nbad\n203.0.113.0,203.0.113.255,DK\n");
+        assert_eq!(g.len(), 3);
+        assert_eq!(g.country(Ipv4Addr::new(1, 0, 0, 7)), Some("AU"));
+        assert_eq!(g.country(Ipv4Addr::new(203, 0, 113, 9)), Some("DK"));
+        assert_eq!(g.country(Ipv4Addr::new(203, 0, 114, 0)), None);
+        assert_eq!(g.country(Ipv4Addr::new(0, 0, 0, 1)), None);
+        assert_eq!(g.country(Ipv4Addr::new(9, 9, 9, 9)), None);
     }
 
     #[test]

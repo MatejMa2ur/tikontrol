@@ -40,15 +40,19 @@ pub fn extra(app: &Arc<App>, req: &Req, s: &Session) -> Option<Resp> {
         }
         ("GET", "/api/v1/events") => events(app, req),
         ("GET", "/api/v1/flows") => {
-            let mut v = lock(crate::flows::agg()).top(20);
+            let (mut v, countries) = {
+                let a = lock(crate::flows::agg());
+                (a.top(20), crate::flows::geo().get().map(|g| g.countries(&a)))
+            };
+            v["geoip"] = json!(countries.is_some());
+            v["countries"] = countries.unwrap_or(json!([]));
             // name destinations from the router's DNS cache when we have it
             let snap = app.snap.read().unwrap_or_else(|e| e.into_inner());
             let names: std::collections::HashMap<&str, &str> = snap.data.as_deref().and_then(|d| d["dnsCache"].as_array()).map(|a| a.iter().filter_map(|c| Some((c["data"].as_str()?, c["name"].as_str()?))).collect()).unwrap_or_default();
-            if let Some(ds) = v["destinations"].as_array_mut() {
-                for d in ds {
-                    let n = d["ip"].as_str().and_then(|ip| names.get(ip)).map(|s| s.to_string());
-                    d["name"] = json!(n);
-                }
+            let name = |d: &mut Value| d["name"] = json!(d["ip"].as_str().and_then(|ip| names.get(ip)));
+            v["destinations"].as_array_mut().into_iter().flatten().for_each(name);
+            for t in v["talkers"].as_array_mut().into_iter().flatten() {
+                t["destinations"].as_array_mut().into_iter().flatten().for_each(name);
             }
             Resp::json(200, &v)
         }

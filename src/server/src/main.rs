@@ -3,7 +3,8 @@
 //! Settings come from the environment (see docs/DEPLOY.md):
 //! TIK_DATA (default ./data), TIK_LISTEN (HTTPS, default 0.0.0.0:8443), TIK_HTTP (plain HTTP, loopback only),
 //! TIK_TLS_CERT + TIK_TLS_KEY (own certificate), TIK_POLL (seconds between snapshots, default 30),
-//! TIK_DEMO (path to a snapshot JSON to serve instead of a router), TIK_FLOWS (NetFlow v5 collector address, off by default).
+//! TIK_DEMO (path to a snapshot JSON to serve instead of a router), TIK_FLOWS (NetFlow v5 collector address, off by default),
+//! TIK_GEOIP (path to a local IPv4-to-country CSV for Insights > Countries; nothing is downloaded).
 
 use std::net::{SocketAddr, TcpListener};
 use std::path::PathBuf;
@@ -61,6 +62,11 @@ fn main() {
     }
     app.spawn_poller(Duration::from_secs(poll));
     tikontrol::live::spawn(app.clone(), data.join("history.json"));
+    if let Some(f) = env("TIK_GEOIP") {
+        let g = tikontrol::flows::Geo::parse(&std::fs::read_to_string(&f).unwrap_or_else(|e| die(&format!("TIK_GEOIP {f}: {e}"))));
+        eprintln!("tikontrol: GeoIP: {} IPv4 ranges loaded", g.len());
+        let _ = tikontrol::flows::geo().set(g);
+    }
     if let Some(f) = env("TIK_FLOWS") {
         tikontrol::flows::spawn(app.clone(), &f).unwrap_or_else(|e| die(&format!("TIK_FLOWS {f}: {e}")));
         println!("tikontrol: NetFlow v5 collector on {f} (router packets only)");

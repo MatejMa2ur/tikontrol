@@ -11,7 +11,7 @@ Clean-room: we copy the behaviour, never the assets.
 **Backing:** `ROS` = RouterOS API on the router · `CMR` = MikroTik CMR server · `tik` = our own logic/DB · `✗` = nothing can back it
 
 <!-- progress:start -->
-**Progress:** 6 ✅ · 156 🟨 · 51 🎨 · 7 ⬜ · 8 ➖ (228 items, 3% done)
+**Progress:** 6 ✅ · 170 🟨 · 37 🎨 · 7 ⬜ · 8 ➖ (228 items, 3% done)
 <!-- progress:end -->
 
 ---
@@ -21,15 +21,15 @@ Clean-room: we copy the behaviour, never the assets.
 | # | UniFi page | tikontrol page | Phase | Status |
 |---|---|---|---|---|
 | P1 | Dashboard | Dashboard | 1 | 🟨 |
-| P2 | UniFi Devices (list) | Devices | 3 |🎨 |
+| P2 | UniFi Devices (list) | Devices | 3 | 🟨 |
 | P3 | Topology | Topology (tab in Devices) | 2 | 🟨 |
-| P4 | Device detail (overview / ports / insights / settings) | Device drawer | 3 |🎨 |
+| P4 | Device detail (overview / ports / insights / settings) | Device drawer | 3 | 🟨 |
 | P5 | Client Devices (list) | Clients | 1 | 🟨 |
 | P6 | Client detail (overview / insights / settings) | Client drawer | 1 | 🟨 |
 | P7 | Ports (port manager) | Ports | 2 | 🟨 |
 | P8 | Radios (Radio Manager, coverage, connectivity) | Radios | 3 |🎨 |
-| P9 | Insights / Traffic flows | Traffic | 3 |🎨 |
-| P10 | Alarm Manager | Alerts | 2 |🎨 |
+| P9 | Insights / Traffic flows | Traffic | 3 | 🟨 |
+| P10 | Alarm Manager | Alerts | 2 | 🟨 |
 | P11 | System Log (events, admin activity, security, updates) | Events | 1 | 🟨 |
 | P12 | Hotspot Manager | Guest portal | 4 |🎨 |
 | P13 | Settings → WiFi | Settings · WiFi | 2 |🟨 |
@@ -43,7 +43,7 @@ Clean-room: we copy the behaviour, never the assets.
 | P21 | Settings → System (site, logging, SNMP, device auth) | Settings · System | 2 |🎨 |
 | P22 | Site Manager (multi-site, cloud) | Sites switcher | 4 | ⬜ |
 | P23 | Login / onboarding wizard | Login + first-run wizard | 1 | 🟨 |
-| P24 | Global search (⌘K) | Command palette | 2 | 🎨 |
+| P24 | Global search (⌘K): clients, devices, SSIDs, settings pages | Command palette | 2 | 🟨 |
 
 ---
 
@@ -73,17 +73,17 @@ Clean-room: we copy the behaviour, never the assets.
 ## UniFi Devices / Topology
 | Feature | Backing | Phase | Status |
 |---|---|---|---|
-| Device list (name, model, IP, version, uptime, state) | CMR `/cmr/device` | 3 |🎨 |
-| Device adoption (one-click) | CMR pairing | 3 |🎨 |
+| Device list (name, model, IP, version, uptime, state; other devices' stats need the CMR server) | ROS this router + `/ip/neighbor` · CMR `/cmr/device` | 3 | 🟨 |
+| Device adoption (one-click; needs CMR server) | CMR pairing | 3 |🎨 |
 | Auto-detect make, model, CPU, memory and WiFi capabilities | ROS `/system/resource`, `/system/routerboard` | 1 | 🟨 |
-| Device detail: CPU/RAM/temperature history | CMR dashboard + tik | 3 |🎨 |
+| Device detail: CPU/RAM/temperature history (this router; temperature only where `/system/health` has a sensor) | tik history · CMR dashboard for others | 3 | 🟨 |
 | Device restart / locate (blink LED) | CMR reboot · ROS `/system/routerboard` LED | 3 | 🟨 |
 | Firmware update per device | CMR / ROS | 3 | 🟨 |
-| Scheduled / rolling fleet updates | CMR upgrade rules | 3 |🎨 |
+| Scheduled / rolling fleet updates (needs CMR server) | CMR upgrade rules | 3 |🎨 |
 | Topology map (auto layout, wired + wireless links) | CMR layout · ROS neighbor + bridge host | 2 | 🟨 |
 | Topology Spotlight (highlight/filter) | tik | 3 | 🟨 |
-| Device Supervisor (health anomalies) | CMR state alerts | 4 |🎨 |
-| Blueprints / config drift inspector | tik (export diff) | 4 |🎨 |
+| Device Supervisor (health anomalies; needs CMR server) | CMR state alerts | 4 |🎨 |
+| Blueprints / config drift inspector (blocked: `/export` over the API with only `read` policy is unverified, and a 7.21 pre-release leaked keys in hide-sensitive exports; test on CHR first) | tik (export diff) | 4 |🎨 |
 | Device SSH credentials management | ROS `/user` | 3 | ⬜ |
 | Device LED control / Etherlighting | ROS LED · Etherlighting ✗ (UI hw) | 4 | 🟨 |
 | Shadow mode / gateway HA | ✗ (VRRP is possible but out of scope) | – | ➖ |
@@ -96,7 +96,7 @@ Clean-room: we copy the behaviour, never the assets.
 | Wired: switch port · Wireless: SSID, band, signal, rate | ROS bridge host + reg-table | 1 | 🟨 |
 | Live per-client throughput | ROS kid-control / reg-table bytes | 1 | 🟨 |
 | Per-client traffic history | tik SQLite | 2 | 🟨 |
-| Per-client apps / domains | tik DNS correlation (CMR is per-device) | 3 |🎨 |
+| Per-client apps / domains (flow destinations per client, named from the DNS cache; the cache itself has no client field) | tik flows + DNS cache (CMR is per-device) | 3 | 🟨 |
 | Rename / alias, custom icon, notes | tik | 1 | 🟨 |
 | Fixed IP (reservation) | ROS lease make-static | 2 | 🟨 |
 | Local DNS record for client | ROS `/ip/dns/static` | 2 | 🟨 |
@@ -147,7 +147,7 @@ Clean-room: we copy the behaviour, never the assets.
 | Traffic by client over time | tik | 2 | 🟨 |
 | Top domains | ROS DNS cache + tik | 3 | 🟨 |
 | Flow log (src, dst, port, bytes) | ROS traffic-flow (IPFIX) → tik collector | 3 | 🟨 |
-| Traffic by country | tik GeoIP on flows | 4 |🎨 |
+| Traffic by country (opt-in `TIK_GEOIP` local CSV, nothing downloaded) | tik GeoIP on flows | 4 | 🟨 |
 | Blocked threats view | ✗ (no IDS) | – | ➖ |
 
 ## Alarm Manager / Notifications

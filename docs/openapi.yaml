@@ -82,12 +82,12 @@ paths:
       summary: Latest router snapshot (same shape as src/scripts/snapshot.py; secrets never requested)
       responses: { '200': { description: snapshot; header x-snapshot-age in seconds }, '503': { description: not read yet, or read-only mode refused } }
   /api/v1/live:
-    get: { summary: 'Server-Sent Events: { t, rx, tx, cpu, wanUp, rate: { mac: { rx, tx } } } every 2 s', responses: { '200': { description: text/event-stream } } }
+    get: { summary: 'Server-Sent Events: { t, rx, tx, cpu, mem (%), temp (°C or null when the board has no sensor), wanUp, rate: { mac: { rx, tx } } } every 2 s', responses: { '200': { description: text/event-stream } } }
   /api/v1/history:
     get:
       summary: Internet Activity series
       parameters: [{ name: range, in: query, schema: { enum: ['1H', '1D', '1W'] } }]
-      responses: { '200': { description: '{ t[], clients[], rx[], tx[], peak: { rx, tx } (highest minute average in the range, bit/s), peakAll: { rx, tx } (all stored history) }' } }
+      responses: { '200': { description: '{ t[], clients[], rx[], tx[], cpu[] (%), mem[] (%), temp[] (°C, null without a sensor), peak: { rx, tx } (highest minute average in the range, bit/s), peakAll: { rx, tx } (all stored history) }' } }
   /api/v1/speedtest:
     get:
       summary: Speed test endpoint and the last 50 results (oldest first; down/up in bit/s, ping in ms); wait = seconds until the next run is allowed
@@ -108,6 +108,10 @@ paths:
       summary: Hourly bytes, first/last seen and events of one client
       parameters: [{ name: mac, in: query, required: true, schema: { type: string } }]
       responses: { '200': { description: ok } }
+  /api/v1/flows:
+    get:
+      summary: NetFlow v5 aggregates (collector is opt-in via TIK_FLOWS; in memory only). Destinations are named from the router's DNS cache; countries need TIK_GEOIP (a local CSV, never downloaded)
+      responses: { '200': { description: '{ since, flows, talkers[{ ip, down, up, destinations[{ ip, bytes, name }] }], destinations[{ ip, bytes, name }], ports[{ proto, port, service, bytes }], geoip, countries[{ country (ISO code, ?? = unknown), bytes }] }' } }
   /api/v1/clients/offline:
     get: { summary: Clients seen before but not in the last 2 minutes, responses: { '200': { description: ok } } }
   /api/v1/events:

@@ -24,15 +24,18 @@
   let dq = $state('')
 
   // NetFlow v5 aggregates from the server's collector (TIK_FLOWS)
-  type Flows = { flows: number; since: number; talkers: { ip: string; down: number; up: number }[]; destinations: { ip: string; bytes: number; name: string | null }[]; ports: { proto: string; port: number; service: string; bytes: number }[] }
+  type Dest = { ip: string; bytes: number; name: string | null }
+  type Flows = { flows: number; since: number; geoip: boolean; countries: { country: string; bytes: number }[]; talkers: { ip: string; down: number; up: number; destinations: Dest[] }[]; destinations: { ip: string; bytes: number; name: string | null }[]; ports: { proto: string; port: number; service: string; bytes: number }[] }
   let flows = $state<Flows | null>(null)
   $effect(() => {
-    if (!isBackend || tab !== 'flows') return
+    if (!isBackend || (tab !== 'flows' && tab !== 'countries')) return
     const load = () => api<Flows>('/flows').then((f) => (flows = f)).catch(() => {})
     load()
     const i = setInterval(load, 15_000)
     return () => clearInterval(i)
   })
+  let openTalker = $state<string | null>(null)
+  const countryName = (cc: string) => { try { return cc === '??' ? 'Unknown' : new Intl.DisplayNames(undefined, { type: 'region' }).of(cc) ?? cc } catch { return cc } }
   const nameOfIp = (ip: string) => { const c = clients.find((x) => x.ip === ip); return c ? displayName(c) : ip }
 
   const CATS = ['Streaming', 'Social', 'Gaming', 'Web', 'Cloud & storage', 'Messaging', 'Updates', 'Other']
@@ -68,7 +71,7 @@
       <div class="row small muted legend"><span><i class="sw d"></i> Download</span><span><i class="sw u"></i> Upload</span></div>
     </Section>
   {:else if tab === 'domains'}
-    <Section title="Recently resolved domains" desc="From the router's DNS cache. Shows what's being looked up, not how much data moved." ros="/ip/dns/cache/print">
+    <Section title="Recently resolved domains" desc="From the router's DNS cache. Shows what's being looked up, not how much data moved, and not who asked: RouterOS doesn't record the client per cache entry. Per-client sites are under Flows (flow destinations named from this cache)." ros="/ip/dns/cache/print">
       {#snippet actions()}<input type="search" placeholder="Filter…" bind:value={dq} />{/snippet}
       <table>
         <thead><tr><th>Domain</th><th class="r">Names</th><th>Examples</th><th></th></tr></thead>
@@ -95,7 +98,10 @@
         <p class="muted small">{flows.flows.toLocaleString()} flows since {new Date(flows.since * 1000).toLocaleString()} · in memory only</p>
         <div class="fgrid">
           <table><thead><tr><th>Client</th><th class="r">Down</th><th class="r">Up</th></tr></thead>
-            <tbody>{#each flows.talkers as t}<tr class="nohover"><td>{nameOfIp(t.ip)}</td><td class="r">{bytes(t.down)}</td><td class="r">{bytes(t.up)}</td></tr>{/each}</tbody></table>
+            <tbody>{#each flows.talkers as t}
+              <tr class="nohover"><td><button class="link" aria-expanded={openTalker === t.ip} onclick={() => (openTalker = openTalker === t.ip ? null : t.ip)}>{nameOfIp(t.ip)}</button></td><td class="r">{bytes(t.down)}</td><td class="r">{bytes(t.up)}</td></tr>
+              {#if openTalker === t.ip}{#each t.destinations ?? [] as d}<tr class="nohover sub"><td class="mono small muted">↳ {d.name ?? d.ip}</td><td class="r small" colspan="2">{bytes(d.bytes)}</td></tr>{/each}{/if}
+            {/each}</tbody></table>
           <table><thead><tr><th>Destination</th><th class="r">Bytes</th></tr></thead>
             <tbody>{#each flows.destinations as d}<tr class="nohover"><td class="mono small">{d.name ?? d.ip}</td><td class="r">{bytes(d.bytes)}</td></tr>{/each}</tbody></table>
           <table><thead><tr><th>Service</th><th>Port</th><th class="r">Bytes</th></tr></thead>
@@ -109,8 +115,17 @@
       {/if}
     </Section>
   {:else}
-    <Section title="Traffic by country" desc="GeoIP lookup on flow destinations. Needs Traffic Flow (see Flows).">
-      <div class="empty"><Icon name="globe" size={28} /><b>No flow data yet</b><p class="muted small">Once flows are on, this shows a world map and a top-countries table, with one-click region blocking.</p><a class="btn" href="#/insights/flows">Go to Flows</a></div>
+    <Section title="Traffic by country" desc="Offline GeoIP lookup on flow destinations. Needs Traffic Flow (see Flows) and a local IPv4-to-country CSV; nothing is downloaded.">
+      {#if flows?.geoip && flows.countries.length}
+        <table>
+          <thead><tr><th>Country</th><th class="r">Bytes</th></tr></thead>
+          <tbody>{#each flows.countries as c}<tr class="nohover"><td>{countryName(c.country)} <span class="muted small mono">{c.country}</span></td><td class="r">{bytes(c.bytes)}</td></tr>{/each}</tbody>
+        </table>
+      {:else}
+        <div class="empty"><Icon name="globe" size={28} /><b>{flows?.geoip ? 'No flow data yet' : 'GeoIP is off'}</b>
+          <p class="muted small">{flows?.geoip ? 'Once the router exports flows, this lists bytes per destination country.' : 'Start the server with TIK_GEOIP=/path/to/ip-to-country.csv (rows of start,end,country code, for example the DB-IP Lite or IP2Location LITE DB1 CSV). tikontrol never fetches it itself.'}</p>
+          <a class="btn" href="#/insights/flows">Go to Flows</a></div>
+      {/if}
     </Section>
   {/if}
 </div>
@@ -133,4 +148,7 @@
   .btn.small { padding: 3px 9px; }
   .ell { max-width: 360px; overflow: hidden; text-overflow: ellipsis; }
   .dimmed { opacity: .4; }
+  .link { background: none; border: 0; padding: 0; color: var(--text); cursor: pointer; text-align: left; }
+  .link:hover { text-decoration: underline; }
+  .sub td { padding-top: 2px; padding-bottom: 2px; }
 </style>
