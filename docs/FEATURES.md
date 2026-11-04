@@ -11,7 +11,7 @@ Clean-room: we copy the behaviour, never the assets.
 **Backing:** `ROS` = RouterOS API on the router · `CMR` = MikroTik CMR server · `tik` = our own logic/DB · `✗` = nothing can back it
 
 <!-- progress:start -->
-**Progress:** 6 ✅ · 88 🟨 · 109 🎨 · 15 ⬜ · 8 ➖ (226 items, 3% done)
+**Progress:** 6 ✅ · 98 🟨 · 100 🎨 · 14 ⬜ · 8 ➖ (226 items, 3% done)
 <!-- progress:end -->
 
 ---
@@ -77,15 +77,15 @@ Clean-room: we copy the behaviour, never the assets.
 | Device adoption (one-click) | CMR pairing | 3 |🎨 |
 | Auto-detect make, model, CPU, memory and WiFi capabilities | ROS `/system/resource`, `/system/routerboard` | 1 | 🟨 |
 | Device detail: CPU/RAM/temperature history | CMR dashboard + tik | 3 |🎨 |
-| Device restart / locate (blink LED) | CMR reboot · ROS `/system/routerboard` LED | 3 |🎨 |
-| Firmware update per device | CMR / ROS | 3 |🎨 |
+| Device restart / locate (blink LED) | CMR reboot · ROS `/system/routerboard` LED | 3 | 🟨 |
+| Firmware update per device | CMR / ROS | 3 | 🟨 |
 | Scheduled / rolling fleet updates | CMR upgrade rules | 3 |🎨 |
 | Topology map (auto layout, wired + wireless links) | CMR layout · ROS neighbor + bridge host | 2 | 🟨 |
 | Topology Spotlight (highlight/filter) | tik | 3 | 🟨 |
 | Device Supervisor (health anomalies) | CMR state alerts | 4 |🎨 |
 | Blueprints / config drift inspector | tik (export diff) | 4 |🎨 |
 | Device SSH credentials management | ROS `/user` | 3 | ⬜ |
-| Device LED control / Etherlighting | ROS LED · Etherlighting ✗ (UI hw) | 4 | ⬜ |
+| Device LED control / Etherlighting | ROS LED · Etherlighting ✗ (UI hw) | 4 | 🟨 |
 | Shadow mode / gateway HA | ✗ (VRRP is possible but out of scope) | – | ➖ |
 
 ## Client Devices
@@ -164,7 +164,7 @@ Clean-room: we copy the behaviour, never the assets.
 | Categories: clients, devices, admin activity, security, updates | tik (topic mapping) | 1 | 🟨 |
 | Derived events (client joined/left, WAN flap) | tik | 2 | 🟨 |
 | Search / filter / export CSV | tik | 2 | 🟨 |
-| Remote syslog / SIEM forwarding | ROS logging action | 3 |🎨 |
+| Remote syslog / SIEM forwarding | ROS logging action | 3 | 🟨 |
 
 ## WiFi settings
 | Feature | Backing | Phase | Status |
@@ -273,16 +273,16 @@ Clean-room: we copy the behaviour, never the assets.
 |---|---|---|---|
 | Admin users + roles | tik (own users) + ROS `/user` | 2 | 🟨 |
 | SSO / cloud account | ✗ local auth only | – | ➖ |
-| Backups (scheduled, download, restore) | ROS `/system/backup` + `/export` | 2 |🎨 |
-| Firmware/app updates (channel, auto-update window) | ROS / CMR | 2 |🎨 |
+| Backups (scheduled, download, restore) | ROS `/system/backup` + `/export` | 2 | 🟨 |
+| Firmware/app updates (channel, auto-update window) | ROS / CMR | 2 | 🟨 |
 | Integrations / local API (+ API keys) | tik REST | 4 |🎨 |
 | Console (terminal in browser) | ROS (SSH/API terminal) | 3 |🎨 |
-| Site settings (name, country, timezone, NTP) | ROS `/system/clock`, ntp | 2 |🎨 |
-| SNMP | ROS `/snmp` | 3 |🎨 |
-| Remote logging / NetFlow export settings | ROS | 3 |🎨 |
+| Site settings (name, country, timezone, NTP) | ROS `/system/clock`, ntp | 2 | 🟨 |
+| SNMP | ROS `/snmp` | 3 | 🟨 |
+| Remote logging / NetFlow export settings | ROS | 3 | 🟨 |
 | Data retention settings | tik | 2 |🎨 |
 | Device auth / SSH settings, service hardening | ROS `/ip/service` | 2 | 🟨 |
-| Debug tools: ping, traceroute, packet capture | ROS `/ping`, `/tool/traceroute`, sniffer | 3 |🎨 |
+| Debug tools: ping, traceroute, packet capture | ROS `/ping`, `/tool/traceroute`, sniffer | 3 | 🟨 |
 | Safe apply (auto-revert) | tik + ROS scheduler | 3 | 🟨 |
 | "Show in RouterOS" for every object | tik | 2 | 🟨 |
 

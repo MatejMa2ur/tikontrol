@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { events, clients, insights, isBackend, type Event } from '../lib/data'
+  import { events, clients, insights, isBackend, raw, type Event } from '../lib/data'
   import { review, apply } from '../lib/apply.svelte'
   import Ros from '../lib/Ros.svelte'
   import Icon from '../lib/Icon.svelte'
@@ -41,6 +41,13 @@
     { id: 'roam', name: 'Client keeps switching bands', on: false, sev: 'info', channels: [] },
   ])
   let ch = $state({ email: '', ntfy: '', telegram: '', webhook: '' })
+  const ourSyslog = (raw.loggingRules ?? []).some((r: any) => r.action === 'tik-remote')
+  let sl = $state({ server: '', topics: 'info,warning,error,critical' })
+  function syslogReview() {
+    const [address, port] = sl.server.split(':')
+    const topics = sl.topics.split(',').map((t) => t.trim()).filter(Boolean)
+    review('Remote syslog', [`/system/logging/action/add name=tik-remote target=remote remote=${address} remote-port=${port || 514}`, ...topics.map((t) => `/system/logging/add topics=${t} action=tik-remote`)], { kind: 'remote-syslog', address, port: +(port || 514), topics })
+  }
   let quiet = $state({ on: false, from: '23:00', to: '07:00' })
   let unacked = $state(0) // from the server when isBackend
   let history = $state(insights.filter((i) => i.level !== 'ok').map((i, n) => ({ id: n, title: i.title, sev: i.level === 'bad' ? 'critical' : 'warning', at: 'Today', ack: false })))
@@ -109,9 +116,14 @@
 </div>
 
 {#snippet syslog()}
-  <Section title="Remote syslog / SIEM" desc="Forward the router log to a syslog server." ros="/system/logging/action/set remote remote=… ; /system/logging/add topics=info action=remote">
-    <Field label="Syslog server"><input type="text" placeholder="10.0.0.50:514" id="syslog" /></Field>
-    <div class="r"><button class="btn primary" onclick={() => review('Remote syslog', ['/system/logging/action/set [find name=remote] remote=10.0.0.50 remote-port=514', '/system/logging/add topics=info action=remote', '/system/logging/add topics=critical action=remote'])}>Review & apply</button></div>
+  <Section title="Remote syslog / SIEM" desc="Forward the router log to a syslog server on your network (unencrypted UDP)." ros="/system/logging/action/print; /system/logging/print">
+    {#if ourSyslog}
+      <Field label="Syslog server" help="Set up by tikontrol"><button class="btn" onclick={() => review('Stop remote syslog', ['/system/logging/remove [find action=tik-remote]', '/system/logging/action/remove [find name=tik-remote]'], { kind: 'remove-remote-syslog' })}>Remove</button></Field>
+    {:else}
+      <Field label="Syslog server" help="Address, optional :port"><input type="text" placeholder="192.0.2.50:514" bind:value={sl.server} aria-label="Syslog server" /></Field>
+      <Field label="Topics" help="Comma separated"><input type="text" bind:value={sl.topics} aria-label="Syslog topics" /></Field>
+      <div class="r"><button class="btn primary" disabled={!sl.server} onclick={syslogReview}>Review & apply</button></div>
+    {/if}
   </Section>
 {/snippet}
 
