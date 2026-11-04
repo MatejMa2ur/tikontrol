@@ -167,6 +167,8 @@ pub struct State {
     #[serde(deserialize_with = "crate::alerts::lenient")]
     pub alerts: crate::alerts::Alerts,
     pub site: serde_json::Value,
+    /// local API keys (hashed), see apikeys.rs
+    pub api_keys: Vec<crate::apikeys::ApiKey>,
 }
 
 pub struct Store {

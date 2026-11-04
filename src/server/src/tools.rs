@@ -3,7 +3,8 @@
 //!
 //! Only typed commands with a validated host are run: there is no way to pass arbitrary RouterOS
 //! commands. Each session may start one tool every two seconds. Packet capture (`/tool/sniffer`) is
-//! not offered: it needs the `sniff` policy, which the reader must not have.
+//! not offered: it needs the `sniff` policy, which the reader must not have. The console is the same:
+//! only vetted reads from `queries::console`, never writes, always over the reader connection.
 
 use crate::api::body;
 use crate::app::{lock, App, As};
@@ -44,6 +45,12 @@ struct Name {
     name: String,
 }
 
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct Command {
+    command: String,
+}
+
 fn last_run() -> &'static Mutex<HashMap<String, Instant>> {
     static M: OnceLock<Mutex<HashMap<String, Instant>>> = OnceLock::new();
     M.get_or_init(Mutex::default)
@@ -76,8 +83,11 @@ const DNS_KEYS: &[&str] = &["name", "type", "data", "ttl"];
 
 pub fn route(app: &Arc<App>, req: &Req, s: &Session) -> Option<Resp> {
     let tool = req.path.strip_prefix("/api/v1/tools/")?;
-    if !matches!(tool, "ping" | "traceroute" | "dns") {
+    if !matches!(tool, "ping" | "traceroute" | "dns" | "console") {
         return None;
+    }
+    if tool == "console" && req.method == "GET" {
+        return Some(Resp::json(200, &json!(crate::ros::queries::console_commands())));
     }
     if req.method != "POST" {
         return Some(Resp::error(405, "use POST"));
@@ -111,6 +121,16 @@ fn run(app: &Arc<App>, req: &Req, s: &Session, tool: &str) -> Resp {
                 Err(e) => return Resp::error(400, &e),
             };
             (Cmd::new("/tool/traceroute").arg("address", &h).arg("count", "1").arg("max-hops", "20"), TRACE_KEYS, None)
+        }
+        "console" => {
+            let b: Command = match body(req) {
+                Ok(b) => b,
+                Err(r) => return r,
+            };
+            match crate::ros::queries::console(&b.command) {
+                Ok((c, keys)) => (c, keys, Some("Read-only console: runs as the reader with a fixed field list.")),
+                Err(e) => return Resp::error(400, &e),
+            }
         }
         _ => {
             let b: Name = match body(req) {

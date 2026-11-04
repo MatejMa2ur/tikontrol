@@ -43,7 +43,6 @@
   const today = () => new Date().toISOString().slice(0, 10)
   const ownFile = (n: string) => /^tik-[A-Za-z0-9_-]{1,40}\.(rsc|backup)$/.test(n)
 
-  let keys = $state<{ name: string; key: string }[]>([])
   // ---------- AI assistants (MCP): src/server/src/mcp.rs ----------
   type McpCfg = { enabled: boolean; privacy: boolean; endpoint: string | null; readWrite: boolean; protocolVersion: string }
   type Proposal = { id: number; t: number; title: string; description: string; commands: string[] }
@@ -77,14 +76,29 @@
   const snippet = $derived(JSON.stringify({ mcpServers: { tikontrol: { type: 'http', url: mcp?.endpoint ?? 'https://tikontrol.lan:8443/mcp', headers: { Authorization: `Bearer ${token || '<your MCP token>'}` } } } }, null, 2))
   if (isBackend) loadMcp()
 
-  const newKey = () => (keys = [...keys, { name: `key-${keys.length + 1}`, key: Array.from(crypto.getRandomValues(new Uint8Array(24)), (b) => b.toString(16).padStart(2, '0')).join('') }])
+  // ---------- API keys: src/server/src/apikeys.rs (read-only, hashed, shown once) ----------
+  let keys = $state<{ name: string; created: number }[]>([])
+  let keyName = $state('')
+  let newKey = $state('')
+  let keyErr = $state('')
+  async function loadKeys() { if (isBackend && isAdmin) try { keys = await api('/apikeys') } catch (e) { keyErr = (e as Error).message } }
+  async function keyAct(f: () => Promise<unknown>) { keyErr = ''; try { await f() } catch (e) { keyErr = (e as Error).message } await loadKeys() }
+  const createKey = () => keyAct(async () => { newKey = (await api<{ key: string }>('/apikeys', { method: 'POST', body: { name: keyName } })).key; keyName = '' })
+  const revokeKey = (n: string) => confirm(`Revoke ${n}? Scripts using it stop working.`) && keyAct(() => api(`/apikeys?name=${encodeURIComponent(n)}`, { method: 'DELETE' }))
+  loadKeys()
 
-  // Console: copy only. tikontrol never runs free-form RouterOS commands (no arbitrary command execution).
+  // ---------- Console: read-only, vetted prints only (src/server/src/ros/queries.rs `console`) ----------
   let cmd = $state('')
-  let cmdCopied = $state(false)
-  async function copy() {
-    try { await navigator.clipboard.writeText(cmd); cmdCopied = true; setTimeout(() => (cmdCopied = false), 1500) } catch { cmdCopied = false }
+  let allowed = $state<string[]>([])
+  let con = $state<{ command: string; rows: Record<string, string>[] } | null>(null)
+  let conErr = $state('')
+  let conBusy = $state(false)
+  if (isBackend) api<string[]>('/tools/console').then((a) => (allowed = a)).catch(() => {})
+  async function runCmd() {
+    conErr = ''; con = null; conBusy = true
+    try { con = await api('/tools/console', { method: 'POST', body: { command: cmd } }) } catch (e) { conErr = (e as Error).message } finally { conBusy = false }
   }
+  const conCols = $derived(con ? [...new Set(con.rows.flatMap((r) => Object.keys(r)))] : [])
 </script>
 
 {#if isBackend}
@@ -126,12 +140,17 @@
   <a class="btn" href="#/devices/updates">Manage updates…</a>
 </Section>
 
-<Section title="API keys" desc="For Home Assistant and scripts. Keys belong to tikontrol, not the router.">
-  {#if isBackend}<div class="muted small">Not available yet.</div>
+<Section title="API keys" desc="For Home Assistant and scripts: read-only access to tikontrol's GET API with Authorization: Bearer <key>. Keys belong to tikontrol, not the router.">
+  {#if !isBackend}<div class="muted small">Available when tikontrol runs with its server.</div>
+  {:else if !isAdmin}<div class="muted small">Only an admin can manage API keys.</div>
   {:else}
-    <button class="btn" onclick={newKey}><Icon name="key" size={14} /> New key</button>
-    {#each keys as k}<div class="row small"><b>{k.name}</b><span class="mono">{k.key}</span></div>{:else}<div class="muted small">No API keys.</div>{/each}
+    <table><thead><tr><th>Name</th><th>Created</th><th></th></tr></thead>
+      <tbody>{#each keys as k}<tr class="nohover"><td><b>{k.name}</b></td><td>{new Date(k.created * 1000).toLocaleString()}</td><td class="r"><button class="btn small" onclick={() => revokeKey(k.name)}>Revoke</button></td></tr>
+      {:else}<tr class="nohover"><td colspan="3" class="muted">No API keys.</td></tr>{/each}</tbody></table>
+    <div class="add"><input type="text" bind:value={keyName} placeholder="Name, e.g. home-assistant" aria-label="API key name" autocomplete="off" /><button class="btn primary" disabled={!keyName} onclick={createKey}><Icon name="key" size={14} /> New key</button></div>
+    {#if newKey}<div class="token" role="status"><div class="small"><b>Your API key.</b> Copy it now: it is shown only once and tikontrol keeps only its hash.</div><div class="row"><code class="mono">{newKey}</code></div></div>{/if}
   {/if}
+  {#if keyErr}<div class="err small" role="alert">{keyErr}</div>{/if}
 </Section>
 
 <Section id="mcp" title="AI assistants (MCP)" desc="Lets an AI assistant on your network read clients, Wi-Fi, events, insights and topology. Off by default, local network only, with its own token.">
@@ -179,9 +198,17 @@
   {#if mcpErr}<div class="err small" role="alert">{mcpErr}</div>{/if}
 </Section>
 
-<Section title="Console" desc="tikontrol does not run free-form commands. Write or paste one here and copy it to the WinBox or SSH terminal.">
-  <div class="add"><span class="mono muted">[admin@{router.identity}] &gt;</span><input type="text" class="mono" bind:value={cmd} placeholder="/ip/address/print" style="flex:1" aria-label="RouterOS command" />
-    <button class="btn" disabled={!cmd} onclick={copy}><Icon name="terminal" size={14} /> {cmdCopied ? 'Copied' : 'Copy to WinBox'}</button></div>
+<Section title="Console" desc="Read-only: runs one print command as tikontrol's reader, with a fixed field list. Changes go through Safe apply, never through here.">
+  {#if !isBackend}<div class="muted small">Available when tikontrol runs with its server.</div>
+  {:else}
+    <form class="add" onsubmit={(e) => { e.preventDefault(); runCmd() }}><span class="mono muted">[reader@{router.identity}] &gt;</span><input type="text" class="mono" bind:value={cmd} list="console-cmds" placeholder="/ip/route/print" style="flex:1" aria-label="RouterOS read command" />
+      <datalist id="console-cmds">{#each allowed as a}<option value={a}></option>{/each}</datalist>
+      <button class="btn" disabled={!cmd || conBusy}><Icon name="terminal" size={14} /> {conBusy ? 'Running…' : 'Run'}</button></form>
+    {#if conErr}<div class="err small" role="alert">{conErr}</div>{/if}
+    {#if con}<div class="mono muted small">{con.command}</div>
+      {#if con.rows.length}<div class="scroll"><table><thead><tr>{#each conCols as c}<th>{c}</th>{/each}</tr></thead><tbody>{#each con.rows as row}<tr class="nohover">{#each conCols as c}<td class="mono small">{row[c] ?? ''}</td>{/each}</tr>{/each}</tbody></table></div>{:else}<div class="muted small">No rows.</div>{/if}
+    {/if}
+  {/if}
 </Section>
 
 <style>
@@ -200,4 +227,5 @@
   .err { color: var(--bad); margin-top: 6px; }
   .row { gap: 10px; padding: 3px 0; }
   .ok { color: var(--ok); margin-top: 8px; }
+  .scroll { overflow-x: auto; max-height: 420px; }
 </style>

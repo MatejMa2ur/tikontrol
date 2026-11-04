@@ -15,6 +15,7 @@ components:
   securitySchemes:
     session: { type: apiKey, in: cookie, name: tik_s }
     csrf: { type: apiKey, in: header, name: X-CSRF-Token }
+    apiKey: { type: http, scheme: bearer, description: 'Local API key (tikapi_…): read-only viewer access to GET routes; any other method is refused' }
   schemas:
     Error: { type: object, properties: { error: { type: string } }, required: [error] }
     Ok: { type: object, properties: { ok: { type: boolean } } }
@@ -122,6 +123,25 @@ paths:
         - { name: cat, in: query, schema: { type: string } }
         - { name: format, in: query, schema: { enum: [json, csv] } }
       responses: { '200': { description: ok } }
+  /api/v1/apikeys:
+    get: { summary: 'API keys (admin): [{ name, created }]; keys themselves are never returned again', responses: { '200': { description: ok }, '403': { description: not admin } } }
+    post:
+      security: [{ session: [], csrf: [] }]
+      summary: Create a read-only API key (admin, max 20). The key is returned once; only its SHA-256 is stored
+      requestBody: { content: { application/json: { schema: { type: object, required: [name], properties: { name: { type: string } } } } } }
+      responses: { '200': { description: '{ name, key }' }, '400': { description: invalid name }, '409': { description: duplicate or too many } }
+    delete:
+      security: [{ session: [], csrf: [] }]
+      summary: Revoke an API key (admin)
+      parameters: [{ name: name, in: query, required: true, schema: { type: string } }]
+      responses: { '200': { description: ok }, '404': { description: no such key } }
+  /api/v1/tools/console:
+    get: { summary: Commands the read-only console accepts, responses: { '200': { description: 'string[]' } } }
+    post:
+      security: [{ session: [], csrf: [] }]
+      summary: 'Run one read command as the reader: a print of a menu the snapshot reads (with its fixed proplist) or `/interface/monitor-traffic <name> once`. Rate limited with the other tools'
+      requestBody: { content: { application/json: { schema: { type: object, required: [command], properties: { command: { type: string } } } } } }
+      responses: { '200': { description: '{ tool, command, rows[], note }' }, '400': { description: not on the read-only list }, '429': { description: too soon } }
   /api/v1/prefs:
     get: { summary: Shared names, icons, notes, groups and hidden clients, responses: { '200': { description: ok } } }
     put: { security: [{ session: [], csrf: [] }], summary: Replace prefs (size-capped), responses: { '200': { description: ok }, '413': { description: too large } } }

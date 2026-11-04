@@ -102,6 +102,12 @@ pub struct Sessions {
     map: HashMap<String, Session>,
 }
 
+/// Request-scoped viewer session for a valid API key (src/apikeys.rs); never stored.
+pub fn api_session(name: &str) -> Session {
+    let now = Instant::now();
+    Session { user: format!("api:{name}"), role: Role::Viewer, csrf: hex(&random_bytes::<32>()), ros: None, created: now, last: now }
+}
+
 impl Sessions {
     pub fn create(&mut self, user: &str, role: Role) -> (String, Session) {
         self.create_with(user, role, None)

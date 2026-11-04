@@ -11,7 +11,7 @@ Clean-room: we copy the behaviour, never the assets.
 **Backing:** `ROS` = RouterOS API on the router · `CMR` = MikroTik CMR server · `tik` = our own logic/DB · `✗` = nothing can back it
 
 <!-- progress:start -->
-**Progress:** 6 ✅ · 183 🟨 · 24 🎨 · 7 ⬜ · 8 ➖ (228 items, 3% done)
+**Progress:** 6 ✅ · 186 🟨 · 21 🎨 · 7 ⬜ · 8 ➖ (228 items, 3% done)
 <!-- progress:end -->
 
 ---
@@ -39,7 +39,7 @@ Clean-room: we copy the behaviour, never the assets.
 | P17 | Settings → Security / CyberSecure | Settings · Security | 3 |🎨 |
 | P18 | Settings → Routing | Settings · Routing | 2 | 🟨 |
 | P19 | Settings → Profiles | Settings · Profiles | 3 |🎨 |
-| P20 | Settings → Control Plane (admins, backups, updates, integrations, console) | Settings · System | 2 |🎨 |
+| P20 | Settings → Control Plane (admins, backups, updates, integrations, console) | Settings · System | 2 | 🟨 |
 | P21 | Settings → System (site, logging, SNMP, device auth) | Settings · System | 2 |🎨 |
 | P22 | Site Manager (multi-site, cloud) | Sites switcher | 4 | ⬜ |
 | P23 | Login / onboarding wizard | Login + first-run wizard | 1 | 🟨 |
@@ -277,8 +277,8 @@ Clean-room: we copy the behaviour, never the assets.
 | Sign in with MikroTik account (role from router group, password only in session memory, changes run as that user) | tik + ROS login | 2 | 🟨 |
 | Backups (scheduled, download, restore) | ROS `/system/backup` + `/export` | 2 | 🟨 |
 | Firmware/app updates (channel, auto-update window) | ROS / CMR | 2 | 🟨 |
-| Integrations / local API (+ API keys) | tik REST | 4 |🎨 |
-| Console (terminal in browser) | ROS (SSH/API terminal) | 3 |🎨 |
+| Integrations / local API (+ API keys) | tik REST | 4 | 🟨 |
+| Console (terminal in browser) | ROS (SSH/API terminal) | 3 | 🟨 |
 | Site settings (name, country, timezone, NTP) | ROS `/system/clock`, ntp | 2 | 🟨 |
 | SNMP | ROS `/snmp` | 3 | 🟨 |
 | Remote logging / NetFlow export settings | ROS | 3 | 🟨 |

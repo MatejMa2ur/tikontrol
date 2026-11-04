@@ -2,6 +2,7 @@
 pub mod alerts;
 pub mod admins;
 pub mod api;
+pub mod apikeys;
 pub mod app;
 pub mod apply;
 pub mod auth;

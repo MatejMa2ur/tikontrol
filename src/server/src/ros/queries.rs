@@ -181,6 +181,36 @@ fn build(q: &Q) -> Cmd {
     c
 }
 
+/// Console (read-only): a RouterOS command is accepted only if it is the `print` of a menu the snapshot
+/// already reads, or a one-shot monitor of a named interface. It runs with the snapshot's vetted
+/// proplist, so no field outside it (keys, secrets, script bodies) can be asked for. Returns the command
+/// and the fields to show.
+pub fn console(line: &str) -> Result<(Cmd, &'static [&'static str]), String> {
+    const MON: &[&str] = &["name", "rx-bits-per-second", "tx-bits-per-second"];
+    const ETH: &[&str] = &["name", "status", "rate", "full-duplex", "auto-negotiation"];
+    let w: Vec<&str> = line.split_whitespace().collect();
+    let path = match w.as_slice() {
+        [p] => p.to_string(),
+        [p, "print"] => format!("{}/print", p.trim_end_matches('/')),
+        [p @ ("/interface/monitor-traffic" | "/interface/ethernet/monitor"), name, "once"] => {
+            let n = crate::apply::ros_name(name)?;
+            let props = if p.ends_with("monitor-traffic") { MON } else { ETH };
+            let key = if props == MON { "interface" } else { "numbers" };
+            return Ok((Cmd::new(p).arg(key, &n).arg("once", "").proplist(props), props));
+        }
+        _ => return Err("one command, no arguments: a menu's print (e.g. /ip/route/print) or /interface/monitor-traffic <name> once".into()),
+    };
+    let q = QUERIES.iter().find(|q| q.path == path && q.args.is_empty()).ok_or_else(|| format!("{path} isn't on the console's read-only list"))?;
+    Ok((build(q), q.props))
+}
+
+/// The commands the console accepts, for the UI's suggestions.
+pub fn console_commands() -> Vec<&'static str> {
+    let mut v: Vec<&str> = QUERIES.iter().filter(|q| q.args.is_empty()).map(|q| q.path).collect();
+    v.dedup();
+    v
+}
+
 /// Parses `/ping` timings like "17ms800us" into milliseconds.
 pub fn rtt_ms(v: &str) -> Option<f64> {
     let mut ms = 0.0;
@@ -327,6 +357,18 @@ pub mod tests {
         assert_eq!(typed("pvid", "007", &[]), json!("007"));
         assert_eq!(typed("topics", "wireless,info", &["topics"]), json!(["wireless", "info"]));
         assert_eq!(typed("servers", "", &["servers"]), json!([]));
+    }
+
+    #[test]
+    fn console_only_runs_vetted_reads() {
+        let (c, _) = console("/ip/route print").unwrap();
+        assert_eq!(c.words().unwrap()[0], "/ip/route/print");
+        let (c, _) = console("/ip/cloud/print").unwrap();
+        assert_eq!(c.words().unwrap()[1], "=.proplist=public-address,dns-name,back-to-home-vpn");
+        assert!(console("/interface/monitor-traffic ether1 once").is_ok());
+        for bad in ["/system/reboot", "/ip/route/print; /system/reboot", "/ip/route/print detail", "/system/script/print", "/interface/wireguard/peers/print where name=x", "/interface/monitor-traffic a;b once", "/interface/monitor-traffic ether1", "/ip/address/add address=1.2.3.4", ""] {
+            assert!(console(bad).is_err(), "{bad}");
+        }
     }
 
     #[test]

@@ -47,6 +47,11 @@ pub fn handle(app: &Arc<App>, req: Req) -> Resp {
             _ => login(app, &req),
         };
     }
+    if session.is_none() {
+        if let Some(r) = crate::apikeys::authenticate(app, &req) {
+            return r.map_or_else(|e| e, |s| route(app, &req, &s));
+        }
+    }
     let Some(s) = session else { return Resp::error(401, "login required") };
     route(app, &req, &s)
 }
