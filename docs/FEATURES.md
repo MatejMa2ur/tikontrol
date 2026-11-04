@@ -11,7 +11,7 @@ Clean-room: we copy the behaviour, never the assets.
 **Backing:** `ROS` = RouterOS API on the router · `CMR` = MikroTik CMR server · `tik` = our own logic/DB · `✗` = nothing can back it
 
 <!-- progress:start -->
-**Progress:** 6 ✅ · 176 🟨 · 31 🎨 · 7 ⬜ · 8 ➖ (228 items, 3% done)
+**Progress:** 6 ✅ · 178 🟨 · 29 🎨 · 7 ⬜ · 8 ➖ (228 items, 3% done)
 <!-- progress:end -->
 
 ---
@@ -107,7 +107,7 @@ Clean-room: we copy the behaviour, never the assets.
 | Kick / reconnect wireless client | ROS reg-table remove | 2 | 🟨 |
 | Override network/VLAN for client | ROS (MAC-based VLAN / access list) | 4 |🎨 |
 | Offline / historical clients list | tik | 2 | 🟨 |
-| Roaming history (which AP, when) | tik (reg-table changes) · CMR wifi-logs | 3 |🎨 |
+| Roaming history (which AP, when) | tik (reg-table changes) · CMR wifi-logs | 3 | 🟨 |
 | Filters (wired / wireless / guest / offline) and search | tik | 1 | 🟨 |
 | Client groups | tik | 3 | 🟨 |
 
@@ -132,11 +132,11 @@ Clean-room: we copy the behaviour, never the assets.
 |---|---|---|---|
 | Radio list per AP: band, channel, width, tx power, clients | ROS wireless/wifi · CMR | 3 | 🟨 |
 | Channel utilisation (channel, width, DFS, tx power, noise, CCQ; busy time not reported by RouterOS) | ROS monitor (driver dependent) | 3 | 🟨 |
-| Neighbouring networks / interference scan | ROS `scan` (duration-limited) | 3 |🎨 |
+| Neighbouring networks / interference scan | ROS `scan` (duration-limited; disconnects clients, so copy-the-command only, results land on the router) | 3 |🎨 |
 | Signal strength distribution | tik from reg-table | 3 | 🟨 |
 | WiFi connectivity success (association / auth / DHCP / DNS) | tik from log + leases | 2 | 🟨 |
 | Radio link quality (CCQ buckets, channel, power, noise) | ROS wireless monitor | 2 | 🟨 |
-| Roaming journeys (Connectivity view) | tik · CMR wifi-logs | 3 |🎨 |
+| Roaming journeys (Connectivity view) | tik · CMR wifi-logs | 3 | 🟨 |
 | Coverage map / floorplan (Design Center) | tik (manual floorplan, no RF model) | 4 |🎨 |
 | WiFiman (client-side speed/coverage app) | ✗ | – | ➖ |
 

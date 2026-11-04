@@ -32,7 +32,7 @@ export type Client = {
   online: boolean
   privateMac: boolean
   roams: number // band switches seen in the log
-  bandLog: { time: string; band?: string; joined: boolean; signal: number }[] // joins/leaves from the log, oldest first
+  bandLog: { time: string; iface: string; band?: string; joined: boolean; signal: number }[] // joins/leaves from the log, oldest first
   ccq?: number // link quality %, legacy wireless only
   standard?: string // 'WiFi 4' | 'WiFi 5' (heuristic)
 }
@@ -114,7 +114,7 @@ const bandOf = (ifname?: string) => {
 const logRe = /^([0-9A-F:]{17})@(w(?:lan|ifi)\d+): (connected|disconnected)[^]*?signal strength (-\d+)/
 const bandLogOf = (mac: string) => log.flatMap((l) => {
   const m = String(l.message).match(logRe)
-  return m && m[1] === mac ? [{ time: String(l.time ?? ''), band: bandOf(m[2]), joined: m[3] === 'connected', signal: +m[4] }] : []
+  return m && m[1] === mac ? [{ time: String(l.time ?? ''), iface: m[2], band: bandOf(m[2]), joined: m[3] === 'connected', signal: +m[4] }] : []
 })
 const roamCount = (mac: string) => log.filter((l) => l.message?.startsWith(mac) && /connected/.test(l.message)).length
 

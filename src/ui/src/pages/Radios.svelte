@@ -1,5 +1,6 @@
 <script lang="ts">
-  import { radios, clients, events, signalQuality } from '../lib/data'
+  import { radios, clients, signalQuality, isBackend } from '../lib/data'
+  import { api } from '../lib/backend'
   import { displayName } from '../lib/live.svelte'
   import { review } from '../lib/apply.svelte'
   import Icon from '../lib/Icon.svelte'
@@ -11,12 +12,20 @@
   const hist = bins.map((b) => wifi.filter((c) => (c.signal ?? -99) >= b && (c.signal ?? -99) < b + 5).length)
   const hmax = Math.max(...hist, 1)
 
-  // Roaming journeys from the log: each client's sequence of band joins
-  const journeys = wifi.map((c) => ({
-    c, steps: events.filter((e) => e.cat === 'WiFi' && e.text.startsWith(displayName(c)) && e.text.includes('joined')).map((e) => ({ t: e.time.slice(11, 16), band: e.text.match(/(2\.4|5) GHz/)?.[0] ?? '?' })).reverse(),
-  })).filter((j) => j.steps.length > 1)
+  // Roaming journeys: each client's joins from the router log, plus the roams the server saw in the
+  // registration table between polls ("X roamed from wlan1 to wlan2", stored in live.rs history)
+  const bandOfIf = (i: string) => radios.find((r) => r.name === i)?.band ?? i
+  type Step = { t: string; iface: string; band: string }
+  let stored = $state<{ t: number; mac?: string; text: string }[]>([])
+  if (isBackend) api<typeof stored>('/events?cat=WiFi').then((e) => (stored = (e ?? []).filter((x) => x.mac && / roamed from \S+ to \S+$/.test(x.text)).reverse())).catch(() => {})
+  const hhmm = (t: number) => new Date(t * 1000).toTimeString().slice(0, 5)
+  const journeys = $derived(wifi.map((c) => {
+    const steps: Step[] = c.bandLog.filter((l) => l.joined).map((l) => ({ t: l.time.slice(11, 16) || l.time, iface: l.iface, band: l.band ?? '?' }))
+    for (const e of stored.filter((x) => x.mac === c.mac)) { const to = e.text.split(' ').at(-1)!; steps.push({ t: hhmm(e.t), iface: to, band: bandOfIf(to) }) }
+    return { c, steps }
+  }).filter((j) => j.steps.length > 1))
 
-  let scanning = $state<string | null>(null)
+  let scanning = $state<(typeof radios)[number] | null>(null)
   // Floor plan: local image + click to place the AP
   let plan = $state<string | null>(null)
   let ap = $state({ x: 50, y: 50 })
@@ -39,7 +48,7 @@
           <dt>Utilisation</dt><dd class="muted small">Not reported: RouterOS's {r.pkg} monitor gives no channel busy time. Noise floor, CCQ and a neighbour scan are the closest signs of a crowded channel.</dd>
         </dl>
         <div class="row">
-          <button class="btn" onclick={() => (scanning = r.name)}><Icon name="search" size={14} /> Scan neighbours</button>
+          <button class="btn" onclick={() => (scanning = r)}><Icon name="search" size={14} /> Scan neighbours</button>
           <a class="btn" href="#/settings/wifi">Channel & power…</a>
         </div>
       </Section>
@@ -55,11 +64,11 @@
     </div>
   </Section>
 
-  <Section title="Roaming journeys" desc="Band and AP changes per client from the log (the Connectivity view)." ros="/log/print where topics~&quot;wireless&quot;">
+  <Section title="Roaming journeys" desc="Radio and band joins per client from the router log{isBackend ? ', plus roams tikontrol saw between polls' : ''}." ros="/log/print where topics~&quot;wireless&quot;">
     {#each journeys as j}
       <div class="row journey">
         <a href="#/clients/{j.c.mac}" class="who row"><Icon name={j.c.kind} size={14} /> {displayName(j.c)}</a>
-        <div class="steps">{#each j.steps as s}<span class="step {s.band.startsWith('5') ? 'b5' : 'b2'}" title={s.t}>{s.band}<small>{s.t}</small></span>{/each}</div>
+        <div class="steps">{#each j.steps as s}<span class="step {s.band.startsWith('2') ? 'b2' : 'b5'}" title="{s.iface} at {s.t}">{s.band}<small>{s.iface} · {s.t}</small></span>{/each}</div>
       </div>
     {:else}<div class="muted small">No roaming in the recent log.</div>{/each}
   </Section>
@@ -81,9 +90,9 @@
 {#if scanning}
   {@const r = scanning}
   <div class="toastbox card">
-    <b>Neighbour scan on {r}</b>
-    <p class="small muted">A scan takes the radio off-channel for ~10 s and briefly disconnects its clients. tikontrol would run it with a time limit:</p>
-    <div class="row"><button class="btn" onclick={() => (scanning = null)}>Cancel</button><button class="btn primary" onclick={() => { review(`Scan ${r}`, `/interface/wireless/scan ${r} duration=10 save-file=scan-${r}`); scanning = null }}>Scan</button></div>
+    <b>Neighbour scan on {r.name}</b>
+    <p class="small muted">A scan takes the radio off-channel for its whole duration: every client on {r.name} disconnects. tikontrol never runs it on its own (not while polling, not with the read-only user): copy the command and run it yourself in WinBox or SSH as an admin, when a short Wi-Fi drop is fine. It stops after 10 s.</p>
+    <div class="row"><button class="btn" onclick={() => (scanning = null)}>Cancel</button><button class="btn primary" onclick={() => { review(`Scan ${r.name} (disconnects its clients)`, `/interface/${r.pkg}/scan ${r.name} duration=10`); scanning = null }}>Show command</button></div>
   </div>
 {/if}
 

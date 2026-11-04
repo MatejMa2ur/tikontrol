@@ -18,7 +18,6 @@
 
   const sq = $derived(signalQuality(c.signal))
   const history = $derived(events.filter((e) => e.text.includes(displayName(c)) || e.text.includes(c.name)).slice(0, 12))
-  const roams = $derived(history.filter((e) => e.cat === 'WiFi'))
   const close = () => (location.hash = '#/clients')
   const save = () => { prefs.aliases[c.mac] = draft.trim(); if (!draft.trim()) delete prefs.aliases[c.mac]; editing = false }
 
@@ -37,7 +36,14 @@
 
   // stored hourly bytes from the server: [unix hour, down, up]
   let hours = $state<[number, number, number][]>([])
-  if (isBackend) api<{ hours: [number, number, number][] }>(`/history/client?mac=${encodeURIComponent(untrack(() => c.mac))}`).then((h) => (hours = (h?.hours ?? []).slice(-24))).catch(() => {})
+  // roaming history: joins from the router log, plus "roamed from X to Y" the server saw in the registration table
+  let stored = $state<{ t: number; text: string }[]>([])
+  if (isBackend) api<{ hours: [number, number, number][]; events?: { t: number; cat: string; text: string }[] }>(`/history/client?mac=${encodeURIComponent(untrack(() => c.mac))}`).then((h) => { hours = (h?.hours ?? []).slice(-24); stored = (h?.events ?? []).filter((e) => e.cat === 'WiFi') }).catch(() => {})
+  const hhmm = (t: number) => new Date(t * 1000).toTimeString().slice(0, 5)
+  const roams = $derived([
+    ...c.bandLog.filter((l) => l.joined).map((l) => ({ time: l.time.slice(11, 16) || l.time, text: `Joined ${l.iface} (${l.band ?? '?'}, ${l.signal} dBm)` })),
+    ...stored.map((e) => ({ time: hhmm(e.t), text: e.text })),
+  ].slice(-12).reverse())
   const hourMax = $derived(Math.max(...hours.map(([, d, u]) => d + u), 1))
   const limitIntent = () => { const [down, up] = s.limit.split('/').map((x) => x.trim()); return { kind: 'limit-client', mac: c.mac, ip: c.ip, down: down ?? '', up: up ?? down ?? '' } }
   // "Why is this client on 2.4 GHz?" and the Safe apply fixes for it
@@ -151,7 +157,7 @@
     {/if}
     {#if !c.wired}
       <h3>Roaming history</h3>
-      {#each roams as e}<div class="row small ev"><span class="muted mono">{e.time.slice(11, 16)}</span> {e.text}</div>
+      {#each roams as e}<div class="row small ev"><span class="muted mono">{e.time}</span> {e.text}</div>
       {:else}<div class="muted small">Stayed on one band.</div>{/each}
     {/if}
     <h3>Recent activity</h3>
