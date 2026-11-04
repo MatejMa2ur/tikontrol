@@ -11,7 +11,7 @@ Clean-room: we copy the behaviour, never the assets.
 **Backing:** `ROS` = RouterOS API on the router · `CMR` = MikroTik CMR server · `tik` = our own logic/DB · `✗` = nothing can back it
 
 <!-- progress:start -->
-**Progress:** 0 ✅ · 0 🟨 · 178 🎨 · 31 ⬜ · 8 ➖ (217 items, 0% done)
+**Progress:** 0 ✅ · 0 🟨 · 178 🎨 · 36 ⬜ · 8 ➖ (222 items, 0% done)
 <!-- progress:end -->
 
 ---
@@ -296,6 +296,17 @@ Clean-room: we copy the behaviour, never the assets.
 | Runs as RouterOS container (arm/v7, arm64) | tik build | 1 | ⬜ |
 | Runs on Docker (home server) | tik build | 0 | ⬜ |
 | CHR dev/test router | – | 0 | ⬜ |
+
+## Themes
+Not a UniFi feature: this is our own addition. Light or dark, the colour theme and the design theme are three separate choices. Themes are sets of CSS variables, so they need no router support.
+
+| Feature | Backing | Phase | Status |
+|---|---|---|---|
+| Colour themes: choose a palette, in both light and dark | tik | 2 | ⬜ |
+| Design themes: corner rounding, spacing and density, borders and shadows, fonts, icon style | tik | 2 | ⬜ |
+| MikroTik-style colour theme: own palette based on MikroTik's current look, no logos or implied endorsement | tik | 2 | ⬜ |
+| Theme picker with live preview, saved per user | tik | 2 | ⬜ |
+| Every theme meets WCAG 2.2 AA contrast | tik | 2 | ⬜ |
 
 ## Read-only mode
 Not a UniFi feature: this is our own addition. The router enforces it, not tikontrol. tikontrol connects with a RouterOS user that has no `write` policy, so RouterOS refuses edits even if the app has a bug or is compromised.
