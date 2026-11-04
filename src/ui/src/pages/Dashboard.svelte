@@ -85,7 +85,7 @@
     </div>
     <hr />
     <div class="row between"><b>Internet Health</b><a class="small" href="#/events">See All</a></div>
-    <div class="health" title="Simulated until history is stored">{#each health as h}<i class={h}></i>{/each}</div>
+    <div class="health" title="Internet health, last 12 hours">{#each health as h}<i class={h}></i>{/each}</div>
     <div class="row between tiny muted"><span>-12h</span><span>Now</span></div>
     <hr />
     <div class="row between"><b>Speed Test</b><button class="link small" title="Phase 3">Run Now</button></div>
@@ -249,7 +249,7 @@
   .b { font-style: normal; width: 15px; height: 15px; border-radius: 3px; display: grid; place-items: center; font-size: 9px; font-weight: 800; color: #fff; }
   .b.Cloudflare { background: #f38020; } .b.Google { background: #4285f4; } .b.Quad9 { background: #d62f6e; }
   .health { display: flex; gap: 1px; height: 7px; border-radius: 4px; overflow: hidden; margin-top: 4px; }
-  .health i { flex: 1; background: var(--ok); } .health i.warn { background: var(--warn); } .health i.bad { background: var(--bad); }
+  .health i { flex: 1; background: var(--ok); } .health i.warn { background: var(--warn); } .health i.bad { background: var(--bad); } .health i.none { background: var(--cells); }
   .link { background: none; border: 0; color: var(--accent); cursor: pointer; padding: 0; }
   .last { margin-top: 8px; }
   .widths { display: grid; grid-template-columns: 52px repeat(4, 1fr); gap: 2px; align-items: center; text-align: center; font-size: 11.5px; }

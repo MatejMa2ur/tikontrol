@@ -1,14 +1,15 @@
 // Normalises a RouterOS snapshot (src/scripts/snapshot.py) into the UI model.
-// ponytail: mockup data source. The Rust backend will serve this same shape from the live binary API.
+// The tikontrol server serves this same shape from the live binary API (src/server/src/ros/queries.rs);
+// without it the mockup falls back to snapshot.json / sample.json. `load()` swaps in a fresh snapshot.
 
 import { simulateBe3 } from './be3'
 import { bandLabel, detectHardware, normalizeWifi, standardOf } from './hardware'
+import { preload } from './backend'
 
 const files = import.meta.glob('./*.json', { eager: true, import: 'default' }) as Record<string, any>
 export const simulated = new URLSearchParams(location.search).get('device') === 'be3'
-export const raw = normalizeWifi(simulated ? simulateBe3(files['./sample.json']) : files['./snapshot.json'] ?? files['./sample.json'])
-export const isSample = !files['./snapshot.json']
-export const hw = detectHardware(raw)
+export const isBackend = !!preload.snapshot
+export const isSample = !isBackend && !files['./snapshot.json']
 
 export type Kind = 'phone' | 'computer' | 'server' | 'vm' | 'speaker' | 'iot' | 'unknown'
 export type Client = {
@@ -95,6 +96,8 @@ function guessKind(host = '', vendor = '', priv: boolean, wired: boolean): Kind 
 }
 
 // ---------- normalise ----------
+function build(raw: any) {
+const hw = detectHardware(raw)
 const leases: any[] = raw.leases ?? []
 const stations: any[] = raw.stations ?? []
 const hosts: any[] = (raw.bridgeHosts ?? []).filter((h: any) => !h.local)
@@ -113,7 +116,7 @@ const macs = new Set<string>([...leases.map((l) => l['mac-address']), ...station
 // ARP-only devices (static IP, no lease) still count as clients if reachable
 for (const a of arp) if (a.status === 'reachable' && a.interface === 'bridge') macs.add(a['mac-address'])
 
-export const clients: Client[] = [...macs].filter(Boolean).map((mac) => {
+const clients: Client[] = [...macs].filter(Boolean).map((mac) => {
   const lease = leases.find((l) => l['mac-address'] === mac)
   const st = stations.find((s) => s['mac-address'] === mac)
   const host = hosts.find((h) => h['mac-address'] === mac)
@@ -151,12 +154,12 @@ export const clients: Client[] = [...macs].filter(Boolean).map((mac) => {
   }
 })
 
-export const offline = [
+const offline = [
   ...arp.filter((a) => a.status !== 'reachable' && !macs.has(a['mac-address'])).map((a) => ({ mac: a['mac-address'] as string, ip: a.address as string, seen: a.status as string })),
   ...leases.filter((l) => l.status !== 'bound').map((l) => ({ mac: l['mac-address'] as string, ip: l.address as string, seen: l['last-seen'] as string })),
 ].filter((o, i, all) => all.findIndex((x) => x.mac === o.mac) === i)
 
-export const ports: Port[] = (raw.ethernet ?? []).map((e: any) => ({
+const ports: Port[] = (raw.ethernet ?? []).map((e: any) => ({
   name: e.name,
   up: e.running && !e.disabled,
   wan: (raw.wan ?? []).some((w: any) => w.interface === e.name),
@@ -165,7 +168,7 @@ export const ports: Port[] = (raw.ethernet ?? []).map((e: any) => ({
 
 const res = raw.resource ?? {}
 const wan = (raw.wan ?? [])[0] ?? {}
-export const router = {
+const router = {
   identity: typeof raw.identity === 'string' ? raw.identity : 'router',
   board: res['board-name'],
   model: raw.routerboard?.model,
@@ -181,7 +184,7 @@ export const router = {
   hddFree: res['free-hdd-space'] ?? 0,
   uptimeS: parseUptime(res.uptime),
 }
-export const internet = {
+const internet = {
   wanIp: wan.address?.split('/')[0],
   gateway: wan.gateway,
   wanIf: wan.interface ?? 'ether1',
@@ -197,7 +200,7 @@ export const internet = {
   latency: Object.entries(raw.latency ?? {}).map(([name, v]: [string, any]) => ({ name, ms: v.ms as number | null, loss: v.loss as number | null })),
   doubleNat: /^(10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.)/.test(wan.address ?? ''),
 }
-export const ssids = [...new Set(wifi.map((w) => w.ssid))].map((ssid) => ({
+const ssids = [...new Set(wifi.map((w) => w.ssid))].map((ssid) => ({
   ssid,
   radios: wifi.filter((w) => w.ssid === ssid).map((w) => ({ name: w.name, band: bandOf(w.name)!, running: w.running })),
   clients: clients.filter((c) => c.ssid === ssid).length,
@@ -206,7 +209,7 @@ export const ssids = [...new Set(wifi.map((w) => w.ssid))].map((ssid) => ({
 const catOf = (topics: string[]): Event['cat'] =>
   topics.includes('wireless') ? 'WiFi' : topics.includes('dhcp') ? 'Clients' : topics.includes('account') ? 'Admin' : topics.includes('firewall') ? 'Security' : 'System'
 const nameFor = (mac: string) => clients.find((c) => c.mac === mac)?.name ?? mac
-export const events: Event[] = log
+const events: Event[] = log
   .map((l) => ({
     time: l.time,
     cat: catOf(l.topics ?? []),
@@ -225,7 +228,7 @@ const memPct = (1 - router.memFree / router.memTotal) * 100
 const flappers = clients.filter((c) => c.roams >= 4)
 const adlist = (raw.adlist ?? [])[0]
 
-export const insights: Insight[] = [
+const insights: Insight[] = [
   insecure.length
     ? { level: 'bad', title: `${insecure.join(', ')} enabled`, detail: 'These services send your router password unencrypted. Disable them or limit them to the LAN.', ros: `/ip/service/disable ${insecure.join(',')}` }
     : { level: 'ok', title: 'Management services secured', detail: 'No plain-text management services enabled.', ros: '/ip/service/print' },
@@ -244,7 +247,7 @@ export const insights: Insight[] = [
 ]
 
 // ---------- radios (legacy wireless monitor; order matches /interface/wireless [find]) ----------
-export const radios = wifi.map((w, i) => {
+const radios = wifi.map((w, i) => {
   const m = (raw.radios ?? [])[i] ?? {}
   // "5180/20-Ceee/ac(23dBm)" -> freq 5180, extension letters give the real width (1 letter = 20 MHz)
   const ch = String(m.channel ?? '').match(/^(\d+)\/20-([A-Za-z]+)\/[^(]*(?:\((\d+)dBm\))?/)
@@ -262,7 +265,7 @@ export const radios = wifi.map((w, i) => {
 })
 
 // WiFi Technology card: clients grouped by standard + band
-export const wifiTech = Object.values(
+const wifiTech = Object.values(
   clients.filter((c) => !c.wired).reduce((acc: Record<string, { type: string; band: string; clients: Client[] }>, c) => {
     const k = `${c.standard}|${c.band}`
     ;(acc[k] ??= { type: c.standard!, band: c.band!, clients: [] }).clients.push(c)
@@ -274,10 +277,23 @@ export const wifiTech = Object.values(
 const assoc = log.filter((l) => /: connected/.test(l.message)).length
 const assocFail = log.filter((l) => /rejected|failed to connect|unicast key exchange timeout/i.test(l.message)).length
 const authFail = log.filter((l) => /handshake timeout|wrong password|unicast key exchange timeout/i.test(l.message)).length
-export const connectivity = [
+const connectivity = [
   { name: 'Association', pct: assoc + assocFail ? Math.round((assoc / (assoc + assocFail)) * 100) : 100 },
   { name: 'Authentication', pct: assoc + authFail ? Math.round((assoc / (assoc + authFail)) * 100) : 100 },
   { name: 'DHCP', pct: leases.length ? Math.round((leases.filter((l) => l.status === 'bound').length / leases.length) * 100) : 100 },
   { name: 'DNS', pct: internet.latency.some((l) => l.ms != null) ? 100 : 0 },
 ]
-export const adblock = (raw.adlist ?? []).filter((a: any) => !a.disabled).reduce((s: { names: number; hits: number }, a: any) => ({ names: s.names + a['name-count'], hits: s.hits + a['match-count'] }), { names: 0, hits: 0 })
+const adblock = (raw.adlist ?? []).filter((a: any) => !a.disabled).reduce((s: { names: number; hits: number }, a: any) => ({ names: s.names + a['name-count'], hits: s.hits + a['match-count'] }), { names: 0, hits: 0 })
+return { raw, hw, clients, offline, ports, router, internet, ssids, events, insights, radios, wifiTech, connectivity, adblock }
+}
+
+type Built = ReturnType<typeof build>
+// Live bindings: importers read the newest values after `load()`; pages re-mount to pick them up (App.svelte).
+export let raw: any, hw: Built['hw'], clients: Built['clients'], offline: Built['offline'], ports: Built['ports'],
+  router: Built['router'], internet: Built['internet'], ssids: Built['ssids'], events: Built['events'],
+  insights: Built['insights'], radios: Built['radios'], wifiTech: Built['wifiTech'], connectivity: Built['connectivity'],
+  adblock: Built['adblock']
+export function load(snapshot: any) {
+  ;({ raw, hw, clients, offline, ports, router, internet, ssids, events, insights, radios, wifiTech, connectivity, adblock } = build(normalizeWifi(snapshot)))
+}
+load(preload.snapshot ?? (simulated ? simulateBe3(files['./sample.json']) : files['./snapshot.json'] ?? files['./sample.json']))

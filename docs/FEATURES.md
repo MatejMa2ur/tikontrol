@@ -11,7 +11,7 @@ Clean-room: we copy the behaviour, never the assets.
 **Backing:** `ROS` = RouterOS API on the router · `CMR` = MikroTik CMR server · `tik` = our own logic/DB · `✗` = nothing can back it
 
 <!-- progress:start -->
-**Progress:** 1 ✅ · 7 🟨 · 177 🎨 · 33 ⬜ · 8 ➖ (226 items, 0% done)
+**Progress:** 1 ✅ · 18 🟨 · 168 🎨 · 31 ⬜ · 8 ➖ (226 items, 0% done)
 <!-- progress:end -->
 
 ---
@@ -42,7 +42,7 @@ Clean-room: we copy the behaviour, never the assets.
 | P20 | Settings → Control Plane (admins, backups, updates, integrations, console) | Settings · System | 2 |🎨 |
 | P21 | Settings → System (site, logging, SNMP, device auth) | Settings · System | 2 |🎨 |
 | P22 | Site Manager (multi-site, cloud) | Sites switcher | 4 | ⬜ |
-| P23 | Login / onboarding wizard | Login + first-run wizard | 1 | ⬜ |
+| P23 | Login / onboarding wizard | Login + first-run wizard | 1 | 🟨 |
 | P24 | Global search (⌘K) | Command palette | 2 | 🎨 |
 
 ---
@@ -51,8 +51,8 @@ Clean-room: we copy the behaviour, never the assets.
 | Feature | Backing | Phase | Status |
 |---|---|---|---|
 | Status-first summary with insights (insecure services, double NAT, low RAM, band flapping, pending firmware) | tik on ROS data | 1 | 🎨 |
-| Internet health (WAN up, latency, packet loss) | ROS netwatch + tik | 1 | 🎨 |
-| WAN live throughput (down/up) graph | ROS monitor-traffic | 1 | 🎨 |
+| Internet health (WAN up, latency, packet loss) | ROS netwatch + tik | 1 | 🟨 |
+| WAN live throughput (down/up) graph | ROS monitor-traffic | 1 | 🟨 |
 | Max download/upload speed indicators | tik | 1 | ⬜ |
 | ISP name, public IP, WAN IP | ROS `/ip/cloud`, dhcp-client | 1 | 🎨 |
 | Client count (wired / wireless / guest) | ROS | 1 | 🎨 |
@@ -62,7 +62,7 @@ Clean-room: we copy the behaviour, never the assets.
 | Traffic Identification card (by client now, by app once CMR is wired) | ROS reg-table bytes · CMR | 1 | 🎨 |
 | WiFi Technology card (clients by standard + band, activity, experience) | ROS reg-table | 1 | 🎨 |
 | Most active clients / access points strips | ROS + tik | 1 | 🎨 |
-| Internet Activity chart: client count cells + down/up, 1H/1D/1W | tik history | 2 | 🎨 |
+| Internet Activity chart: client count cells + down/up, 1H/1D/1W | tik history | 2 | 🟨 |
 | Gateway column (WAN/gateway IP, uptime, latency to 3 resolvers, channel widths) | ROS | 1 | 🎨 |
 | WiFi experience / satisfaction score | tik (signal + rate heuristic) | 2 | 🎨 |
 | Recent critical events | ROS log + tik | 1 | 🎨 |
@@ -94,8 +94,8 @@ Clean-room: we copy the behaviour, never the assets.
 | Client list: name, IP, MAC, vendor, connection, uptime | ROS leases + ARP + reg-table + bridge host | 1 | 🎨 |
 | Device fingerprint / auto icon (phone, TV, PC…) | tik (OUI + hostname + DHCP heuristics) | 1 | 🎨 |
 | Wired: switch port · Wireless: SSID, band, signal, rate | ROS bridge host + reg-table | 1 | 🎨 |
-| Live per-client throughput | ROS kid-control / reg-table bytes | 1 | 🎨 |
-| Per-client traffic history | tik SQLite | 2 |🎨 |
+| Live per-client throughput | ROS kid-control / reg-table bytes | 1 | 🟨 |
+| Per-client traffic history | tik SQLite | 2 | 🟨 |
 | Per-client apps / domains | tik DNS correlation (CMR is per-device) | 3 |🎨 |
 | Rename / alias, custom icon, notes | tik | 1 | 🎨 |
 | Fixed IP (reservation) | ROS lease make-static | 2 | 🎨 |
@@ -105,7 +105,7 @@ Clean-room: we copy the behaviour, never the assets.
 | Speed limit (client groups) | ROS simple queues | 2 | 🎨 |
 | Kick / reconnect wireless client | ROS reg-table remove | 2 |🎨 |
 | Override network/VLAN for client | ROS (MAC-based VLAN / access list) | 4 |🎨 |
-| Offline / historical clients list | tik | 2 |🎨 |
+| Offline / historical clients list | tik | 2 | 🟨 |
 | Roaming history (which AP, when) | tik (reg-table changes) · CMR wifi-logs | 3 |🎨 |
 | Filters (wired / wireless / guest / offline) and search | tik | 1 | 🎨 |
 | Client groups | tik | 3 |🎨 |
@@ -162,8 +162,8 @@ Clean-room: we copy the behaviour, never the assets.
 |---|---|---|---|
 | Live event stream | ROS `/log follow` | 1 | 🎨 |
 | Categories: clients, devices, admin activity, security, updates | tik (topic mapping) | 1 | 🎨 |
-| Derived events (client joined/left, WAN flap) | tik | 2 |🎨 |
-| Search / filter / export CSV | tik | 2 |🎨 |
+| Derived events (client joined/left, WAN flap) | tik | 2 | 🟨 |
+| Search / filter / export CSV | tik | 2 | 🟨 |
 | Remote syslog / SIEM forwarding | ROS logging action | 3 |🎨 |
 
 ## WiFi settings
@@ -210,7 +210,7 @@ Clean-room: we copy the behaviour, never the assets.
 | DNS servers / DoH (encrypted DNS) | ROS `/ip/dns` use-doh-server | 2 |🎨 |
 | Dynamic DNS | ROS `/ip/cloud` ddns | 2 |🎨 |
 | IPv6 WAN | ROS | 4 |🎨 |
-| ISP status / outage history | tik | 2 |🎨 |
+| ISP status / outage history | tik | 2 | 🟨 |
 
 ## VPN
 | Feature | Backing | Phase | Status |
@@ -327,7 +327,7 @@ Not a UniFi feature: this is our own addition. The router enforces it, not tikon
 | Router-enforced read-only: connect with a user that has no `write` policy | ROS user groups | 1 | 🟨 |
 | Guided setup: show the commands to create the read-only group and user | tik + ROS | 1 | 🟨 |
 | Detect the connected user's real policies and show them, instead of trusting a setting | ROS `/user` | 1 | 🟨 |
-| Read-only badge, with edit controls disabled and the reason shown | tik | 1 | ⬜ |
+| Read-only badge, with edit controls disabled and the reason shown | tik | 1 | 🟨 |
 | Store no write credential in read-only mode | tik | 1 | ✅ |
 | Switching to read and write needs a new credential and an explicit confirmation | tik | 2 | 🟨 |
 | MCP follows the same mode: no proposed changes in read-only mode | tik | 2 | ⬜ |

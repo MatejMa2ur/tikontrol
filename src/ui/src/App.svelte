@@ -1,5 +1,7 @@
 <script lang="ts">
-  import { router, isSample, simulated } from './lib/data'
+  import { router, isSample, simulated, isBackend, load } from './lib/data'
+  import { api, logout, session } from './lib/backend'
+  import { apply } from './lib/apply.svelte'
   import { prefs } from './lib/live.svelte'
   import Icon from './lib/Icon.svelte'
   import Palette from './lib/Palette.svelte'
@@ -36,6 +38,32 @@
   const alias: Record<string, string[]> = { ports: ['devices', 'ports'], radios: ['devices', 'radios'] }
   const r = $derived(alias[route[0]] ?? route)
   const page = $derived(pages.find((p) => p.id === r[0]) ?? pages[0])
+
+  // With the server: fetch a fresh snapshot every 30 s and re-mount the page with it, unless the user is
+  // typing or reviewing a change (live numbers stream separately and never need this).
+  let version = $state(0)
+  let me = $state(session.me)
+  let stale = $state('')
+  $effect(() => {
+    if (!isBackend) return
+    let last = ''
+    const tick = async () => {
+      try {
+        const s = await api('/snapshot')
+        const json = JSON.stringify(s)
+        stale = ''
+        const busy = apply.open || apply.armed || document.activeElement?.matches('input, textarea, select')
+        if (json !== last && last && !busy) { load(s); version++ }
+        if (!busy) last = json
+      } catch (e) { stale = (e as Error).message }
+      me = await api('/me').catch(() => me)
+    }
+    tick()
+    const i = setInterval(tick, 30_000)
+    return () => clearInterval(i)
+  })
+  const modeLabel = $derived(me?.readOnly ? 'Read-only' : 'Read & write')
+  const modeTitle = $derived(me?.policies ? `Router user ${me.policies.user} (group ${me.policies.group}): ${me.policies.policy.join(', ')}` : '')
 </script>
 
 <!-- Layout follows UniFi Network: top app bar, icon-only rail, full-bleed content -->
@@ -46,13 +74,20 @@
     <a class="app" href="#/devices" title="Devices"><Icon name="devices" size={16} /></a>
     <a class="app" href="#/clients" title="Clients"><Icon name="clients" size={16} /></a>
   </nav>
-  <span class="pill hide-sm mock" title="Live numbers are simulated around a real snapshot until the backend exists">{simulated ? 'Simulated hAP be³ Media · ' : isSample ? 'Sample data · ' : ''}Mockup</span>
+  {#if isBackend}
+    <span class="pill hide-sm mock" class:ok={me?.readOnly} class:warn={!me?.readOnly} title={modeTitle}>{modeLabel}</span>
+    {#if stale || me?.error}<span class="pill bad hide-sm" role="status" title={me?.error ?? stale}>Router unreachable · showing last data</span>{/if}
+  {:else}
+    <span class="pill hide-sm mock" title="No tikontrol server: live numbers are simulated around a snapshot">{simulated ? 'Simulated hAP be³ Media · ' : isSample ? 'Sample data · ' : ''}Mockup</span>
+  {/if}
   <div class="right row">
     <Palette {pages} />
     <button class="btn ghost" class:on={prefs.showRos} onclick={() => (prefs.showRos = !prefs.showRos)} title="Show the RouterOS commands behind every card"><Icon name="code" size={15} /></button>
     <button class="btn ghost" onclick={() => (prefs.theme = prefs.theme === 'dark' ? 'light' : 'dark')} aria-label="Toggle theme"><Icon name={prefs.theme === 'dark' ? 'sun' : 'moon'} size={15} /></button>
     <span class="site hide-sm"><span class="dot ok"></span><span class="led"></span>{router.board?.startsWith(router.identity) ? router.board : `${router.identity} ${router.board}`}<Icon name="down" size={11} /></span>
-    <span class="avatar" title="admin">A</span>
+    {#if isBackend}
+      <button class="avatar" title="Signed in as {me?.user} ({me?.role}). Click to sign out." aria-label="Sign out {me?.user}" onclick={logout}>{(me?.user ?? 'a').slice(0, 1).toUpperCase()}</button>
+    {:else}<span class="avatar" title="admin">A</span>{/if}
   </div>
 </header>
 
@@ -65,6 +100,7 @@
     {/each}
   </nav>
   <main class:bleed={page.id === 'dashboard'}>
+    {#key version}
     {#if page.id === 'dashboard'}<Dashboard />
     {:else if page.id === 'topology'}<Topology />
     {:else if page.id === 'devices'}<Devices tab={r[1] || 'list'} />
@@ -73,6 +109,7 @@
     {:else if page.id === 'insights'}<Insights tab={r[1] || 'apps'} />
     {:else if page.id === 'hotspot'}<Hotspot tab={r[1] || 'portal'} />
     {:else if page.id === 'settings'}<Settings section={r[1] || 'wifi'} />{/if}
+    {/key}
   </main>
 </div>
 
@@ -89,6 +126,7 @@
   .btn.on { color: var(--accent); }
   .site { display: inline-flex; align-items: center; gap: 8px; padding: 5px 12px; border-radius: 99px; background: var(--bg); border: 1px solid var(--line); font-size: 12px; font-weight: 550; }
   .led { width: 16px; height: 4px; border-radius: 2px; background: var(--muted); }
+  button.avatar { border: 0; cursor: pointer; }
   .avatar { width: 28px; height: 28px; border-radius: 50%; display: grid; place-items: center; background: linear-gradient(135deg, var(--accent), var(--accent2)); color: #fff; font-weight: 700; font-size: 12px; }
   .shell { display: grid; grid-template-columns: 46px minmax(0, 1fr); min-height: calc(100vh - 46px); }
   .rail { position: sticky; top: 46px; height: calc(100vh - 46px); display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 10px 0; border-right: 1px solid var(--line); background: var(--panel); }
