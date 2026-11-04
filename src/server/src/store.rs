@@ -131,12 +131,17 @@ pub struct RouterCfg {
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, Default, PartialEq)]
+#[serde(default, rename_all = "camelCase")]
 pub struct Prefs {
     pub aliases: BTreeMap<String, String>,
     pub icons: BTreeMap<String, String>,
     pub notes: BTreeMap<String, String>,
     pub groups: Vec<serde_json::Value>,
+    /// hidden clients (MACs)
     pub hidden: Vec<String>,
+    /// dashboard layout: card ids in display order, and the hidden ones
+    pub card_order: Vec<String>,
+    pub hidden_cards: Vec<String>,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, Default)]

@@ -11,7 +11,7 @@ Clean-room: we copy the behaviour, never the assets.
 **Backing:** `ROS` = RouterOS API on the router · `CMR` = MikroTik CMR server · `tik` = our own logic/DB · `✗` = nothing can back it
 
 <!-- progress:start -->
-**Progress:** 6 ✅ · 141 🟨 · 59 🎨 · 13 ⬜ · 8 ➖ (227 items, 3% done)
+**Progress:** 6 ✅ · 142 🟨 · 59 🎨 · 12 ⬜ · 8 ➖ (227 items, 3% done)
 <!-- progress:end -->
 
 ---
@@ -68,7 +68,7 @@ Clean-room: we copy the behaviour, never the assets.
 | Recent critical events | ROS log + tik | 1 | 🟨 |
 | Firmware update available banner | ROS / CMR | 2 | 🟨 |
 | Speed test (run + history) | tik container client | 3 | ⬜ |
-| Customisable widgets / layout | tik | 4 | ⬜ |
+| Customisable widgets / layout | tik | 4 | 🟨 |
 
 ## UniFi Devices / Topology
 | Feature | Backing | Phase | Status |

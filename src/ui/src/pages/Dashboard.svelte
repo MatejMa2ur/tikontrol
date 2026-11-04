@@ -47,6 +47,28 @@
   }
   const problems = insights.filter((i) => i.level !== 'ok')
   const step = Math.min(23, 118 / (ports.length || 1)) // the drawing fits any port count
+  // layout: ids the UI doesn't know are dropped, new cards are appended, so old prefs keep working
+  const CARDS = {
+    traffic: { title: 'Traffic Identification', body: trafficCard },
+    tech: { title: 'WiFi Technology', body: techCard },
+    active: { title: 'Most Active Clients', body: activeCard },
+    aps: { title: 'Most Active Access Points', body: apsCard },
+    activity: { title: 'Internet Activity', body: activityCard },
+    link: { title: 'Radio Link Quality', body: linkCard },
+    conn: { title: 'WiFi Connectivity', body: connCard },
+  }
+  type Card = keyof typeof CARDS
+  const ALL = Object.keys(CARDS) as Card[]
+  const isCard = (id: string): id is Card => Object.hasOwn(CARDS, id)
+  let editing = $state(false)
+  const order = $derived([...new Set([...prefs.cardOrder.filter(isCard), ...ALL])])
+  const visible = $derived(editing ? order : order.filter((id) => !prefs.hiddenCards.includes(id)))
+  const move = (id: Card, d: -1 | 1) => {
+    const o = [...order], i = o.indexOf(id)
+    ;[o[i], o[i + d]] = [o[i + d], o[i]]
+    prefs.cardOrder = o
+  }
+  const toggle = (id: Card) => (prefs.hiddenCards = prefs.hiddenCards.includes(id) ? prefs.hiddenCards.filter((x) => x !== id) : [...prefs.hiddenCards, id])
   const q = signalQuality(wifiClients.reduce((s, c) => s + (c.signal ?? 0), 0) / (wifiClients.length || 1))
 </script>
 
@@ -112,8 +134,37 @@
     <Ros cmd="/system/resource/print; /ip/address/print; /ping 1.1.1.1 count=3" />
   </aside>
 
-  <!-- ===== right: cards ===== -->
+  <!-- ===== right: cards (order and visibility in prefs, "Edit layout") ===== -->
   <div class="cards">
+    <div class="layout-bar row small">
+      {#if editing}
+        <span class="muted">Hide, show and reorder the cards.</span>
+        <button class="btn" onclick={() => { prefs.cardOrder = []; prefs.hiddenCards = [] }}>Reset layout</button>
+        <button class="btn primary" onclick={() => (editing = false)}>Done</button>
+      {:else}
+        <button class="btn" onclick={() => (editing = true)}><Icon name="settings" size={13} /> Edit layout</button>
+      {/if}
+    </div>
+    {#each visible as id, i (id)}
+      {@const off = prefs.hiddenCards.includes(id)}
+      <div class="slot" class:wide={id === 'activity'} class:off>
+        {#if editing}
+          <div class="edit row small" role="group" aria-label="{CARDS[id].title} card">
+            <b>{CARDS[id].title}</b>{#if off}<span class="muted">Hidden</span>{/if}
+            <span class="row">
+              <button class="btn" disabled={i === 0} onclick={() => move(id, -1)} aria-label="Move {CARDS[id].title} up">↑ Up</button>
+              <button class="btn" disabled={i === visible.length - 1} onclick={() => move(id, 1)} aria-label="Move {CARDS[id].title} down">↓ Down</button>
+              <button class="btn" onclick={() => toggle(id)} aria-pressed={!off} aria-label="{off ? 'Show' : 'Hide'} {CARDS[id].title}">{off ? 'Show' : 'Hide'}</button>
+            </span>
+          </div>
+        {/if}
+        {@render CARDS[id].body()}
+      </div>
+    {/each}
+  </div>
+</div>
+
+{#snippet trafficCard()}
     <section class="card">
       <header class="row between"><h3>Traffic Identification</h3><span class="row small"><span class="down">↓ {bytes(trafficDown)}</span><span class="up">↑ {bytes(trafficUp)}</span><span class="muted">›</span></span></header>
       <div class="split">
@@ -132,7 +183,9 @@
       </div>
       <div class="note tiny muted">By client. Per-app identification arrives with MikroTik CMR (Phase 3).</div>
     </section>
+{/snippet}
 
+{#snippet techCard()}
     <section class="card">
       <header class="row between"><h3>WiFi Technology</h3><span class="muted">›</span></header>
       <div class="split">
@@ -153,7 +206,9 @@
         </table>
       </div>
     </section>
+{/snippet}
 
+{#snippet activeCard()}
     <section class="card">
       <header class="row between"><h3>Most Active Clients</h3><a href="#/clients" class="muted">›</a></header>
       <div class="tiles">
@@ -165,7 +220,9 @@
         {/each}
       </div>
     </section>
+{/snippet}
 
+{#snippet apsCard()}
     <section class="card">
       <header class="row between"><h3>Most Active Access Points</h3><a href="#/devices" class="muted">›</a></header>
       <div class="tiles">
@@ -174,8 +231,10 @@
         {/each}
       </div>
     </section>
+{/snippet}
 
-    <section class="card wide">
+{#snippet activityCard()}
+    <section class="card">
       <header class="row between">
         <h3>Internet Activity</h3>
         <div class="row small">
@@ -194,7 +253,9 @@
       {#if since > 0}<p class="muted small">History starts {new Date(hist.t[since] * 1000).toLocaleString([], { weekday: 'short', hour: '2-digit', minute: '2-digit' })}, when tikontrol started collecting.</p>{:else if since < 0}<p class="muted small">No history yet: tikontrol collects a sample every poll.</p>{/if}
       <Ros cmd="/interface/monitor-traffic {internet.wanIf}; /interface/print stats where name={internet.wanIf}" />
     </section>
+{/snippet}
 
+{#snippet linkCard()}
     <section class="card">
       <header class="row between">
         <h3>Radio Link Quality</h3>
@@ -215,7 +276,9 @@
         </div>
       {/if}
     </section>
+{/snippet}
 
+{#snippet connCard()}
     <section class="card">
       <header class="row between"><h3>WiFi Connectivity <span class="good small">Success {Math.min(...connectivity.map((c) => c.pct))}%</span></h3><span class="muted">›</span></header>
       <div class="conn">
@@ -229,8 +292,7 @@
       </div>
       <div class="row between tiny muted">{#each [-90, -80, -70, -60, -50, -40, -30] as d}<span>{d}</span>{/each}</div>
     </section>
-  </div>
-</div>
+{/snippet}
 
 <style>
   .dash { display: grid; grid-template-columns: 250px minmax(0, 1fr); min-height: calc(100vh - 46px); }
@@ -271,6 +333,12 @@
   /* right cards */
   .cards { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; padding: 14px; align-content: start; }
   .wide { grid-column: span 2; }
+  .slot { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+  .slot > :global(.card) { flex: 1; }
+  .slot.off > :global(.card) { opacity: .4; }
+  .layout-bar { grid-column: 1 / -1; justify-content: flex-end; gap: 8px; margin-bottom: -6px; }
+  .edit { justify-content: space-between; gap: 8px; padding: 6px 8px; border: 1px dashed var(--line); border-radius: 6px; }
+  .edit .row { gap: 6px; }
   .card { padding: 14px 16px; }
   h3 { margin: 0; font-size: 13px; font-weight: 650; display: flex; gap: 10px; align-items: baseline; }
   header { margin-bottom: 12px; gap: 12px; flex-wrap: wrap; }

@@ -269,14 +269,20 @@ fn put_prefs(app: &App, req: &Req) -> Resp {
         Ok(p) => p,
         Err(r) => return r,
     };
-    // names are shown in the UI and MCP output: cap their size, the UI escapes them
-    let small = |m: &std::collections::BTreeMap<String, String>| m.len() <= 2000 && m.iter().all(|(k, v)| k.len() <= 64 && v.len() <= 500);
-    if !small(&p.aliases) || !small(&p.icons) || !small(&p.notes) || p.groups.len() > 100 || p.hidden.len() > 2000 || req.body.len() > 200_000 {
-        return Resp::error(413, "prefs too large");
+    if req.body.len() > 200_000 || !prefs_ok(&p) {
+        return Resp::error(413, "prefs too large or invalid");
     }
     let mut st = lock(&app.store);
     st.state.prefs = p;
     saved(st.save())
+}
+
+fn prefs_ok(p: &Prefs) -> bool {
+    // names are shown in the UI and MCP output: cap their size, the UI escapes them
+    let small = |m: &std::collections::BTreeMap<String, String>| m.len() <= 2000 && m.iter().all(|(k, v)| k.len() <= 64 && v.len() <= 500);
+    // card ids are short slugs; the UI ignores ids it doesn't know
+    let ids = |v: &[String]| v.len() <= 32 && v.iter().all(|i| !i.is_empty() && i.len() <= 32 && i.bytes().all(|b| b.is_ascii_lowercase() || b == b'-'));
+    small(&p.aliases) && small(&p.icons) && small(&p.notes) && p.groups.len() <= 100 && p.hidden.len() <= 2000 && ids(&p.card_order) && ids(&p.hidden_cards)
 }
 
 fn router_info(app: &App) -> Resp {
@@ -602,5 +608,23 @@ pub mod tests {
         let r = handle(&app, req("GET", "/clients/abc", ""));
         assert_eq!(r.status, 200);
         assert!(r.headers.iter().any(|(k, v)| *k == "content-type" && v.starts_with("text/html")));
+    }
+}
+
+#[cfg(test)]
+mod prefs_tests {
+    use super::*;
+
+    #[test]
+    fn prefs_validation() {
+        // old state/clients without the layout fields still load
+        let p: Prefs = serde_json::from_str(r#"{"aliases":{},"hidden":[]}"#).unwrap();
+        assert!(prefs_ok(&p) && p.card_order.is_empty());
+        let mut p: Prefs = serde_json::from_str(r#"{"cardOrder":["activity","traffic"],"hiddenCards":["aps"]}"#).unwrap();
+        assert!(prefs_ok(&p) && p.card_order[0] == "activity");
+        p.hidden_cards = vec!["<script>".into()];
+        assert!(!prefs_ok(&p));
+        p.hidden_cards = vec!["a".into(); 33];
+        assert!(!prefs_ok(&p));
     }
 }

@@ -65,12 +65,15 @@ export const prefs = $state({
   notes: load<Record<string, string>>('tik.notes', {}),
   groups: load<{ name: string; limit: string; members: string[] }[]>('tik.groups', [{ name: 'Family', limit: '', members: [] }, { name: 'IoT', limit: '10M/10M', members: [] }]),
   hidden: load<string[]>('tik.hidden', []),
+  // dashboard layout: card ids in order, and the hidden ones (pages/Dashboard.svelte)
+  cardOrder: load<string[]>('tik.cardOrder', []),
+  hiddenCards: load<string[]>('tik.hiddenCards', []),
   speedtests: load<{ at: string; down: number; up: number; ping: number }[]>('tik.speedtests', []),
 })
-// Names, icons, notes, groups and hidden clients live on the server when there is one (shared by every
+// Names, icons, notes, groups, hidden clients and the dashboard layout live on the server when there is one (shared by every
 // browser and by MCP); the theme (mode, palette, design) and "show RouterOS" stay per browser, which is
 // per user as long as people don't share a browser profile.
-const SHARED = ['aliases', 'icons', 'notes', 'groups', 'hidden'] as const
+const SHARED = ['aliases', 'icons', 'notes', 'groups', 'hidden', 'cardOrder', 'hiddenCards'] as const
 let loaded = !isBackend
 if (isBackend) api('/prefs').then((p) => { for (const k of SHARED) if (p?.[k]) (prefs as any)[k] = p[k]; loaded = true }).catch(() => (loaded = true))
 let saveTimer: ReturnType<typeof setTimeout> | undefined
