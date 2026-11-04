@@ -32,12 +32,13 @@ export type Client = {
   online: boolean
   privateMac: boolean
   roams: number // band switches seen in the log
+  bandLog: { time: string; band?: string; joined: boolean; signal: number }[] // joins/leaves from the log, oldest first
   ccq?: number // link quality %, legacy wireless only
   standard?: string // 'WiFi 4' | 'WiFi 5' (heuristic)
 }
 export type Port = { name: string; up: boolean; wan: boolean; clients: string[] }
 export type Event = { time: string; cat: 'Clients' | 'WiFi' | 'System' | 'Security' | 'Admin'; level: 'info' | 'warning' | 'error'; text: string }
-export type Insight = { level: 'ok' | 'warn' | 'bad'; title: string; detail: string; ros: string }
+export type Insight = { level: 'ok' | 'warn' | 'bad'; title: string; detail: string; ros: string; href?: string }
 
 // ---------- helpers ----------
 export function parseUptime(v: unknown): number | undefined {
@@ -110,6 +111,11 @@ const bandOf = (ifname?: string) => {
   const w = wifi.find((x) => x.name === ifname)
   return w ? bandLabel(w.band) as Client['band'] : undefined
 }
+const logRe = /^([0-9A-F:]{17})@(w(?:lan|ifi)\d+): (connected|disconnected)[^]*?signal strength (-\d+)/
+const bandLogOf = (mac: string) => log.flatMap((l) => {
+  const m = String(l.message).match(logRe)
+  return m && m[1] === mac ? [{ time: String(l.time ?? ''), band: bandOf(m[2]), joined: m[3] === 'connected', signal: +m[4] }] : []
+})
 const roamCount = (mac: string) => log.filter((l) => l.message?.startsWith(mac) && /connected/.test(l.message)).length
 
 const macs = new Set<string>([...leases.map((l) => l['mac-address']), ...stations.map((s) => s['mac-address'])])
@@ -148,6 +154,7 @@ const clients: Client[] = [...macs].filter(Boolean).map((mac) => {
     online: !!st || !!host || a?.status === 'reachable' || lease?.status === 'bound',
     privateMac: priv,
     roams: roamCount(mac),
+    bandLog: bandLogOf(mac),
     ccq: lq.find((x) => x['mac-address'] === mac)?.['tx-ccq'],
     // ponytail: the radio's best standard, the client may negotiate less. The registration table's `band` has the real one.
     standard: st ? standardOf(wifi.find((w) => w.name === st.interface)?.band) : undefined,
@@ -239,7 +246,7 @@ const insights: Insight[] = [
     ? [{ level: 'warn' as const, title: `Memory ${Math.round(memPct)}% used`, detail: `Only ${bytes(router.memFree)} free.${adlist ? ` The DNS ad-block list (${adlist['name-count'].toLocaleString()} names) is the largest optional user.` : ''}`, ros: '/ip/dns/print; /ip/dns/adlist/print' }]
     : []),
   ...(flappers.length
-    ? [{ level: 'warn' as const, title: `${flappers.length} device${flappers.length > 1 ? 's' : ''} switching bands`, detail: `${flappers.map((c) => c.name).join(', ')} keep hopping between 2.4 and 5 GHz on the same SSID. Usually weak 5 GHz signal at their location.`, ros: '/interface/wireless/registration-table/print' }]
+    ? [{ level: 'warn' as const, title: `${flappers.length} device${flappers.length > 1 ? 's' : ''} switching bands`, detail: `${flappers.map((c) => c.name).join(', ')} keep hopping between 2.4 and 5 GHz on the same SSID. Usually weak 5 GHz signal at their location. Open the device to see why and how to fix it.`, ros: '/interface/wireless/registration-table/print', href: flappers.length === 1 ? `#/clients/${flappers[0].mac}` : '#/clients' }]
     : []),
   ...(raw.update?.['latest-version'] && raw.update['installed-version'] && raw.update['latest-version'] !== raw.update['installed-version']
     ? [{ level: 'warn' as const, title: `RouterOS ${raw.update['latest-version']} is available`, detail: `You run ${raw.update['installed-version']} on the ${raw.update.channel ?? 'stable'} channel. Read the changelog and take a backup before upgrading.`, ros: '/system/package/update/check-for-updates' }]
@@ -300,3 +307,27 @@ export function load(snapshot: any) {
   ;({ raw, hw, clients, offline, ports, router, internet, ssids, events, insights, radios, wifiTech, connectivity, adblock } = build(normalizeWifi(snapshot)))
 }
 load(preload.snapshot ?? (simulated ? simulateBe3(files['./sample.json']) : files['./snapshot.json'] ?? files['./sample.json']))
+
+// "Why is this client on 2.4 GHz?" Plain-language reasons from what the router reports; null when there's nothing to explain.
+export function whyBand(c: Client) {
+  const r5 = radios.find((r) => r.band === '5 GHz'), r2 = radios.find((r) => r.band === '2.4 GHz')
+  const switching = new Set(c.bandLog.filter((l) => l.joined).map((l) => l.band)).size > 1
+  if (c.wired || !r5 || !r2 || (c.band !== '2.4 GHz' && !switching)) return null
+  const avg = (band: string) => {
+    const s = c.bandLog.filter((l) => l.band === band).map((l) => l.signal)
+    if (c.band === band && c.signal != null) s.push(c.signal)
+    return s.length ? Math.round(s.reduce((a, b) => a + b, 0) / s.length) : undefined
+  }
+  const sig5 = avg('5 GHz'), sig2 = avg('2.4 GHz')
+  const reasons: string[] = []
+  if (sig5 == null) reasons.push('This device hasn\'t joined 5 GHz in the recent log. It may only support 2.4 GHz (many smart-home gadgets do); then nothing is wrong.')
+  else if (sig5 < -70 || (sig2 != null && sig2 - sig5 >= 8)) reasons.push(`Weak 5 GHz signal where it is: about ${sig5} dBm on 5 GHz${sig2 != null ? ` against ${sig2} dBm on 2.4 GHz` : ''}. 5 GHz loses more through walls, so the device moves to the stronger 2.4 GHz.`)
+  if (r5.ssid && r5.ssid === r2.ssid) reasons.push(hw.wifiPackage === 'wireless'
+    ? 'Both bands share one network name, and the legacy wireless package has no band steering: the device alone picks the band, and switches whenever 2.4 GHz looks stronger.'
+    : 'Both bands share one network name, so the device picks the band itself. (The wifi package can steer clients; tikontrol doesn\'t set that up yet.)')
+  if (r5.dfs) reasons.push(`5 GHz is on DFS channel ${r5.channel}${r5.auto ? ', picked automatically' : ''}. If the router hears radar it must leave the channel, which drops every client, then listen for 60 s before sending again. For that minute only 2.4 GHz is left.`)
+  if ((r5.width ?? 0) >= 80) reasons.push(`The 5 GHz channel is ${r5.width} MHz wide. The same power spread over a wider channel means a weaker, noisier edge of coverage than at 40 MHz.`)
+  if (r5.ccq != null && r5.ccq < 50) reasons.push(`5 GHz link quality (CCQ) is ${r5.ccq}%: many frames are sent again, which slows the link.`)
+  const limited = (raw.accessList ?? []).some((a: any) => a.interface === r5.name && a['signal-range'])
+  return { r5, sig5, sig2, switching, reasons, limited, sameSsid: !!r5.ssid && r5.ssid === r2.ssid }
+}

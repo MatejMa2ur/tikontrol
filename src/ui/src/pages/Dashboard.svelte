@@ -165,7 +165,8 @@
     <hr />
     <a class="row between card-link" href="#/settings"><b class="row"><Icon name="shield" size={14} /> Security Checks</b><span>›</span></a>
     {#each problems as p}
-      <div class="row tiny check" title={p.detail}><span class="dot {p.level}"></span>{p.title}</div>
+      {#if p.href}<a class="row tiny check" href={p.href} title={p.detail}><span class="dot {p.level}"></span>{p.title} ›</a>
+      {:else}<div class="row tiny check" title={p.detail}><span class="dot {p.level}"></span>{p.title}</div>{/if}
     {/each}
     <Ros cmd="/system/resource/print; /ip/address/print; /ping 1.1.1.1 count=3" />
   </aside>

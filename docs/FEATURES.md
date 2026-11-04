@@ -11,7 +11,7 @@ Clean-room: we copy the behaviour, never the assets.
 **Backing:** `ROS` = RouterOS API on the router · `CMR` = MikroTik CMR server · `tik` = our own logic/DB · `✗` = nothing can back it
 
 <!-- progress:start -->
-**Progress:** 6 ✅ · 146 🟨 · 59 🎨 · 8 ⬜ · 8 ➖ (227 items, 3% done)
+**Progress:** 6 ✅ · 147 🟨 · 59 🎨 · 8 ⬜ · 8 ➖ (228 items, 3% done)
 <!-- progress:end -->
 
 ---
@@ -103,6 +103,7 @@ Clean-room: we copy the behaviour, never the assets.
 | Block / unblock | ROS address-list + filter | 2 | 🟨 |
 | Pause internet / schedules | ROS kid-control | 2 | 🟨 |
 | Speed limit (client groups) | ROS simple queues | 2 | 🟨 |
+| "Why is this client on 2.4 GHz?": reasons, band history from the log, Safe apply fixes (channel 36, 40 MHz, own 5 GHz SSID, signal-range access list) | tik from log + monitor · ROS wireless/wifi | 3 | 🟨 |
 | Kick / reconnect wireless client | ROS reg-table remove | 2 | 🟨 |
 | Override network/VLAN for client | ROS (MAC-based VLAN / access list) | 4 |🎨 |
 | Offline / historical clients list | tik | 2 | 🟨 |

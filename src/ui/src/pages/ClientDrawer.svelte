@@ -1,6 +1,7 @@
 <script lang="ts">
   import { untrack } from 'svelte'
-  import { subtitle, signalQuality, bps, bytes, dur, events, isBackend, type Client } from '../lib/data'
+  import { subtitle, signalQuality, bps, bytes, dur, events, isBackend, whyBand, type Client } from '../lib/data'
+  import type { Intent } from '../lib/apply.svelte'
   import { api } from '../lib/backend'
   import { live, prefs, displayName, iconOf } from '../lib/live.svelte'
   import { review } from '../lib/apply.svelte'
@@ -39,6 +40,29 @@
   if (isBackend) api<{ hours: [number, number, number][] }>(`/history/client?mac=${encodeURIComponent(untrack(() => c.mac))}`).then((h) => (hours = (h?.hours ?? []).slice(-24))).catch(() => {})
   const hourMax = $derived(Math.max(...hours.map(([, d, u]) => d + u), 1))
   const limitIntent = () => { const [down, up] = s.limit.split('/').map((x) => x.trim()); return { kind: 'limit-client', mac: c.mac, ip: c.ip, down: down ?? '', up: up ?? down ?? '' } }
+  // "Why is this client on 2.4 GHz?" and the Safe apply fixes for it
+  const why = $derived(whyBand(c))
+  let minSig = $state(-72)
+  const fixes = $derived.by(() => {
+    if (!why) return []
+    const r = why.r5, path = `/interface/${r.pkg}`, legacy = r.pkg === 'wireless'
+    const set = (k: string, v: string) => `${path}/set [find name="${r.name}"] ${k}=${v}`
+    // channel 36 at the control position of the current width ("20/40/80mhz-eCee" -> 2nd 20 MHz -> 5200)
+    const freq = String(5180 + 20 * Math.max(0, (r.widthSetting?.split('-')[1] ?? 'C').indexOf('C')))
+    const width = legacy ? '20/40mhz-XX' : '20/40mhz'
+    const ssid = `${(r.ssid ?? '').slice(0, 29)}-5G`
+    const out: { title: string; what: string; risk: string; cmds: string[]; intent: Intent }[] = []
+    if (r.dfs || r.auto) out.push({ title: 'Fix 5 GHz on channel 36', risk: 'Medium', what: 'No radar moves and no 60 s outages. Trade-off (EU): channels 36–48 allow 200 mW EIRP, channels 100–140 allow 1 W, so leaving DFS can shorten 5 GHz range.',
+      cmds: [set(legacy ? 'frequency' : 'channel.frequency', freq)], intent: { kind: 'wifi-radio', package: r.pkg, interface: r.name, frequency: freq } })
+    if ((r.width ?? 0) >= 80) out.push({ title: 'Narrow 5 GHz to 40 MHz', risk: 'Medium', what: 'Stronger, steadier edge of coverage; top speed close to the router drops.',
+      cmds: [set(legacy ? 'channel-width' : 'channel.width', width)], intent: { kind: 'wifi-radio', package: r.pkg, interface: r.name, width } })
+    if (why.sameSsid) out.push({ title: `Give 5 GHz its own name (${ssid})`, risk: 'Medium', what: 'Then you choose the band: join this device to the 5 GHz name and it stays there. Devices on 5 GHz must join the new name once.',
+      cmds: [set(legacy ? 'ssid' : 'configuration.ssid', `"${ssid}"`)], intent: { kind: 'wifi-network', package: r.pkg, interfaces: [r.name], ssid } })
+    if (!why.limited) out.push({ title: `Only accept good signal on 5 GHz (${minSig} dBm or better)`, risk: 'Medium', what: 'A simple band steering: devices too far away for 5 GHz are turned away and stay on 2.4 GHz instead of bouncing.',
+      cmds: [`${path}/access-list/add interface=${r.name} signal-range=${minSig}..120 ${legacy ? 'authentication=yes forwarding=yes' : 'action=accept'} comment=tik:sigrange:${r.name}`, `${path}/access-list/add interface=${r.name} ${legacy ? 'authentication=no forwarding=no' : 'action=reject'} comment=tik:sigrange:${r.name}`],
+      intent: { kind: 'wifi-signal-range', package: r.pkg, interface: r.name, min: minSig } })
+    return out
+  })
   const area = $derived(`0,60 ${pts.map((v, i) => `${(i / 47) * 300},${60 - (v / max) * 56}`).join(' ')} 300,60`)
 </script>
 
@@ -92,6 +116,27 @@
       {#if c.bytesDown || c.bytesUp}<dt>Total traffic</dt><dd>{bytes(c.bytesDown)} down · {bytes(c.bytesUp)} up</dd>{/if}
       {#if prefs.notes[c.mac]}<dt>Notes</dt><dd>{prefs.notes[c.mac]}</dd>{/if}
     </dl>
+    {#if why}
+      <section class="why" id="why-band">
+        <h3>{why.switching ? 'Why does it keep switching bands?' : 'Why is it on 2.4 GHz?'}</h3>
+        <ul>{#each why.reasons as r}<li>{r}</li>{/each}</ul>
+        <h4>Band history</h4>
+        {#each c.bandLog.slice(-10) as l}
+          <div class="row small ev"><span class="muted mono">{l.time.slice(11, 16) || l.time}</span> {l.joined ? 'Joined' : 'Left'} {l.band ?? '?'} <span class="mono muted">{l.signal} dBm</span></div>
+        {:else}<div class="muted small">No band changes in the recent log. Now: {c.band}{c.signal != null ? `, ${c.signal} dBm` : ''}.</div>{/each}
+        {#if fixes.length}
+          <h4>Fixes</h4>
+          {#each fixes as f}
+            <div class="fix">
+              <div class="row between"><b class="small">{f.title}</b><span class="pill warn">{f.risk} risk</span></div>
+              <p class="tiny muted">{f.what} Wi-Fi clients on {why.r5.band} reconnect when it applies; it reverts by itself unless you confirm.</p>
+              {#if f.intent.kind === 'wifi-signal-range'}<label class="tiny">Minimum signal <input type="number" min="-90" max="-50" bind:value={minSig} /> dBm</label>{/if}
+              <button class="btn small" onclick={() => review(f.title, f.cmds, f.intent)}>Review…</button>
+            </div>
+          {/each}
+        {/if}
+      </section>
+    {/if}
   {:else if tab === 'insights'}
     <h3>Traffic, last 24 h</h3>
     {#if isBackend}
@@ -151,6 +196,11 @@
   .chart { width: 100%; height: 70px; }
   .chart polygon { fill: color-mix(in srgb, var(--down) 30%, transparent); stroke: var(--down); stroke-width: 1; vector-effect: non-scaling-stroke; }
   .ev { padding: 4px 0; align-items: baseline; }
+  .why ul { margin: 0; padding-left: 18px; display: grid; gap: 6px; font-size: 12.5px; }
+  h4 { font-size: 12px; margin: 14px 0 6px; color: var(--muted); }
+  .fix { border: 1px solid var(--line); border-radius: 8px; padding: 10px; margin-bottom: 8px; }
+  .fix p { margin: 6px 0; }
+  .fix input { width: 64px; }
   .tiny { font-size: 11px; }
   .icons { display: flex; gap: 4px; flex-wrap: wrap; }
   .ico { width: 30px; height: 30px; border-radius: 7px; border: 1px solid var(--line); background: var(--panel2); display: grid; place-items: center; cursor: pointer; color: var(--muted); }

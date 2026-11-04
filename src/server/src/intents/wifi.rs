@@ -93,6 +93,18 @@ enum W {
         package: Pkg,
         mac: String,
     },
+    /// 5 GHz only accepts clients heard at `min` dBm or better: an accept rule with signal-range, then reject the rest.
+    WifiSignalRange {
+        #[serde(default)]
+        package: Pkg,
+        interface: String,
+        min: i8,
+    },
+    RemoveWifiSignalRange {
+        #[serde(default)]
+        package: Pkg,
+        interface: String,
+    },
     /// Radio off at `off`, on at `on` (HH:MM, router clock), every day.
     WifiSchedule {
         #[serde(default)]
@@ -106,7 +118,7 @@ enum W {
     },
 }
 
-const KINDS: &[&str] = &["wifi-network", "wifi-radio", "wifi-radio-enabled", "wifi-guest", "remove-wifi-guest", "wifi-access-list", "remove-wifi-access-list", "wifi-schedule", "remove-wifi-schedule"];
+const KINDS: &[&str] = &["wifi-network", "wifi-radio", "wifi-radio-enabled", "wifi-guest", "remove-wifi-guest", "wifi-access-list", "remove-wifi-access-list", "wifi-signal-range", "remove-wifi-signal-range", "wifi-schedule", "remove-wifi-schedule"];
 
 pub fn compile(v: &Value, r: &mut dyn Router) -> Option<Result<Plan, String>> {
     let kind = v.get("kind")?.as_str()?;
@@ -358,9 +370,13 @@ fn build(w: W, r: &mut dyn Router) -> Result<Plan, String> {
             if f.is_empty() {
                 return Err("nothing to change".into());
             }
+            let low_unii1 = f.iter().any(|(k, v)| k.ends_with("frequency") && v.as_deref().and_then(|v| v.parse::<u16>().ok()).is_some_and(|m| (5150..=5250).contains(&m)));
             let (ops, undo) = set_fields(r, pkg.path(), &i, f)?;
             let mut p = plan(format!("Radio settings for {i}"), Risk::Medium, ops, undo);
             p.warnings.push("Clients on this radio disconnect for a few seconds. A wrong channel or power can break coverage until it reverts. Stay within your country's limits.".into());
+            if low_unii1 {
+                p.warnings.push(EU_POWER.into());
+            }
             Ok(p)
         }
         W::WifiRadioEnabled { package: pkg, interface, enabled } => {
@@ -450,6 +466,43 @@ fn build(w: W, r: &mut dyn Router) -> Result<Plan, String> {
             }
             Ok(plan(format!("Remove Wi-Fi access rule for {mac}"), Risk::Low, vec![Op::on(pkg.acl(), "remove", "comment", &c, vec![])], readd(pkg.acl(), &keys, &old)))
         }
+        W::WifiSignalRange { package: pkg, interface, min } => {
+            let i = ifname(&interface)?;
+            if !(-90..=-50).contains(&min) {
+                return Err("minimum signal must be -90 to -50 dBm".into());
+            }
+            let c = format!("tik:sigrange:{i}");
+            let keys = range_keys(pkg);
+            let old = r.run(&Cmd::new(&format!("{}/print", pkg.acl())).proplist(&keys).query("comment", &c))?;
+            let verdict = |ok: bool| match pkg {
+                Pkg::Wireless => vec![("authentication", yn(ok)), ("forwarding", yn(ok))],
+                Pkg::Wifi => vec![("action", if ok { "accept" } else { "reject" }.into())],
+            };
+            // appended after the user's own rules, so their MAC allow/deny entries still win
+            let mut accept = vec![("interface", i.clone()), ("signal-range", format!("{min}..120"))];
+            accept.extend(verdict(true));
+            accept.push(("comment", c.clone()));
+            let mut reject = vec![("interface", i.clone())];
+            reject.extend(verdict(false));
+            reject.push(("comment", c.clone()));
+            let ops = vec![Op::on(pkg.acl(), "remove", "comment", &c, vec![]), Op::add(pkg.acl(), accept), Op::add(pkg.acl(), reject)];
+            let mut undo = vec![Op::on(pkg.acl(), "remove", "comment", &c, vec![])];
+            undo.extend(readd(pkg.acl(), &keys, &old));
+            let mut p = plan(format!("{i} only accepts clients at {min} dBm or better"), Risk::Medium, ops, undo);
+            p.warnings.push(format!("Wi-Fi clients on {i} weaker than {min} dBm are disconnected and must use another band; clients reconnect when this applies or reverts."));
+            p.warnings.push("Pick a threshold a few dB away from where a device usually sits, or it keeps bouncing at the edge. Devices that only have this band can't join from weak spots.".into());
+            Ok(p)
+        }
+        W::RemoveWifiSignalRange { package: pkg, interface } => {
+            let i = ifname(&interface)?;
+            let c = format!("tik:sigrange:{i}");
+            let keys = range_keys(pkg);
+            let old = r.run(&Cmd::new(&format!("{}/print", pkg.acl())).proplist(&keys).query("comment", &c))?;
+            if old.is_empty() {
+                return Err("only signal limits created by tikontrol can be removed here".into());
+            }
+            Ok(plan(format!("Remove the signal limit on {i}"), Risk::Low, vec![Op::on(pkg.acl(), "remove", "comment", &c, vec![])], readd(pkg.acl(), &keys, &old)))
+        }
         W::WifiSchedule { package: pkg, interface, on, off } => {
             let (i, on, off) = (ifname(&interface)?, hhmm(&on)?, hhmm(&off)?);
             if on == off {
@@ -475,6 +528,15 @@ fn build(w: W, r: &mut dyn Router) -> Result<Plan, String> {
             }
             Ok(plan(format!("Remove the Wi-Fi schedule for {i}"), Risk::Low, vec![Op::on(SCHED, "remove", "comment", &c, vec![])], readd(SCHED, &SCHED_KEYS, &old)))
         }
+    }
+}
+
+const EU_POWER: &str = "Range trade-off (EU): channels 36-48 allow 200 mW EIRP, channels 100-140 (DFS) allow 1 W, so leaving DFS can shorten 5 GHz range. Check your country's rules.";
+
+fn range_keys(pkg: Pkg) -> Vec<&'static str> {
+    match pkg {
+        Pkg::Wireless => vec!["interface", "signal-range", "authentication", "forwarding", "comment"],
+        Pkg::Wifi => vec!["interface", "signal-range", "action", "comment"],
     }
 }
 
@@ -565,6 +627,18 @@ mod tests {
         assert_eq!(p.cli()[1], r#"/system/scheduler/add name=tik-wifi-off-wlan1 start-time=23:30:00 interval=1d policy=read,write,test on-event="/interface/wireless/disable [find name=\"wlan1\"]" comment=tik:wifisched:wlan1"#);
         assert_eq!(p.undo_cli(), [r#"/system/scheduler/remove [find comment="tik:wifisched:wlan1"]"#]);
         assert!(go(json!({"kind": "remove-wifi-schedule", "interface": "wlan1"}), &mut Fake::default()).is_err());
+    }
+
+    #[test]
+    fn signal_range_adds_accept_then_reject_and_undo_removes_them() {
+        let p = go(json!({"kind": "wifi-signal-range", "interface": "wlan2", "min": -72}), &mut Fake::default()).unwrap();
+        assert_eq!(p.cli()[1], "/interface/wireless/access-list/add interface=wlan2 signal-range=-72..120 authentication=yes forwarding=yes comment=tik:sigrange:wlan2");
+        assert_eq!(p.cli()[2], "/interface/wireless/access-list/add interface=wlan2 authentication=no forwarding=no comment=tik:sigrange:wlan2");
+        assert_eq!(p.undo_cli(), [r#"/interface/wireless/access-list/remove [find comment="tik:sigrange:wlan2"]"#]);
+        assert!(go(json!({"kind": "wifi-signal-range", "interface": "wlan2", "min": -20}), &mut Fake::default()).is_err());
+        let mut f = Fake::default();
+        f.answers.insert("/interface/wireless/print".into(), Ok(vec![row(&[("frequency", "5640")])]));
+        assert!(go(json!({"kind": "wifi-radio", "interface": "wlan2", "frequency": "5180"}), &mut f).unwrap().warnings.iter().any(|w| w.contains("200 mW")));
     }
 
     #[test]
