@@ -1,0 +1,151 @@
+openapi: 3.1.0
+info:
+  title: tikontrol API
+  version: 1.0.0
+  description: |
+    The browser API of the tikontrol server (src/server). Version 1 lives under /api/v1.
+    Authentication is a session cookie (`tik_s`, HttpOnly, SameSite=Strict, Secure over HTTPS).
+    Every request that is not GET must be same-origin (Origin / Sec-Fetch-Site) and, once signed in,
+    carry the session's CSRF token in `X-CSRF-Token`. Everything is denied unless listed as public.
+    Bodies are JSON (`Content-Type: application/json`, at most 256 KiB); unknown fields are rejected.
+    Errors are `{ "error": "message" }`.
+servers:
+  - url: https://tikontrol.lan:8443
+components:
+  securitySchemes:
+    session: { type: apiKey, in: cookie, name: tik_s }
+    csrf: { type: apiKey, in: header, name: X-CSRF-Token }
+  schemas:
+    Error: { type: object, properties: { error: { type: string } }, required: [error] }
+    Ok: { type: object, properties: { ok: { type: boolean } } }
+    Me:
+      type: object
+      properties:
+        user: { type: string }
+        role: { enum: [admin, viewer] }
+        csrf: { type: string }
+        router: { type: [object, 'null'], properties: { host: { type: string }, mode: { enum: [read-only, read-write] } } }
+        readOnly: { type: boolean }
+        policies: { type: [object, 'null'], properties: { user: { type: string }, group: { type: string }, policy: { type: array, items: { type: string } } } }
+        error: { type: [string, 'null'] }
+    Cred: { type: object, required: [user, password], properties: { user: { type: string, maxLength: 64 }, password: { type: string, maxLength: 256 } } }
+    Intent:
+      type: object
+      required: [kind]
+      description: A Safe apply intent. `kind` selects the change; see src/server/src/apply.rs and src/server/src/intents/.
+      properties: { kind: { type: string, examples: [block-client, dns-record, port-forward] } }
+      additionalProperties: true
+    Preview:
+      type: object
+      properties:
+        id: { type: string }
+        title: { type: string }
+        risk: { enum: [low, medium, high] }
+        warnings: { type: array, items: { type: string } }
+        commands: { type: array, items: { type: string } }
+        undo: { type: array, items: { type: string } }
+        revertible: { type: boolean }
+        window: { type: integer, description: seconds before the router reverts by itself }
+        canApply: { type: boolean }
+        reason: { type: [string, 'null'] }
+security: [{ session: [] }]
+paths:
+  /api/v1/health:
+    get:
+      security: []
+      summary: Liveness and whether first-run setup is needed (public)
+      responses: { '200': { description: ok, content: { application/json: { schema: { type: object, properties: { ok: { type: boolean }, version: { type: string }, needsSetup: { type: boolean } } } } } } }
+  /api/v1/setup/admin:
+    post:
+      security: []
+      summary: Create the first admin with the one-time setup token from the log (public, once)
+      requestBody: { content: { application/json: { schema: { type: object, required: [token, name, password], properties: { token: { type: string }, name: { type: string, maxLength: 32 }, password: { type: string, minLength: 12, maxLength: 256 } } } } } }
+      responses: { '200': { description: signed in }, '403': { description: wrong token }, '409': { description: already set up }, '429': { description: rate limited } }
+  /api/v1/login:
+    post:
+      security: []
+      summary: Sign in (public, rate limited per IP and globally)
+      requestBody: { content: { application/json: { schema: { type: object, required: [name, password], properties: { name: { type: string }, password: { type: string } } } } } }
+      responses: { '200': { description: sets the session cookie; body has user, role, csrf }, '401': { description: wrong credentials }, '429': { description: rate limited } }
+  /api/v1/logout:
+    post: { security: [{ session: [], csrf: [] }], summary: End the session, responses: { '200': { description: ok } } }
+  /api/v1/me:
+    get: { summary: Current user, mode and detected router policies, responses: { '200': { description: ok, content: { application/json: { schema: { $ref: '#/components/schemas/Me' } } } } } }
+  /api/v1/snapshot:
+    get:
+      summary: Latest router snapshot (same shape as src/scripts/snapshot.py; secrets never requested)
+      responses: { '200': { description: snapshot; header x-snapshot-age in seconds }, '503': { description: not read yet, or read-only mode refused } }
+  /api/v1/live:
+    get: { summary: 'Server-Sent Events: { t, rx, tx, cpu, wanUp, rate: { mac: { rx, tx } } } every 2 s', responses: { '200': { description: text/event-stream } } }
+  /api/v1/history:
+    get:
+      summary: Internet Activity series
+      parameters: [{ name: range, in: query, schema: { enum: ['1H', '1D', '1W'] } }]
+      responses: { '200': { description: '{ t[], clients[], rx[], tx[] }' } }
+  /api/v1/health/internet:
+    get: { summary: 'Last 12 h in 48 slots: ok | warn | bad | none', responses: { '200': { description: ok } } }
+  /api/v1/history/client:
+    get:
+      summary: Hourly bytes, first/last seen and events of one client
+      parameters: [{ name: mac, in: query, required: true, schema: { type: string } }]
+      responses: { '200': { description: ok } }
+  /api/v1/clients/offline:
+    get: { summary: Clients seen before but not in the last 2 minutes, responses: { '200': { description: ok } } }
+  /api/v1/events:
+    get:
+      summary: Derived events (newest first, max 500); format=csv exports with formula cells neutralised
+      parameters:
+        - { name: q, in: query, schema: { type: string } }
+        - { name: cat, in: query, schema: { type: string } }
+        - { name: format, in: query, schema: { enum: [json, csv] } }
+      responses: { '200': { description: ok } }
+  /api/v1/prefs:
+    get: { summary: Shared names, icons, notes, groups and hidden clients, responses: { '200': { description: ok } } }
+    put: { security: [{ session: [], csrf: [] }], summary: Replace prefs (size-capped), responses: { '200': { description: ok }, '413': { description: too large } } }
+  /api/v1/router:
+    get: { summary: Router connection (no passwords) and detected policies, responses: { '200': { description: ok } } }
+    post:
+      security: [{ session: [], csrf: [] }]
+      summary: Connect a router (admin). Logs in, checks real group policies, refuses an over-privileged reader
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [host, pin, reader]
+              properties:
+                host: { type: string }
+                port: { type: integer, default: 8729, not: { const: 8728 } }
+                pin: { type: string, pattern: '^[0-9a-f]{64}$' }
+                mode: { enum: [read-only, read-write], default: read-only }
+                reader: { $ref: '#/components/schemas/Cred' }
+                writer: { oneOf: [{ $ref: '#/components/schemas/Cred' }, { type: 'null' }] }
+                confirm_write: { type: boolean }
+      responses: { '200': { description: saved }, '400': { description: invalid or over-privileged }, '409': { description: read-write needs confirm_write }, '502': { description: router refused } }
+    delete: { security: [{ session: [], csrf: [] }], summary: Forget the router (admin), responses: { '200': { description: ok } } }
+  /api/v1/router/probe:
+    post: { security: [{ session: [], csrf: [] }], summary: Read the API-SSL certificate fingerprint (admin; sends no credentials), responses: { '200': { description: '{ pin }' } } }
+  /api/v1/router/setup-commands:
+    get:
+      summary: RouterOS commands that create least-privilege tikontrol users (no secrets)
+      parameters: [{ name: ip, in: query, schema: { type: string } }, { name: write, in: query, schema: { enum: ['0', '1'] } }]
+      responses: { '200': { description: '{ commands[] }' } }
+  /api/v1/apply:
+    get: { summary: Recent applied changes and their state, responses: { '200': { description: ok } } }
+  /api/v1/apply/preview:
+    post:
+      security: [{ session: [], csrf: [] }]
+      summary: Compile an intent to RouterOS commands and their inverse (works in read-only mode)
+      requestBody: { content: { application/json: { schema: { type: object, required: [intent], properties: { intent: { $ref: '#/components/schemas/Intent' } } } } } }
+      responses: { '200': { description: ok, content: { application/json: { schema: { $ref: '#/components/schemas/Preview' } } } }, '400': { description: invalid intent } }
+  /api/v1/apply/start:
+    post: { security: [{ session: [], csrf: [] }], summary: 'Arm the router-side revert, then apply (admin, read-write)', responses: { '200': { description: armed }, '403': { description: read-only or not admin }, '502': { description: failed and undone } } }
+  /api/v1/apply/keep:
+    post: { security: [{ session: [], csrf: [] }], summary: Confirm within the window; removes the revert job, responses: { '200': { description: ok }, '409': { description: too late or not armed } } }
+  /api/v1/apply/revert:
+    post: { security: [{ session: [], csrf: [] }], summary: Undo now and remove the revert job, responses: { '200': { description: ok } } }
+  /mcp:
+    post:
+      security: []
+      summary: MCP endpoint (JSON-RPC 2.0, Streamable HTTP). Off by default; bearer token; local network only. See docs/DEPLOY.md
+      responses: { '200': { description: JSON-RPC response }, '401': { description: bad token }, '404': { description: disabled } }
