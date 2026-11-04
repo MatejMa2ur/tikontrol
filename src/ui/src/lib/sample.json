@@ -1,0 +1,1791 @@
+{
+ "identity": "Router",
+ "resource": {
+  "architecture-name": "arm",
+  "board-name": "hAP ac^2",
+  "build-time": "2026-01-01 12:00:00",
+  "cpu": "ARM",
+  "cpu-count": 4,
+  "cpu-frequency": 672,
+  "cpu-load": 2,
+  "free-hdd-space": 232792,
+  "free-memory": 19367749,
+  "minimum-version": "7.0",
+  "platform": "MikroTik",
+  "total-hdd-space": 16777216,
+  "total-memory": 134217728,
+  "uptime": "1970-01-10 17:18:18",
+  "version": "7.20",
+  "write-sect-since-reboot": 45758,
+  "write-sect-total": 1490301
+ },
+ "routerboard": {
+  "current-firmware": "7.19",
+  "model": "RBD52G-5HacD2HnD",
+  "upgrade-firmware": "7.20"
+ },
+ "update": {
+  "channel": "stable",
+  "installed-version": "7.20",
+  "latest-version": "7.20"
+ },
+ "wan": [
+  {
+   ".id": "*1",
+   "address": "10.10.0.102/24",
+   "gateway": "10.10.0.1",
+   "interface": "ether1",
+   "status": "bound"
+  }
+ ],
+ "cloud": {
+  "back-to-home-vpn": "enabled",
+  "dns-name": null,
+  "public-address": null
+ },
+ "wanTraffic": {
+  ".id": "*2",
+  "fp-rx-bits-per-second": 59590,
+  "fp-rx-packets-per-second": 44,
+  "fp-tx-bits-per-second": 3351,
+  "fp-tx-packets-per-second": 40,
+  "name": "ether1",
+  "rx-bits-per-second": 40167,
+  "rx-drops-per-second": 0,
+  "rx-errors-per-second": 0,
+  "rx-packets-per-second": 44,
+  "tx-bits-per-second": 64788,
+  "tx-drops-per-second": 0,
+  "tx-errors-per-second": 0,
+  "tx-packets-per-second": 64,
+  "tx-queue-drops-per-second": 0
+ },
+ "interfaces": [
+  {
+   ".id": "*3",
+   "disabled": false,
+   "mac-address": "18:FD:74:00:00:0B",
+   "name": "ether1",
+   "running": true,
+   "type": "ether"
+  },
+  {
+   ".id": "*4",
+   "disabled": false,
+   "mac-address": "18:FD:74:00:00:0B",
+   "name": "ether2",
+   "running": true,
+   "type": "ether"
+  },
+  {
+   ".id": "*5",
+   "disabled": false,
+   "mac-address": "18:FD:74:00:00:0B",
+   "name": "ether3",
+   "running": true,
+   "type": "ether"
+  },
+  {
+   ".id": "*6",
+   "disabled": false,
+   "mac-address": "18:FD:74:00:00:0B",
+   "name": "ether4",
+   "running": false,
+   "type": "ether"
+  },
+  {
+   ".id": "*7",
+   "disabled": false,
+   "mac-address": "18:FD:74:00:00:0B",
+   "name": "ether5",
+   "running": false,
+   "type": "ether"
+  },
+  {
+   ".id": "*8",
+   "disabled": false,
+   "mac-address": "18:FD:74:00:00:0B",
+   "name": "wlan1",
+   "running": true,
+   "type": "wlan"
+  },
+  {
+   ".id": "*9",
+   "disabled": false,
+   "mac-address": "18:FD:74:00:00:0B",
+   "name": "wlan2",
+   "running": true,
+   "type": "wlan"
+  },
+  {
+   ".id": "*A",
+   "comment": "back-to-home-vpn",
+   "disabled": false,
+   "name": "back-to-home-vpn",
+   "running": true,
+   "type": "wg"
+  },
+  {
+   ".id": "*B",
+   "comment": "defconf",
+   "disabled": false,
+   "mac-address": "18:FD:74:00:00:0B",
+   "name": "bridge",
+   "running": true,
+   "type": "bridge"
+  },
+  {
+   ".id": "*C",
+   "disabled": false,
+   "mac-address": "00:00:00:00:00:00",
+   "name": "lo",
+   "running": true,
+   "type": "loopback"
+  }
+ ],
+ "ethernet": [
+  {
+   ".id": "*D",
+   "disabled": false,
+   "name": "ether1",
+   "running": true
+  },
+  {
+   ".id": "*E",
+   "disabled": false,
+   "name": "ether2",
+   "running": true
+  },
+  {
+   ".id": "*F",
+   "disabled": false,
+   "name": "ether3",
+   "running": true
+  },
+  {
+   ".id": "*10",
+   "disabled": false,
+   "name": "ether4",
+   "running": false
+  },
+  {
+   ".id": "*11",
+   "disabled": false,
+   "name": "ether5",
+   "running": false
+  }
+ ],
+ "wifi": [
+  {
+   ".id": "*12",
+   "band": "2ghz-b/g/n",
+   "channel-width": "20/40mhz-XX",
+   "disabled": false,
+   "frequency": "auto",
+   "mode": "ap-bridge",
+   "name": "wlan1",
+   "running": true,
+   "ssid": "HomeNet"
+  },
+  {
+   ".id": "*13",
+   "band": "5ghz-a/n/ac",
+   "channel-width": "20/40/80mhz-XXXX",
+   "disabled": false,
+   "frequency": "auto",
+   "mode": "ap-bridge",
+   "name": "wlan2",
+   "running": true,
+   "ssid": "HomeNet"
+  }
+ ],
+ "stations": [
+  {
+   ".id": "*14",
+   "bytes": "36889167,161950265",
+   "interface": "wlan2",
+   "last-ip": "10.12.0.105",
+   "mac-address": "38:42:0B:00:00:0C",
+   "rx-rate": "866Mbps-80MHz/2S",
+   "signal-strength": "-33dBm@6Mbps",
+   "tx-rate": "433Mbps-80MHz/1S",
+   "uptime": "1970-01-08 18:59:30"
+  },
+  {
+   ".id": "*15",
+   "bytes": "7783747,4632012",
+   "interface": "wlan1",
+   "last-ip": "10.12.0.111",
+   "mac-address": "02:AA:BB:00:00:06",
+   "rx-rate": "300Mbps-40MHz/2S",
+   "signal-strength": "-56dBm@24Mbps",
+   "tx-rate": "300Mbps-40MHz/2S",
+   "uptime": "1970-01-02 22:33:56"
+  },
+  {
+   ".id": "*16",
+   "bytes": "3552301470,160356195",
+   "interface": "wlan1",
+   "last-ip": "10.12.0.110",
+   "mac-address": "02:AA:BB:00:00:07",
+   "rx-rate": "866Mbps-80MHz/2S",
+   "signal-strength": "-68dBm@5.5Mbps",
+   "tx-rate": "300Mbps-40MHz/2S",
+   "uptime": "1970-01-09 07:54:56"
+  },
+  {
+   ".id": "*17",
+   "bytes": "918383,2881179",
+   "interface": "wlan2",
+   "last-ip": "10.12.0.116",
+   "mac-address": "02:AA:BB:00:00:03",
+   "rx-rate": "866Mbps-80MHz/2S",
+   "signal-strength": "-30dBm@24Mbps",
+   "tx-rate": "433Mbps-80MHz/1S",
+   "uptime": "1970-01-10 12:42:19"
+  },
+  {
+   ".id": "*18",
+   "bytes": "3505125,3573522",
+   "interface": "wlan1",
+   "last-ip": "10.12.0.118",
+   "mac-address": "02:AA:BB:00:00:0A",
+   "rx-rate": "866Mbps-80MHz/2S",
+   "signal-strength": "-53dBm@6Mbps",
+   "tx-rate": "866Mbps-80MHz/2S",
+   "uptime": "1970-01-08 06:18:53"
+  },
+  {
+   ".id": "*19",
+   "bytes": "6956888,357228",
+   "interface": "wlan2",
+   "last-ip": "10.12.0.107",
+   "mac-address": "E0:D4:E8:00:00:12",
+   "rx-rate": "866Mbps-80MHz/2S",
+   "signal-strength": "-62dBm@HT40-4",
+   "tx-rate": "866Mbps-80MHz/2S",
+   "uptime": "1970-01-07 06:16:44"
+  }
+ ],
+ "leases": [
+  {
+   ".id": "*1A",
+   "address": "10.12.0.105",
+   "dynamic": true,
+   "last-seen": "16m29s",
+   "mac-address": "38:42:0B:00:00:0C",
+   "status": "bound",
+   "host-name": "Speaker"
+  },
+  {
+   ".id": "*1B",
+   "address": "10.12.0.104",
+   "dynamic": true,
+   "last-seen": "17m49s",
+   "mac-address": "68:EC:8A:00:00:0F",
+   "status": "bound",
+   "host-name": "smart-hub"
+  },
+  {
+   ".id": "*1C",
+   "address": "10.12.0.117",
+   "dynamic": false,
+   "last-seen": "16m51s",
+   "mac-address": "02:AA:BB:00:00:08",
+   "status": "bound",
+   "host-name": "dev-vm"
+  },
+  {
+   ".id": "*1D",
+   "address": "10.12.0.115",
+   "dynamic": true,
+   "last-seen": "14m35s",
+   "mac-address": "AC:87:A3:00:00:11",
+   "status": "bound",
+   "host-name": "home-server"
+  },
+  {
+   ".id": "*1E",
+   "address": "10.12.0.116",
+   "dynamic": true,
+   "last-seen": "2m53s",
+   "mac-address": "02:AA:BB:00:00:03",
+   "status": "bound"
+  },
+  {
+   ".id": "*1F",
+   "address": "10.12.0.110",
+   "dynamic": true,
+   "last-seen": "10m20s",
+   "mac-address": "02:AA:BB:00:00:07",
+   "status": "bound"
+  },
+  {
+   ".id": "*20",
+   "address": "10.12.0.111",
+   "dynamic": true,
+   "last-seen": "15m58s",
+   "mac-address": "02:AA:BB:00:00:06",
+   "status": "bound"
+  },
+  {
+   ".id": "*21",
+   "address": "10.12.0.107",
+   "dynamic": true,
+   "last-seen": "4m28s",
+   "mac-address": "E0:D4:E8:00:00:12",
+   "status": "bound",
+   "host-name": "desktop-pc"
+  },
+  {
+   ".id": "*22",
+   "address": "10.12.0.118",
+   "dynamic": true,
+   "last-seen": "17m16s",
+   "mac-address": "02:AA:BB:00:00:0A",
+   "status": "bound"
+  }
+ ],
+ "arp": [
+  {
+   ".id": "*23",
+   "address": "10.12.0.115",
+   "interface": "bridge",
+   "mac-address": "AC:87:A3:00:00:11",
+   "status": "reachable"
+  },
+  {
+   ".id": "*24",
+   "address": "10.12.0.103",
+   "interface": "bridge",
+   "mac-address": "02:AA:BB:00:00:05",
+   "status": "stale"
+  },
+  {
+   ".id": "*25",
+   "address": "10.12.0.105",
+   "interface": "bridge",
+   "mac-address": "38:42:0B:00:00:0C",
+   "status": "stale"
+  },
+  {
+   ".id": "*26",
+   "address": "10.12.0.104",
+   "interface": "bridge",
+   "mac-address": "68:EC:8A:00:00:0F",
+   "status": "reachable"
+  },
+  {
+   ".id": "*27",
+   "address": "10.12.0.117",
+   "interface": "bridge",
+   "mac-address": "02:AA:BB:00:00:08",
+   "status": "stale"
+  },
+  {
+   ".id": "*28",
+   "address": "10.12.0.106",
+   "interface": "bridge",
+   "mac-address": "02:AA:BB:00:00:09",
+   "status": "failed"
+  },
+  {
+   ".id": "*29",
+   "address": "10.12.0.102",
+   "interface": "bridge",
+   "mac-address": "02:AA:BB:00:00:04",
+   "status": "stale"
+  },
+  {
+   ".id": "*2A",
+   "address": "10.12.0.107",
+   "interface": "bridge",
+   "mac-address": "E0:D4:E8:00:00:12",
+   "status": "reachable"
+  },
+  {
+   ".id": "*2B",
+   "address": "10.12.0.108",
+   "interface": "bridge",
+   "mac-address": "A4:7E:FA:00:00:10",
+   "status": "failed"
+  },
+  {
+   ".id": "*2C",
+   "address": "10.12.0.109",
+   "interface": "bridge",
+   "mac-address": "02:AA:BB:00:00:0A",
+   "status": "stale"
+  },
+  {
+   ".id": "*2D",
+   "address": "10.12.0.111",
+   "interface": "bridge",
+   "mac-address": "02:AA:BB:00:00:06",
+   "status": "reachable"
+  },
+  {
+   ".id": "*2E",
+   "address": "10.12.0.110",
+   "interface": "bridge",
+   "mac-address": "02:AA:BB:00:00:07",
+   "status": "reachable"
+  },
+  {
+   ".id": "*2F",
+   "address": "10.12.0.112",
+   "interface": "bridge",
+   "mac-address": "4C:02:20:00:00:0D",
+   "status": "failed"
+  },
+  {
+   ".id": "*30",
+   "address": "10.10.0.1",
+   "interface": "ether1",
+   "mac-address": "02:AA:BB:00:00:02",
+   "status": "reachable"
+  },
+  {
+   ".id": "*31",
+   "address": "10.12.0.113",
+   "interface": "bridge",
+   "mac-address": "4C:23:38:00:00:0E",
+   "status": "stale"
+  },
+  {
+   ".id": "*32",
+   "address": "10.12.0.114",
+   "interface": "bridge",
+   "mac-address": "A4:7E:FA:00:00:10",
+   "status": "failed"
+  },
+  {
+   ".id": "*33",
+   "address": "10.12.0.116",
+   "interface": "bridge",
+   "mac-address": "02:AA:BB:00:00:03",
+   "status": "stale"
+  },
+  {
+   ".id": "*34",
+   "address": "10.12.0.118",
+   "interface": "bridge",
+   "mac-address": "02:AA:BB:00:00:0A",
+   "status": "stale"
+  }
+ ],
+ "bridgeHosts": [
+  {
+   ".id": "*35",
+   "interface": "wlan2",
+   "local": false,
+   "mac-address": "02:AA:BB:00:00:03",
+   "on-interface": "wlan2"
+  },
+  {
+   ".id": "*36",
+   "interface": "bridge",
+   "local": true,
+   "mac-address": "18:FD:74:00:00:0B",
+   "on-interface": "bridge"
+  },
+  {
+   ".id": "*37",
+   "interface": "ether3",
+   "local": true,
+   "mac-address": "18:FD:74:00:00:0B",
+   "on-interface": "ether3"
+  },
+  {
+   ".id": "*38",
+   "interface": "wlan1",
+   "local": true,
+   "mac-address": "18:FD:74:00:00:0B",
+   "on-interface": "wlan1"
+  },
+  {
+   ".id": "*39",
+   "interface": "wlan2",
+   "local": true,
+   "mac-address": "18:FD:74:00:00:0B",
+   "on-interface": "wlan2"
+  },
+  {
+   ".id": "*3A",
+   "interface": "wlan2",
+   "local": false,
+   "mac-address": "38:42:0B:00:00:0C",
+   "on-interface": "wlan2"
+  },
+  {
+   ".id": "*3B",
+   "interface": "wlan1",
+   "local": false,
+   "mac-address": "02:AA:BB:00:00:06",
+   "on-interface": "wlan1"
+  },
+  {
+   ".id": "*3C",
+   "interface": "wlan1",
+   "local": false,
+   "mac-address": "02:AA:BB:00:00:07",
+   "on-interface": "wlan1"
+  },
+  {
+   ".id": "*3D",
+   "interface": "ether3",
+   "local": false,
+   "mac-address": "02:AA:BB:00:00:08",
+   "on-interface": "ether3"
+  },
+  {
+   ".id": "*3E",
+   "interface": "ether2",
+   "local": false,
+   "mac-address": "68:EC:8A:00:00:0F",
+   "on-interface": "ether2"
+  },
+  {
+   ".id": "*3F",
+   "interface": "ether3",
+   "local": false,
+   "mac-address": "AC:87:A3:00:00:11",
+   "on-interface": "ether3"
+  },
+  {
+   ".id": "*40",
+   "interface": "wlan1",
+   "local": false,
+   "mac-address": "02:AA:BB:00:00:0A",
+   "on-interface": "wlan1"
+  },
+  {
+   ".id": "*41",
+   "interface": "wlan2",
+   "local": false,
+   "mac-address": "E0:D4:E8:00:00:12",
+   "on-interface": "wlan2"
+  }
+ ],
+ "dns": {
+  "cache-size": 18250,
+  "cache-used": 28775
+ },
+ "adlist": [
+  {
+   ".id": "*42",
+   "disabled": false,
+   "match-count": 8936,
+   "name-count": 318891,
+   "url": "https://example.com/blocklist/hosts"
+  }
+ ],
+ "filter": [
+  {
+   ".id": "*43",
+   "action": "drop",
+   "chain": "forward",
+   "comment": "back-to-home-vpn",
+   "disabled": false
+  },
+  {
+   ".id": "*44",
+   "action": "accept",
+   "chain": "input",
+   "comment": "back-to-home-vpn",
+   "disabled": false
+  },
+  {
+   ".id": "*45",
+   "action": "passthrough",
+   "chain": "forward",
+   "comment": "special dummy rule to show fasttrack counters"
+  },
+  {
+   ".id": "*46",
+   "action": "accept",
+   "chain": "input",
+   "comment": "defconf: accept established,related,untracked",
+   "connection-state": "established,related,untracked"
+  },
+  {
+   ".id": "*47",
+   "action": "drop",
+   "chain": "input",
+   "comment": "defconf: drop invalid",
+   "connection-state": "invalid"
+  },
+  {
+   ".id": "*48",
+   "action": "accept",
+   "chain": "input",
+   "comment": "defconf: accept ICMP"
+  },
+  {
+   ".id": "*49",
+   "action": "accept",
+   "chain": "input",
+   "comment": "defconf: accept to local loopback (for CAPsMAN)"
+  },
+  {
+   ".id": "*4A",
+   "action": "drop",
+   "chain": "input",
+   "comment": "defconf: drop all not coming from LAN",
+   "in-interface-list": "!LAN"
+  },
+  {
+   ".id": "*4B",
+   "action": "accept",
+   "chain": "forward",
+   "comment": "defconf: accept in ipsec policy"
+  },
+  {
+   ".id": "*4C",
+   "action": "accept",
+   "chain": "forward",
+   "comment": "defconf: accept out ipsec policy"
+  },
+  {
+   ".id": "*4D",
+   "action": "fasttrack-connection",
+   "chain": "forward",
+   "comment": "defconf: fasttrack",
+   "connection-state": "established,related"
+  },
+  {
+   ".id": "*4E",
+   "action": "accept",
+   "chain": "forward",
+   "comment": "defconf: accept established,related, untracked",
+   "connection-state": "established,related,untracked"
+  },
+  {
+   ".id": "*4F",
+   "action": "drop",
+   "chain": "forward",
+   "comment": "defconf: drop invalid",
+   "connection-state": "invalid"
+  },
+  {
+   ".id": "*50",
+   "action": "drop",
+   "chain": "forward",
+   "comment": "defconf: drop all from WAN not DSTNATed",
+   "connection-state": "new",
+   "in-interface-list": "WAN"
+  },
+  {
+   ".id": "*51",
+   "action": "log",
+   "chain": "forward"
+  },
+  {
+   ".id": "*52",
+   "action": "log",
+   "chain": "forward"
+  }
+ ],
+ "nat": [
+  {
+   ".id": "*53",
+   "action": "masquerade",
+   "chain": "srcnat",
+   "comment": "back-to-home-vpn",
+   "disabled": false
+  },
+  {
+   ".id": "*54",
+   "action": "masquerade",
+   "chain": "srcnat",
+   "comment": "defconf: masquerade"
+  }
+ ],
+ "addresses": [
+  {
+   ".id": "*55",
+   "address": "10.12.0.1/24",
+   "comment": "defconf",
+   "interface": "bridge"
+  },
+  {
+   ".id": "*56",
+   "address": "10.11.0.1/24",
+   "comment": "back-to-home-vpn",
+   "interface": "back-to-home-vpn"
+  },
+  {
+   ".id": "*57",
+   "address": "10.10.0.102/24",
+   "interface": "ether1"
+  }
+ ],
+ "wanStats": [
+  {
+   ".id": "*58",
+   "name": "ether1",
+   "rx-byte": 76378139311,
+   "tx-byte": 6994936283
+  }
+ ],
+ "linkQuality": [
+  {
+   ".id": "*59",
+   "mac-address": "38:42:0B:00:00:0C",
+   "p-throughput": 52856,
+   "tx-ccq": 94
+  },
+  {
+   ".id": "*5A",
+   "mac-address": "02:AA:BB:00:00:06",
+   "p-throughput": 13688,
+   "tx-ccq": 100
+  },
+  {
+   ".id": "*5B",
+   "mac-address": "02:AA:BB:00:00:07",
+   "p-throughput": 15167,
+   "tx-ccq": 64
+  },
+  {
+   ".id": "*5C",
+   "mac-address": "02:AA:BB:00:00:03",
+   "p-throughput": 80798,
+   "tx-ccq": 20
+  },
+  {
+   ".id": "*5D",
+   "mac-address": "02:AA:BB:00:00:0A",
+   "p-throughput": 66192,
+   "tx-ccq": 100
+  },
+  {
+   ".id": "*5E",
+   "mac-address": "E0:D4:E8:00:00:12",
+   "p-throughput": 26353,
+   "tx-ccq": 100
+  }
+ ],
+ "radios": [
+  {
+   "name": null,
+   "channel": "2437/20-Ce/gn(17dBm)",
+   "noise-floor": -98,
+   "overall-tx-ccq": 23,
+   "registered-clients": 3,
+   "status": "running-ap"
+  },
+  {
+   "name": null,
+   "channel": "5180/20-Ceee/ac(23dBm)",
+   "noise-floor": -95,
+   "overall-tx-ccq": 100,
+   "registered-clients": 3,
+   "status": "running-ap"
+  }
+ ],
+ "wireguard": [
+  {
+   ".id": "*5F",
+   "comment": "back-to-home-vpn",
+   "disabled": false,
+   "listen-port": 51820,
+   "mtu": 1420,
+   "name": "back-to-home-vpn",
+   "running": true
+  }
+ ],
+ "wgPeers": [
+  {
+   ".id": "*60",
+   "allowed-address": [
+    "10.11.0.104/32",
+    "fc00:0:0:99::4"
+   ],
+   "comment": "back-to-home-vpn device 1",
+   "disabled": false,
+   "endpoint-address": "",
+   "endpoint-port": 0,
+   "interface": "back-to-home-vpn",
+   "name": "peer1",
+   "rx": 0,
+   "tx": 0
+  },
+  {
+   ".id": "*61",
+   "allowed-address": [
+    "10.11.0.103/32",
+    "fc00:0:0:99::3"
+   ],
+   "comment": "back-to-home-vpn device 2",
+   "disabled": false,
+   "endpoint-address": "",
+   "endpoint-port": 0,
+   "interface": "back-to-home-vpn",
+   "name": "peer2",
+   "rx": 0,
+   "tx": 0
+  },
+  {
+   ".id": "*62",
+   "allowed-address": [
+    "10.11.0.102/32",
+    "fc00:0:0:99::2"
+   ],
+   "comment": "back-to-home-vpn device 3",
+   "disabled": false,
+   "endpoint-address": "",
+   "endpoint-port": 0,
+   "interface": "back-to-home-vpn",
+   "name": "peer3",
+   "rx": 0,
+   "tx": 0
+  }
+ ],
+ "routes": [
+  {
+   ".id": "*63",
+   "active": true,
+   "distance": 1,
+   "dst-address": "0.0.0.0/0",
+   "dynamic": true,
+   "gateway": "10.10.0.1",
+   "routing-table": "main"
+  },
+  {
+   ".id": "*64",
+   "active": true,
+   "distance": 0,
+   "dst-address": "10.10.0.0/24",
+   "dynamic": true,
+   "gateway": "ether1",
+   "routing-table": "main"
+  },
+  {
+   ".id": "*65",
+   "active": true,
+   "distance": 0,
+   "dst-address": "10.12.0.0/24",
+   "dynamic": true,
+   "gateway": "bridge",
+   "routing-table": "main"
+  },
+  {
+   ".id": "*66",
+   "active": true,
+   "distance": 0,
+   "dst-address": "10.11.0.0/24",
+   "dynamic": true,
+   "gateway": "back-to-home-vpn",
+   "routing-table": "main"
+  }
+ ],
+ "dnsStatic": [
+  {
+   ".id": "*67",
+   "address": "10.12.0.1",
+   "comment": "defconf",
+   "disabled": false,
+   "name": "router.lan",
+   "type": "A"
+  }
+ ],
+ "dnsCfg": {
+  "allow-remote-requests": true,
+  "mdns-repeat-ifaces": [],
+  "servers": [
+   "8.8.8.8",
+   "1.1.1.1"
+  ],
+  "use-doh-server": ""
+ },
+ "dnsCache": [
+  {
+   "name": "www.example.com",
+   "type": "A",
+   "ttl": "00:10:00"
+  },
+  {
+   "name": "www.example.org",
+   "type": "A",
+   "ttl": "00:10:00"
+  },
+  {
+   "name": "www.example.net",
+   "type": "A",
+   "ttl": "00:10:00"
+  },
+  {
+   "name": "pool.ntp.org",
+   "type": "A",
+   "ttl": "00:10:00"
+  }
+ ],
+ "queues": [],
+ "hotspot": [],
+ "users": [
+  {
+   ".id": "*68",
+   "comment": "system default user",
+   "disabled": false,
+   "group": "full",
+   "last-logged-in": "2026-01-10 08:46:47",
+   "name": "admin"
+  }
+ ],
+ "userGroups": [
+  {
+   ".id": "*69",
+   "name": "read",
+   "policy": [
+    "local",
+    "telnet",
+    "ssh",
+    "reboot",
+    "read",
+    "test",
+    "winbox",
+    "password",
+    "web",
+    "sniff",
+    "sensitive",
+    "api",
+    "romon",
+    "rest-api",
+    "!ftp",
+    "!write",
+    "!policy"
+   ]
+  },
+  {
+   ".id": "*6A",
+   "name": "write",
+   "policy": [
+    "local",
+    "telnet",
+    "ssh",
+    "reboot",
+    "read",
+    "write",
+    "test",
+    "winbox",
+    "password",
+    "web",
+    "sniff",
+    "sensitive",
+    "api",
+    "romon",
+    "rest-api",
+    "!ftp",
+    "!policy"
+   ]
+  },
+  {
+   ".id": "*6B",
+   "name": "full",
+   "policy": [
+    "local",
+    "telnet",
+    "ssh",
+    "ftp",
+    "reboot",
+    "read",
+    "write",
+    "policy",
+    "test",
+    "winbox",
+    "password",
+    "web",
+    "sniff",
+    "sensitive",
+    "api",
+    "romon",
+    "rest-api"
+   ]
+  }
+ ],
+ "scheduler": [],
+ "clock": {
+  "time-zone-name": "Etc/UTC",
+  "date": "2026-01-15",
+  "time": "12:00:00"
+ },
+ "ntp": {
+  "enabled": false,
+  "servers": []
+ },
+ "snmp": {
+  "contact": "",
+  "enabled": false,
+  "location": ""
+ },
+ "upnp": {
+  "enabled": false
+ },
+ "pools": [
+  {
+   ".id": "*6C",
+   "name": "default-dhcp",
+   "ranges": [
+    "10.12.0.102-10.12.0.254"
+   ]
+  }
+ ],
+ "dhcpServers": [
+  {
+   ".id": "*6D",
+   "address-pool": "default-dhcp",
+   "disabled": false,
+   "interface": "bridge",
+   "lease-time": "00:30:00",
+   "name": "defconf"
+  }
+ ],
+ "dhcpNetworks": [
+  {
+   ".id": "*6E",
+   "address": "10.12.0.0/24",
+   "comment": "defconf",
+   "dns-server": "10.12.0.1",
+   "gateway": [
+    "10.12.0.1"
+   ]
+  }
+ ],
+ "bridges": [
+  {
+   ".id": "*6F",
+   "comment": "defconf",
+   "igmp-snooping": false,
+   "name": "bridge",
+   "protocol-mode": "rstp",
+   "vlan-filtering": false
+  }
+ ],
+ "bridgePorts": [
+  {
+   ".id": "*70",
+   ".nextid": "*1",
+   "bridge": "bridge",
+   "comment": "defconf",
+   "disabled": false,
+   "frame-types": "admit-all",
+   "hw": true,
+   "interface": "ether2",
+   "pvid": 1
+  },
+  {
+   ".id": "*71",
+   ".nextid": "*2",
+   "bridge": "bridge",
+   "comment": "defconf",
+   "disabled": false,
+   "frame-types": "admit-all",
+   "hw": true,
+   "interface": "ether3",
+   "pvid": 1
+  },
+  {
+   ".id": "*72",
+   ".nextid": "*3",
+   "bridge": "bridge",
+   "comment": "defconf",
+   "disabled": false,
+   "frame-types": "admit-all",
+   "hw": true,
+   "interface": "ether4",
+   "pvid": 1
+  },
+  {
+   ".id": "*73",
+   ".nextid": "*4",
+   "bridge": "bridge",
+   "comment": "defconf",
+   "disabled": false,
+   "frame-types": "admit-all",
+   "hw": true,
+   "interface": "ether5",
+   "pvid": 1
+  },
+  {
+   ".id": "*74",
+   ".nextid": "*6",
+   "bridge": "bridge",
+   "comment": "defconf",
+   "disabled": false,
+   "frame-types": "admit-all",
+   "interface": "wlan1",
+   "pvid": 1
+  },
+  {
+   ".id": "*75",
+   ".nextid": "*FFFFFFFF",
+   "bridge": "bridge",
+   "disabled": false,
+   "frame-types": "admit-all",
+   "interface": "wlan2",
+   "pvid": 1
+  }
+ ],
+ "bridgeVlans": [],
+ "listMembers": [
+  {
+   ".id": "*76",
+   "comment": "defconf",
+   "interface": "bridge",
+   "list": "LAN"
+  },
+  {
+   ".id": "*77",
+   "comment": "defconf",
+   "interface": "ether1",
+   "list": "WAN"
+  },
+  {
+   ".id": "*78",
+   "interface": "back-to-home-vpn",
+   "list": "LAN"
+  }
+ ],
+ "netwatch": [],
+ "loggingRules": [
+  {
+   ".id": "*79",
+   "action": "memory",
+   "disabled": false,
+   "topics": [
+    "info"
+   ]
+  },
+  {
+   ".id": "*7A",
+   "action": "memory",
+   "disabled": false,
+   "topics": [
+    "error"
+   ]
+  },
+  {
+   ".id": "*7B",
+   "action": "memory",
+   "disabled": false,
+   "topics": [
+    "warning"
+   ]
+  },
+  {
+   ".id": "*7C",
+   "action": "echo",
+   "disabled": false,
+   "topics": [
+    "critical"
+   ]
+  }
+ ],
+ "neighbors": [],
+ "secProfiles": [
+  {
+   ".id": "*7D",
+   "authentication-types": [
+    "wpa2-psk"
+   ],
+   "management-protection": "disabled",
+   "mode": "dynamic-keys",
+   "name": "default"
+  }
+ ],
+ "accessList": [],
+ "trafficFlow": {
+  "enabled": false
+ },
+ "ovpn": [],
+ "l2tp": {
+  "enabled": false
+ },
+ "backups": [
+  {
+   ".id": "*1",
+   "last-modified": "1970-01-12 20:22:09",
+   "name": "flash/backup-1.backup",
+   "size": 2971,
+   "type": "backup"
+  }
+ ],
+ "addressLists": [],
+ "etherStats": [
+  {
+   ".id": "*7F",
+   "name": "ether1",
+   "rx-byte": 116424005812,
+   "rx-drop": 0,
+   "rx-error": 0,
+   "tx-byte": 30087416074,
+   "tx-drop": 0,
+   "tx-error": 0
+  },
+  {
+   ".id": "*80",
+   "name": "ether2",
+   "rx-byte": 192492964,
+   "rx-drop": 0,
+   "rx-error": 0,
+   "tx-byte": 755440324,
+   "tx-drop": 0,
+   "tx-error": 0
+  },
+  {
+   ".id": "*81",
+   "name": "ether3",
+   "rx-byte": 22068072878,
+   "rx-drop": 0,
+   "rx-error": 0,
+   "tx-byte": 13596657811,
+   "tx-drop": 0,
+   "tx-error": 0
+  },
+  {
+   ".id": "*82",
+   "name": "ether4",
+   "rx-byte": 0,
+   "rx-drop": 0,
+   "rx-error": 0,
+   "tx-byte": 0,
+   "tx-drop": 0,
+   "tx-error": 0
+  },
+  {
+   ".id": "*83",
+   "name": "ether5",
+   "rx-byte": 0,
+   "rx-drop": 0,
+   "rx-error": 0,
+   "tx-byte": 0,
+   "tx-drop": 0,
+   "tx-error": 0
+  }
+ ],
+ "etherMon": [
+  {
+   "name": "ether1",
+   "status": "link-ok",
+   "rate": "1Gbps",
+   "full-duplex": true,
+   "auto-negotiation": "done"
+  },
+  {
+   "name": "ether2",
+   "status": "link-ok",
+   "rate": "100Mbps",
+   "full-duplex": true,
+   "auto-negotiation": "done"
+  },
+  {
+   "name": "ether3",
+   "status": "link-ok",
+   "rate": "1Gbps",
+   "full-duplex": true,
+   "auto-negotiation": "done"
+  },
+  {
+   "name": "ether4",
+   "status": "no-link",
+   "rate": null,
+   "full-duplex": null,
+   "auto-negotiation": "done"
+  },
+  {
+   "name": "ether5",
+   "status": "no-link",
+   "rate": null,
+   "full-duplex": null,
+   "auto-negotiation": "done"
+  }
+ ],
+ "ipv6": {
+  "disable-ipv6": false
+ },
+ "kidControl": [],
+ "services": [
+  {
+   ".id": "*84",
+   "disabled": true,
+   "name": "ftp",
+   "port": 21
+  },
+  {
+   ".id": "*85",
+   "disabled": false,
+   "name": "ssh",
+   "port": 22
+  },
+  {
+   ".id": "*86",
+   "disabled": false,
+   "name": "ssh",
+   "port": 22
+  },
+  {
+   ".id": "*87",
+   "disabled": true,
+   "name": "telnet",
+   "port": 23
+  },
+  {
+   ".id": "*88",
+   "disabled": false,
+   "name": "resolver",
+   "port": 53
+  },
+  {
+   ".id": "*89",
+   "disabled": false,
+   "name": "resolver",
+   "port": 53
+  },
+  {
+   ".id": "*8A",
+   "disabled": true,
+   "name": "www",
+   "port": 80
+  },
+  {
+   ".id": "*8B",
+   "disabled": true,
+   "name": "www-ssl",
+   "port": 443
+  },
+  {
+   ".id": "*8C",
+   "disabled": false,
+   "name": "reverse-proxy",
+   "port": 443
+  },
+  {
+   ".id": "*8D",
+   "disabled": false,
+   "name": "btest",
+   "port": 2000
+  },
+  {
+   ".id": "*8E",
+   "disabled": false,
+   "name": "discover",
+   "port": 5678
+  },
+  {
+   ".id": "*8F",
+   "disabled": false,
+   "name": "winbox",
+   "port": 8291
+  },
+  {
+   ".id": "*90",
+   "disabled": false,
+   "name": "api",
+   "port": 8728
+  },
+  {
+   ".id": "*91",
+   "disabled": false,
+   "name": "api-ssl",
+   "port": 8729
+  },
+  {
+   ".id": "*92",
+   "disabled": false,
+   "name": "cloud",
+   "port": 40518
+  },
+  {
+   ".id": "*93",
+   "disabled": false,
+   "name": "detnet",
+   "port": 40555
+  },
+  {
+   ".id": "*94",
+   "disabled": false,
+   "name": "detnet",
+   "port": 40592
+  },
+  {
+   ".id": "*95",
+   "disabled": false,
+   "name": "fileshare-www-ssl",
+   "port": 40629
+  },
+  {
+   ".id": "*96",
+   "disabled": false,
+   "name": "resolver",
+   "port": 40666
+  },
+  {
+   ".id": "*97",
+   "disabled": false,
+   "name": "detnet",
+   "port": 40703
+  },
+  {
+   ".id": "*98",
+   "disabled": false,
+   "name": "wireguard-back-to-home-vpn",
+   "port": 51820
+  },
+  {
+   ".id": "*99",
+   "disabled": false,
+   "name": "detnet",
+   "port": 40777
+  },
+  {
+   ".id": "*9A",
+   "disabled": false,
+   "name": "detnet",
+   "port": 40814
+  },
+  {
+   ".id": "*9B",
+   "disabled": false,
+   "name": "detnet",
+   "port": 40851
+  },
+  {
+   ".id": "*9C",
+   "disabled": false,
+   "name": "detnet",
+   "port": 40888
+  }
+ ],
+ "log": [
+  {
+   ".id": "*9D",
+   "message": "02:AA:BB:00:00:07@wlan2: disconnected, registered to other interface, signal strength -77",
+   "time": "2026-01-10 00:41:32",
+   "topics": [
+    "wireless",
+    "info"
+   ]
+  },
+  {
+   ".id": "*9E",
+   "message": "02:AA:BB:00:00:0A@wlan2: connected, signal strength -63",
+   "time": "2026-01-10 01:23:55",
+   "topics": [
+    "wireless",
+    "info"
+   ]
+  },
+  {
+   ".id": "*9F",
+   "message": "02:AA:BB:00:00:0A@wlan1: disconnected, registered to other interface, signal strength -50",
+   "time": "2026-01-10 01:23:55",
+   "topics": [
+    "wireless",
+    "info"
+   ]
+  },
+  {
+   ".id": "*A0",
+   "message": "02:AA:BB:00:00:0A@wlan1: connected, signal strength -71",
+   "time": "2026-01-10 01:30:56",
+   "topics": [
+    "wireless",
+    "info"
+   ]
+  },
+  {
+   ".id": "*A1",
+   "message": "02:AA:BB:00:00:0A@wlan2: disconnected, registered to other interface, signal strength -55",
+   "time": "2026-01-10 01:45:57",
+   "topics": [
+    "wireless",
+    "info"
+   ]
+  },
+  {
+   ".id": "*A2",
+   "message": "02:AA:BB:00:00:0A@wlan2: connected, signal strength -53",
+   "time": "2026-01-10 02:24:39",
+   "topics": [
+    "wireless",
+    "info"
+   ]
+  },
+  {
+   ".id": "*A3",
+   "message": "02:AA:BB:00:00:0A@wlan1: disconnected, registered to other interface, signal strength -64",
+   "time": "2026-01-10 02:24:39",
+   "topics": [
+    "wireless",
+    "info"
+   ]
+  },
+  {
+   ".id": "*A4",
+   "message": "02:AA:BB:00:00:0A@wlan1: connected, signal strength -77",
+   "time": "2026-01-10 03:00:26",
+   "topics": [
+    "wireless",
+    "info"
+   ]
+  },
+  {
+   ".id": "*A5",
+   "message": "02:AA:BB:00:00:0A@wlan2: disconnected, registered to other interface, signal strength -71",
+   "time": "2026-01-10 03:00:26",
+   "topics": [
+    "wireless",
+    "info"
+   ]
+  },
+  {
+   ".id": "*A6",
+   "message": "02:AA:BB:00:00:0A@wlan2: connected, signal strength -69",
+   "time": "2026-01-10 03:37:35",
+   "topics": [
+    "wireless",
+    "info"
+   ]
+  },
+  {
+   ".id": "*A7",
+   "message": "02:AA:BB:00:00:0A@wlan1: disconnected, registered to other interface, signal strength -54",
+   "time": "2026-01-10 03:37:35",
+   "topics": [
+    "wireless",
+    "info"
+   ]
+  },
+  {
+   ".id": "*A8",
+   "message": "02:AA:BB:00:00:07@wlan2: connected, signal strength -78",
+   "time": "2026-01-10 04:09:48",
+   "topics": [
+    "wireless",
+    "info"
+   ]
+  },
+  {
+   ".id": "*A9",
+   "message": "02:AA:BB:00:00:07@wlan1: disconnected, registered to other interface, signal strength -57",
+   "time": "2026-01-10 04:09:48",
+   "topics": [
+    "wireless",
+    "info"
+   ]
+  },
+  {
+   ".id": "*AA",
+   "message": "02:AA:BB:00:00:07@wlan1: connected, signal strength -69",
+   "time": "2026-01-10 04:47:28",
+   "topics": [
+    "wireless",
+    "info"
+   ]
+  },
+  {
+   ".id": "*AB",
+   "message": "02:AA:BB:00:00:07@wlan2: disconnected, registered to other interface, signal strength -45",
+   "time": "2026-01-10 04:47:28",
+   "topics": [
+    "wireless",
+    "info"
+   ]
+  },
+  {
+   ".id": "*AC",
+   "message": "02:AA:BB:00:00:03@wlan1: connected, signal strength -51",
+   "time": "2026-01-10 05:03:00",
+   "topics": [
+    "wireless",
+    "info"
+   ]
+  },
+  {
+   ".id": "*AD",
+   "message": "02:AA:BB:00:00:03@wlan2: disconnected, registered to other interface, signal strength -69",
+   "time": "2026-01-10 05:03:00",
+   "topics": [
+    "wireless",
+    "info"
+   ]
+  },
+  {
+   ".id": "*AE",
+   "message": "02:AA:BB:00:00:03@wlan2: connected, signal strength -49",
+   "time": "2026-01-10 05:43:05",
+   "topics": [
+    "wireless",
+    "info"
+   ]
+  },
+  {
+   ".id": "*AF",
+   "message": "02:AA:BB:00:00:03@wlan1: disconnected, registered to other interface, signal strength -48",
+   "time": "2026-01-10 05:43:05",
+   "topics": [
+    "wireless",
+    "info"
+   ]
+  },
+  {
+   ".id": "*B0",
+   "message": "02:AA:BB:00:00:0A@wlan1: connected, signal strength -67",
+   "time": "2026-01-10 05:51:18",
+   "topics": [
+    "wireless",
+    "info"
+   ]
+  },
+  {
+   ".id": "*B1",
+   "message": "02:AA:BB:00:00:0A@wlan2: disconnected, registered to other interface, signal strength -67",
+   "time": "2026-01-10 05:51:18",
+   "topics": [
+    "wireless",
+    "info"
+   ]
+  },
+  {
+   ".id": "*B2",
+   "message": "02:AA:BB:00:00:0A@wlan2: connected, signal strength -46",
+   "time": "2026-01-10 05:58:28",
+   "topics": [
+    "wireless",
+    "info"
+   ]
+  },
+  {
+   ".id": "*B3",
+   "message": "02:AA:BB:00:00:0A@wlan1: disconnected, registered to other interface, signal strength -46",
+   "time": "2026-01-10 05:58:28",
+   "topics": [
+    "wireless",
+    "info"
+   ]
+  },
+  {
+   ".id": "*B4",
+   "message": "E0:D4:E8:00:00:12@wlan2: connected, signal strength -77",
+   "time": "2026-01-10 05:59:52",
+   "topics": [
+    "wireless",
+    "info"
+   ]
+  },
+  {
+   ".id": "*B5",
+   "message": "E0:D4:E8:00:00:12@wlan1: disconnected, registered to other interface, signal strength -75",
+   "time": "2026-01-10 05:59:52",
+   "topics": [
+    "wireless",
+    "info"
+   ]
+  },
+  {
+   ".id": "*B6",
+   "message": "02:AA:BB:00:00:0A@wlan1: connected, signal strength -65",
+   "time": "2026-01-10 06:43:31",
+   "topics": [
+    "wireless",
+    "info"
+   ]
+  },
+  {
+   ".id": "*B7",
+   "message": "02:AA:BB:00:00:0A@wlan2: disconnected, registered to other interface, signal strength -64",
+   "time": "2026-01-10 06:43:31",
+   "topics": [
+    "wireless",
+    "info"
+   ]
+  },
+  {
+   ".id": "*B8",
+   "message": "02:AA:BB:00:00:0A@wlan2: connected, signal strength -73",
+   "time": "2026-01-10 07:27:20",
+   "topics": [
+    "wireless",
+    "info"
+   ]
+  },
+  {
+   ".id": "*B9",
+   "message": "02:AA:BB:00:00:0A@wlan1: disconnected, registered to other interface, signal strength -65",
+   "time": "2026-01-10 07:27:20",
+   "topics": [
+    "wireless",
+    "info"
+   ]
+  },
+  {
+   ".id": "*BA",
+   "message": "E0:D4:E8:00:00:12@wlan1: connected, signal strength -52",
+   "time": "2026-01-10 07:41:25",
+   "topics": [
+    "wireless",
+    "info"
+   ]
+  },
+  {
+   ".id": "*BB",
+   "message": "E0:D4:E8:00:00:12@wlan2: disconnected, registered to other interface, signal strength -76",
+   "time": "2026-01-10 07:41:25",
+   "topics": [
+    "wireless",
+    "info"
+   ]
+  },
+  {
+   ".id": "*BC",
+   "message": "02:AA:BB:00:00:0A@wlan1: connected, signal strength -74",
+   "time": "2026-01-10 07:58:22",
+   "topics": [
+    "wireless",
+    "info"
+   ]
+  },
+  {
+   ".id": "*BD",
+   "message": "02:AA:BB:00:00:0A@wlan2: disconnected, registered to other interface, signal strength -55",
+   "time": "2026-01-10 07:58:22",
+   "topics": [
+    "wireless",
+    "info"
+   ]
+  },
+  {
+   ".id": "*BE",
+   "message": "E0:D4:E8:00:00:12@wlan2: connected, signal strength -54",
+   "time": "2026-01-10 08:21:51",
+   "topics": [
+    "wireless",
+    "info"
+   ]
+  },
+  {
+   ".id": "*BF",
+   "message": "E0:D4:E8:00:00:12@wlan1: disconnected, registered to other interface, signal strength -78",
+   "time": "2026-01-10 08:21:51",
+   "topics": [
+    "wireless",
+    "info"
+   ]
+  }
+ ],
+ "latency": {
+  "Cloudflare": {
+   "ms": 17.8,
+   "loss": 0
+  },
+  "Google": {
+   "ms": 21.0,
+   "loss": 0
+  },
+  "Quad9": {
+   "ms": 8.0,
+   "loss": 0
+  }
+ }
+}

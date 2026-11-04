@@ -1,0 +1,4 @@
+node_modules/
+dist/
+src/ui/src/lib/snapshot.json
+.DS_Store
