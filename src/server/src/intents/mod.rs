@@ -7,3 +7,5 @@ pub mod networks;
 pub mod profiles;
 pub mod security;
 pub mod system;
+pub mod vpn;
+pub mod wifi;

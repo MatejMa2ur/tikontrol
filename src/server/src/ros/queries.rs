@@ -70,8 +70,8 @@ const QUERIES: &[Q] = &[
     // ponytail: dotted proplist names are unverified over the API (docs/NEXT_STEPS.md)
     q("wifiNew", "/interface/wifi/print", &["name", "channel.band", "channel.width", "configuration.ssid", "running", "disabled"]),
     q("stationsNew", "/interface/wifi/registration-table/print", &["interface", "mac-address", "signal", "tx-rate", "rx-rate", "uptime", "bytes", "last-ip", "band", "ssid"]),
-    q("wireguard", "/interface/wireguard/print", &["name", "listen-port", "mtu", "running", "disabled", "comment"]),
-    q("wgPeers", "/interface/wireguard/peers/print", &["interface", "name", "allowed-address", "endpoint-address", "endpoint-port", "last-handshake", "rx", "tx", "comment", "disabled"]).arrays(&["allowed-address"]),
+    q("wireguard", "/interface/wireguard/print", &["name", "listen-port", "mtu", "running", "disabled", "comment", "public-key"]),
+    q("wgPeers", "/interface/wireguard/peers/print", &["interface", "name", "allowed-address", "endpoint-address", "endpoint-port", "last-handshake", "rx", "tx", "comment", "disabled", "public-key"]).arrays(&["allowed-address"]),
     q("routes", "/ip/route/print", &["dst-address", "gateway", "distance", "routing-table", "active", "dynamic", "static", "comment", "disabled"]),
     q("dnsStatic", "/ip/dns/static/print", &["name", "address", "type", "comment", "disabled"]),
     one("dnsCfg", "/ip/dns/print", &["servers", "use-doh-server", "allow-remote-requests", "mdns-repeat-ifaces"]).arrays(&["servers", "mdns-repeat-ifaces"]),

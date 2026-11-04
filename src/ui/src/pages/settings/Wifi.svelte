@@ -1,7 +1,7 @@
 <script lang="ts">
   import { ssids, radios, raw, clients, hw, router } from '../../lib/data'
   import { displayName } from '../../lib/live.svelte'
-  import { review } from '../../lib/apply.svelte'
+  import { review, type Intent } from '../../lib/apply.svelte'
   import Icon from '../../lib/Icon.svelte'
   import Section from '../../lib/ui/Section.svelte'
   import Field from '../../lib/ui/Field.svelte'
@@ -27,7 +27,7 @@
     const radiosFor = radios.filter((r) => s.bands.includes(r.band))
     const prof = `tik-${s.name.replace(/\W/g, '')}`
     const out = [`/interface/wireless/security-profiles/add name=${prof} mode=dynamic-keys authentication-types=${s.security === 'wpa2' ? 'wpa2-psk' : 'wpa2-psk,wpa3-psk'} wpa2-pre-shared-key="••••••" ${s.security !== 'wpa2' ? 'wpa3-pre-shared-key="••••••"' : ''}`.trim()]
-    if (editIdx === 0) radiosFor.forEach((r) => out.push(`/interface/wireless/set ${r.name} ssid="${s.name}" security-profile=${prof} hide-ssid=${s.hidden ? 'yes' : 'no'} default-forwarding=${s.isolation ? 'no' : 'yes'}`))
+    if (editIdx >= 0) radiosFor.forEach((r) => out.push(`/interface/wireless/set ${r.name} ssid="${s.name}" security-profile=${prof} hide-ssid=${s.hidden ? 'yes' : 'no'} default-forwarding=${s.isolation ? 'no' : 'yes'}`))
     else radiosFor.forEach((r) => out.push(`/interface/wireless/add master-interface=${r.name} name=${prof}-${r.band[0]}g ssid="${s.name}" security-profile=${prof} hide-ssid=${s.hidden ? 'yes' : 'no'} default-forwarding=${s.isolation ? 'no' : 'yes'}`))
     if (s.network !== 'Default') out.push(`/interface/wireless/set [find ssid="${s.name}"] vlan-mode=use-tag vlan-id=${s.network}`)
     if (s.limit) out.push(`/interface/wireless/set [find ssid="${s.name}"] default-client-tx-limit=${s.limit.split('/')[0]} default-ap-tx-limit=${s.limit.split('/')[1] ?? s.limit.split('/')[0]}`)
@@ -35,15 +35,48 @@
     if (s.macFilter) out.push(`/interface/wireless/set [find ssid="${s.name}"] default-authentication=no`)
     return out
   }
+  const pkg = hw.wifiPackage === 'wifi' ? 'wifi' : 'wireless'
+  // Safe apply intents (server: src/server/src/intents/wifi.rs). One intent per review.
+  function intentFor(s: Ssid): Intent | undefined {
+    const ifs = radios.filter((r) => s.bands.includes(r.band)).map((r) => r.name)
+    if (!ifs.length) return
+    if (editIdx < 0) return s.password.length >= 8 ? { kind: 'wifi-guest', package: pkg, master: ifs[0], ssid: s.name, passphrase: s.password } : undefined
+    const before = list[editIdx]
+    return {
+      kind: 'wifi-network', package: pkg, interfaces: ifs,
+      ...(s.name !== before.name ? { ssid: s.name } : {}),
+      ...(s.hidden !== before.hidden ? { hidden: s.hidden } : {}),
+      ...(s.isolation !== before.isolation ? { isolated: s.isolation } : {}),
+      ...(s.security !== before.security && s.security !== 'open' ? { security: s.security } : {}),
+      ...(s.password ? { passphrase: s.password } : {}),
+    }
+  }
   function save() {
-    review(editIdx < 0 ? `Create SSID ${edit!.name}` : `Update SSID ${edit!.name}`, cmds(edit!))
+    review(editIdx < 0 ? `Create SSID ${edit!.name}` : `Update SSID ${edit!.name}`, cmds(edit!), intentFor(edit!))
     if (editIdx < 0) list.push(edit!); else list[editIdx] = edit!
     edit = null
+  }
+  function reviewSchedule(s: Ssid) {
+    const r = radios.find((x) => s.bands.includes(x.band))
+    if (r) review(`Wi-Fi schedule for ${s.name}`, cmds(s).filter((c) => c.startsWith('/system/scheduler')), { kind: 'wifi-schedule', package: pkg, interface: r.name, on: s.from, off: s.to })
   }
   const wifiQr = (s: Ssid) => `WIFI:T:${s.security === 'open' ? 'nopass' : 'WPA'};S:${s.name};P:${qrPass};H:${s.hidden ? 'true' : 'false'};;`
 
   // per-radio channel / power
-  let rf = $state(radios.map((r) => ({ name: r.name, band: r.band, widths: r.widths.filter((w) => w <= r.maxWidth), channel: 'auto', width: r.width ?? r.maxWidth, power: 'default' })))
+  let rf = $state(radios.map((r) => ({ name: r.name, band: r.band, widths: r.widths.filter((w) => w <= r.maxWidth), channel: 'auto', width: r.width ?? r.maxWidth, power: 'default', on: r.running })))
+  type Rf = (typeof rf)[number]
+  const pkgPath = pkg === 'wifi' ? '/interface/wifi' : '/interface/wireless'
+  const freqOf = (r: Rf) => (r.channel === 'auto' ? 'auto' : String((r.band.startsWith('2') ? 2407 : r.band.startsWith('6') ? 5950 : 5000) + 5 * +r.channel))
+  const WIDTHS: Record<string, Record<number, string>> = {
+    wifi: { 20: '20mhz', 40: '20/40mhz', 80: '20/40/80mhz', 160: '20/40/80/160mhz', 320: '20/40/80/160/320mhz' },
+    wireless: { 20: '20mhz', 40: '20/40mhz-XX', 80: '20/40/80mhz-XXXX', 160: '20/40/80/160mhz-XXXXXXXX' },
+  }
+  const widthOf = (r: Rf) => WIDTHS[pkg][r.width] ?? '20mhz'
+  const powerOf = (r: Rf) => (r.power === 'default' ? 'default' : String(r.power === 'high' ? 20 : r.power === 'medium' ? 14 : 8))
+  const radioCli = (r: Rf) => pkg === 'wifi'
+    ? `/interface/wifi/set [find name="${r.name}"] channel.frequency=${freqOf(r)} channel.width=${widthOf(r)}${r.power === 'default' ? '' : ` configuration.tx-power=${powerOf(r)}`}`
+    : `/interface/wireless/set [find name="${r.name}"] frequency=${freqOf(r)} channel-width=${widthOf(r)}${r.power === 'default' ? ' tx-power-mode=default' : ` tx-power-mode=all-rates-fixed tx-power=${powerOf(r)}`}`
+  const radioIntent = (r: Rf): Intent => ({ kind: 'wifi-radio', package: pkg, interface: r.name, frequency: freqOf(r), width: widthOf(r), tx_power: powerOf(r) })
   const channels = (band: string) => (band.startsWith('2') ? ['auto', '1', '6', '11'] : band.startsWith('6') ? ['auto', '5', '37', '69', '101', '133', '165', '197'] : ['auto', '36', '44', '52', '100', '116', '132', '149'])
 </script>
 
@@ -72,9 +105,11 @@
       <select bind:value={r.channel}>{#each channels(r.band) as c}<option value={c}>{c === 'auto' ? 'Auto channel' : `Channel ${c}`}</option>{/each}</select>
       <select bind:value={r.width}>{#each r.widths as w}<option value={w}>{w} MHz</option>{/each}</select>
       <select bind:value={r.power}><option value="default">Auto power</option><option value="high">High</option><option value="medium">Medium</option><option value="low">Low</option></select>
+      <button class="btn small" onclick={() => review(`Radio settings for ${r.name}`, [radioCli(r)], radioIntent(r))}>Apply</button>
+      <button class="btn small" onclick={() => review(`${r.on ? 'Turn off' : 'Turn on'} ${r.name}`, [`${pkgPath}/${r.on ? 'disable' : 'enable'} [find name="${r.name}"]`], { kind: 'wifi-radio-enabled', package: pkg, interface: r.name, enabled: !r.on })}>{r.on ? 'Turn off' : 'Turn on'}</button>
     </Field>
   {/each}
-  <div class="r"><button class="btn primary" onclick={() => review('Radio settings', rf.map((r) => `/interface/wireless/set ${r.name} frequency=${r.channel === 'auto' ? 'auto' : r.band.startsWith('2') ? 2407 + 5 * +r.channel : 5000 + 5 * +r.channel} channel-width=${r.width === 20 ? '20mhz' : r.width === 40 ? (r.band.startsWith('2') ? '20/40mhz-XX' : '20/40mhz-XX') : '20/40/80mhz-XXXX'}${r.power === 'default' ? ' tx-power-mode=default' : ` tx-power-mode=all-rates-fixed tx-power=${r.power === 'high' ? 20 : r.power === 'medium' ? 14 : 8}`}`))}>Review & apply</button></div>
+  <div class="r"><button class="btn" onclick={() => review('Radio settings', rf.map(radioCli))}>Show all as commands</button></div>
 </Section>
 
 {#if edit}
@@ -90,7 +125,7 @@
     <Field label="Hide SSID"><Toggle bind:checked={edit.hidden} label="Hide" /></Field>
     <details><summary class="small">Advanced</summary>
       <Field label="WiFi schedule"><Toggle bind:checked={edit.schedule} label="Schedule" /></Field>
-      {#if edit.schedule}<Field label="On between"><input type="time" bind:value={edit.from} /><input type="time" bind:value={edit.to} /></Field>{/if}
+      {#if edit.schedule}<Field label="On between" help="Applies to one radio"><input type="time" bind:value={edit.from} /><input type="time" bind:value={edit.to} /><button class="btn small" onclick={() => reviewSchedule(edit!)}>Review schedule</button></Field>{/if}
       <Field label="Speed limit per client" help="e.g. 50M/10M"><input type="text" bind:value={edit.limit} placeholder="Unlimited" /></Field>
       <Field label="MAC address filter" help="Only allow listed devices"><Toggle bind:checked={edit.macFilter} label="MAC filter" /></Field>
       <Field label="Private PSK" na={legacy ? NEW_PKG : undefined} help="Different password per device"><Toggle bind:checked={edit.ppsk} disabled={legacy} label="PPSK" /></Field>
