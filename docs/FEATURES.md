@@ -11,7 +11,7 @@ Clean-room: we copy the behaviour, never the assets.
 **Backing:** `ROS` = RouterOS API on the router · `CMR` = MikroTik CMR server · `tik` = our own logic/DB · `✗` = nothing can back it
 
 <!-- progress:start -->
-**Progress:** 6 ✅ · 170 🟨 · 37 🎨 · 7 ⬜ · 8 ➖ (228 items, 3% done)
+**Progress:** 6 ✅ · 176 🟨 · 31 🎨 · 7 ⬜ · 8 ➖ (228 items, 3% done)
 <!-- progress:end -->
 
 ---
@@ -120,12 +120,12 @@ Clean-room: we copy the behaviour, never the assets.
 | PoE status / power cycle | ROS `/interface/ethernet/poe` (hw dependent) | 3 | 🟨 |
 | Port profile (VLAN access/trunk, native VLAN) | ROS bridge VLAN · CMR vlan | 3 | 🟨 |
 | Port disable / enable | ROS | 2 | 🟨 |
-| Port mirroring | ROS switch mirror | 4 |🎨 |
-| Link aggregation | ROS bonding | 4 |🎨 |
-| STP / loop protection settings | ROS bridge protocol-mode | 4 |🎨 |
-| Storm control | ROS switch (hw dependent) | 4 |🎨 |
-| 802.1X port auth | ROS dot1x | 4 |🎨 |
-| LLDP-MED / voice VLAN | ROS lldp | 4 |🎨 |
+| Port mirroring | ROS switch mirror | 4 | 🟨 |
+| Link aggregation | ROS bonding | 4 | 🟨 |
+| STP / loop protection settings | ROS bridge protocol-mode | 4 | 🟨 |
+| Storm control | ROS switch (hw dependent) | 4 | 🟨 |
+| 802.1X port auth | ROS dot1x | 4 | 🟨 |
+| LLDP-MED / voice VLAN | ROS lldp | 4 | 🟨 |
 
 ## Radios / WiFi monitoring
 | Feature | Backing | Phase | Status |

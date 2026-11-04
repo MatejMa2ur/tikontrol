@@ -398,6 +398,7 @@ pub const AREAS: &[Area] = &[
     crate::intents::profiles::compile,
     crate::intents::hotspot::compile,
     crate::intents::wifi::compile,
+    crate::intents::ports::compile,
     crate::intents::vpn::compile,
     crate::intents::routing::compile,
 ];

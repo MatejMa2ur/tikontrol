@@ -99,7 +99,15 @@ const QUERIES: &[Q] = &[
     q("dhcpNetworks", "/ip/dhcp-server/network/print", &["address", "gateway", "dns-server", "domain", "comment"]).arrays(&["gateway"]),
     q("vlans", "/interface/vlan/print", &["name", "vlan-id", "interface", "comment"]),
     q("bridges", "/interface/bridge/print", &["name", "vlan-filtering", "protocol-mode", "igmp-snooping", "comment"]),
-    q("bridgePorts", "/interface/bridge/port/print", &["interface", "bridge", "pvid", "frame-types", "hw", "disabled", "comment"]),
+    q("bridgePorts", "/interface/bridge/port/print", &["interface", "bridge", "pvid", "frame-types", "hw", "disabled", "comment", "edge", "bpdu-guard"]),
+    // Ports advanced: each menu only answers when the router / switch chip has it (feature detection)
+    q("bonds", "/interface/bonding/print", &["name", "slaves", "mode", "running", "disabled", "comment"]).arrays(&["slaves"]),
+    q("switches", "/interface/ethernet/switch/print", &["name", "type", "mirror-source", "mirror-target"]),
+    q("switchPorts", "/interface/ethernet/switch/port/print", &["name", "storm-rate"]),
+    q("dot1x", "/interface/dot1x/server/print", &["interface", "auth-types", "disabled", "comment"]).arrays(&["auth-types"]),
+    // never the RADIUS secret
+    q("radius", "/radius/print", &["service", "disabled"]).arrays(&["service"]),
+    one("discovery", "/ip/neighbor/discovery-settings/print", &["discover-interface-list", "protocol", "lldp-med-net-policy-vlan"]).arrays(&["protocol"]),
     q("bridgeVlans", "/interface/bridge/vlan/print", &["bridge", "vlan-ids", "tagged", "untagged"]).arrays(&["vlan-ids", "tagged", "untagged"]),
     q("listMembers", "/interface/list/member/print", &["list", "interface", "comment"]),
     q("netwatch", "/tool/netwatch/print", &["host", "status", "interval", "type", "comment"]),

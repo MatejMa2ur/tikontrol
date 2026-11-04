@@ -33,7 +33,7 @@ components:
       type: object
       required: [kind]
       description: A Safe apply intent. `kind` selects the change; see src/server/src/apply.rs and src/server/src/intents/.
-      properties: { kind: { type: string, examples: [block-client, dns-record, port-forward, traffic-rule] } }
+      properties: { kind: { type: string, examples: [block-client, dns-record, port-forward, traffic-rule, set-port-mirror, create-bond] } }
       additionalProperties: true
     Preview:
       type: object
