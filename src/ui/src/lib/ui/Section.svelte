@@ -14,7 +14,7 @@
 </section>
 
 <style>
-  .sec { padding: 16px 18px; }
+  .sec { padding: var(--pad) calc(var(--pad) + 2px); }
   header { margin-bottom: 12px; gap: 12px; align-items: flex-start; }
   h3 { margin: 0; font-size: 13.5px; font-weight: 650; }
   p { margin: 3px 0 0; max-width: 70ch; }

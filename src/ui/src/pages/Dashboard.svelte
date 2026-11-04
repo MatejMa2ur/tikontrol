@@ -186,7 +186,7 @@
           <div class="seg">{#each ['1H', '1D', '1W'] as const as r}<button class:on={range === r} onclick={() => (range = r)}>{r}</button>{/each}</div>
         </div>
       </header>
-      {#key prefs.theme}<ActivityChart data={hist} {mode} />{/key}
+      {#key prefs.theme + prefs.palette}<ActivityChart data={hist} {mode} />{/key}
       <Ros cmd="/interface/monitor-traffic {internet.wanIf}; /interface/print stats where name={internet.wanIf}" />
     </section>
 

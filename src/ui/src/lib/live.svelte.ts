@@ -2,6 +2,7 @@
 // and history comes from its store; in the mockup they are a random walk around the snapshot values.
 import { clients, internet, router, isBackend } from './data'
 import { api } from './backend'
+import { applyTheme, designs, palettes, DEFAULT_DESIGN, DEFAULT_PALETTE } from './themes'
 
 const N = 120 // seconds of history in the WAN chart
 const now = () => Math.floor(Date.now() / 1000)
@@ -52,9 +53,13 @@ if (isBackend) {
 
 // ---------- local prefs (aliases live in our DB in the real app) ----------
 const load = <T>(k: string, d: T): T => { try { return JSON.parse(localStorage.getItem(k) ?? '') } catch { return d } }
+const q = new URLSearchParams(location.search) // ?theme= ?palette= ?design= for screenshots
 export const prefs = $state({
   aliases: load<Record<string, string>>('tik.aliases', {}),
-  theme: (new URLSearchParams(location.search).get('theme') as 'dark' | 'light' | null) ?? load<'dark' | 'light'>('tik.theme', 'dark'),
+  theme: (q.get('theme') as 'dark' | 'light' | null) ?? load<'dark' | 'light'>('tik.theme', 'dark'),
+  // Colour and design theme (lib/themes.ts). Unknown names from storage fall back to the defaults.
+  palette: ((p: string) => (Object.hasOwn(palettes, p) ? p : DEFAULT_PALETTE))(q.get('palette') ?? load<string>('tik.palette', DEFAULT_PALETTE)),
+  design: ((d: string) => (Object.hasOwn(designs, d) ? d : DEFAULT_DESIGN))(q.get('design') ?? load<string>('tik.design', DEFAULT_DESIGN)),
   showRos: load<boolean>('tik.showRos', false),
   icons: load<Record<string, string>>('tik.icons', {}),
   notes: load<Record<string, string>>('tik.notes', {}),
@@ -63,7 +68,8 @@ export const prefs = $state({
   speedtests: load<{ at: string; down: number; up: number; ping: number }[]>('tik.speedtests', []),
 })
 // Names, icons, notes, groups and hidden clients live on the server when there is one (shared by every
-// browser and by MCP); the theme and "show RouterOS" stay per browser.
+// browser and by MCP); the theme (mode, palette, design) and "show RouterOS" stay per browser, which is
+// per user as long as people don't share a browser profile.
 const SHARED = ['aliases', 'icons', 'notes', 'groups', 'hidden'] as const
 let loaded = !isBackend
 if (isBackend) api('/prefs').then((p) => { for (const k of SHARED) if (p?.[k]) (prefs as any)[k] = p[k]; loaded = true }).catch(() => (loaded = true))
@@ -71,9 +77,11 @@ let saveTimer: ReturnType<typeof setTimeout> | undefined
 $effect.root(() => {
   $effect(() => {
     localStorage.setItem('tik.theme', JSON.stringify(prefs.theme))
+    localStorage.setItem('tik.palette', JSON.stringify(prefs.palette))
+    localStorage.setItem('tik.design', JSON.stringify(prefs.design))
     localStorage.setItem('tik.showRos', JSON.stringify(prefs.showRos))
     localStorage.setItem('tik.speedtests', JSON.stringify(prefs.speedtests))
-    document.documentElement.dataset.theme = prefs.theme
+    applyTheme(document.documentElement, prefs.theme, prefs.palette, prefs.design)
   })
   $effect(() => {
     const shared = JSON.stringify(Object.fromEntries(SHARED.map((k) => [k, prefs[k]])))

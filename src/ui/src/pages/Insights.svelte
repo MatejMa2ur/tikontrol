@@ -41,7 +41,7 @@
     </Section>
   {:else if tab === 'clients'}
     <Section title="Internet activity" desc="Client count and throughput over time.">
-      {#key prefs.theme}<ActivityChart data={activity('1D')} height={260} />{/key}
+      {#key prefs.theme + prefs.palette}<ActivityChart data={activity('1D')} height={260} />{/key}
     </Section>
     <Section title="Traffic by client" desc="Total bytes since each client connected (Wi-Fi counters; wired clients need kid-control accounting)." ros="/interface/wireless/registration-table/print; /ip/kid-control/device/print stats">
       {#each byClient as { c, total }}
