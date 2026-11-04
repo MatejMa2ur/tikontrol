@@ -61,6 +61,7 @@ fn main() {
     }
     app.spawn_poller(Duration::from_secs(poll));
     tikontrol::live::spawn(app.clone(), data.join("history.json"));
+    tikontrol::alerts::spawn(app.clone(), Duration::from_secs(30));
     let handler: http::Handler = {
         let app = app.clone();
         Arc::new(move |req| api::handle(&app, req))

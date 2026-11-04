@@ -1,4 +1,4 @@
-//! Routes for Safe apply, alerts and other write features (filled in by later features).
+//! Routes for Safe apply and other write features (filled in by later features). Alerts live in alerts.rs.
 
 use crate::app::App;
 use crate::auth::Session;

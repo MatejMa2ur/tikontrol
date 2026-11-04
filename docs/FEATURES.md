@@ -11,7 +11,7 @@ Clean-room: we copy the behaviour, never the assets.
 **Backing:** `ROS` = RouterOS API on the router · `CMR` = MikroTik CMR server · `tik` = our own logic/DB · `✗` = nothing can back it
 
 <!-- progress:start -->
-**Progress:** 1 ✅ · 18 🟨 · 168 🎨 · 31 ⬜ · 8 ➖ (226 items, 0% done)
+**Progress:** 1 ✅ · 22 🟨 · 164 🎨 · 31 ⬜ · 8 ➖ (226 items, 0% done)
 <!-- progress:end -->
 
 ---
@@ -152,10 +152,10 @@ Clean-room: we copy the behaviour, never the assets.
 ## Alarm Manager / Notifications
 | Feature | Backing | Phase | Status |
 |---|---|---|---|
-| Alert rules (device offline, WAN down, new client, CPU/RAM) | tik · CMR alerts | 2 |🎨 |
-| Channels: email, push (ntfy), Telegram, webhook | tik | 2 |🎨 |
-| Alert history / acknowledge | tik | 2 |🎨 |
-| Quiet hours / per-rule severity | tik | 3 |🎨 |
+| Alert rules (device offline, WAN down, new client, CPU/RAM) | tik · CMR alerts | 2 |🟨 |
+| Channels: email, push (ntfy), Telegram, webhook (ntfy/Telegram/webhook built, untested against the real services; email not done) | tik | 2 |🟨 |
+| Alert history / acknowledge | tik | 2 |🟨 |
+| Quiet hours / per-rule severity | tik | 3 |🟨 |
 
 ## System Log / Events
 | Feature | Backing | Phase | Status |

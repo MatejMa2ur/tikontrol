@@ -154,7 +154,8 @@ pub struct State {
     pub router: Option<RouterCfg>,
     pub prefs: Prefs,
     pub mcp: McpCfg,
-    pub alerts: serde_json::Value,
+    #[serde(deserialize_with = "crate::alerts::lenient")]
+    pub alerts: crate::alerts::Alerts,
     pub site: serde_json::Value,
 }
 

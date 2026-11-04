@@ -217,7 +217,8 @@ pub struct Live {
     cv: Condvar,
     pub subscribers: Mutex<usize>,
     prev: Mutex<Option<(u64, Stations)>>,
-    wan_up: Mutex<Option<bool>>,
+    /// last WAN link state the sampler saw (None until the first reading); read by the alert rules
+    pub wan_up: Mutex<Option<bool>>,
     pub latency_ms: Mutex<f64>,
 }
 
