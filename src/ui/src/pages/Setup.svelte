@@ -14,7 +14,8 @@
 
   // admin
   let token = $state('')
-  let name = $state('admin')
+  let backup = $state(false)
+  let name = $state('local-admin')
   let password = $state('')
   let password2 = $state('')
 
@@ -38,8 +39,12 @@
   })
 
   const admin = (e: SubmitEvent) => { e.preventDefault(); run(async () => {
-    if (password !== password2) throw new Error('passwords do not match')
-    await api('/setup/admin', { method: 'POST', body: { token: token.trim(), name, password } })
+    if (backup) {
+      if (password !== password2) throw new Error('passwords do not match')
+      await api('/setup/admin', { method: 'POST', body: { token: token.trim(), name, password } })
+    } else {
+      await api('/setup/start', { method: 'POST', body: { token: token.trim() } })
+    }
     location.reload()
   }) }
   const probe = () => run(async () => { pinOk = false; pin = (await api<{ pin: string }>('/router/probe', { method: 'POST', body: { host, port } })).pin })
@@ -50,7 +55,7 @@
   const pretty = (p: string) => p.match(/.{1,2}/g)?.join(':') ?? p
   // configured but no snapshot yet: check again shortly (first poll, or the router refused us)
   $effect(() => {
-    if (step !== 'router' || !me?.router) return
+    if (step !== 'router' || !me?.router || (me.setup && !me.error)) return
     const t = setTimeout(() => location.reload(), me.error ? 30_000 : 4_000)
     return () => clearTimeout(t)
   })
@@ -60,24 +65,28 @@
   {#if step === 'admin'}
     <form class="card" onsubmit={admin}>
       <h1>Welcome to tikontrol</h1>
-      <p class="muted">Setup takes two steps: create a local account here, then connect your router.</p>
+      <p class="muted">Three steps, no extra account needed:</p>
       <ol class="steps small">
-        <li class="now"><b>Create a local account</b>: your way in, even when the router is unreachable.</li>
+        <li class="now"><b>Enter the setup token</b>: proves you run tikontrol.</li>
         <li><b>Connect your router</b>: a read-only RouterOS user lets tikontrol show live data.</li>
         <li><b>Sign in with your MikroTik account</b>: from then on, your router group decides what you can do.</li>
       </ol>
 
       <label>Setup token<input type="text" bind:value={token} required autocomplete="off" spellcheck="false" /></label>
-      <p class="hint">A one-time code tikontrol printed in its log when it first started (the terminal or container output). It proves you are the person running tikontrol, so nobody else on your network can create the first account. It stops working once this account exists.</p>
-      <label>Username<input type="text" bind:value={name} required maxlength="32" autocomplete="username" /></label>
-      <p class="hint">Pick a name that is <b>not</b> your MikroTik username, e.g. <code>local-admin</code>. A local account always wins over a router account with the same name.</p>
-      <label>Password (at least 12 characters)<input type="password" bind:value={password} required minlength="12" maxlength="256" autocomplete="new-password" /></label>
-      <label>Repeat password<input type="password" bind:value={password2} required minlength="12" maxlength="256" autocomplete="new-password" /></label>
+      <p class="hint">A one-time code tikontrol printed in its log when it first started (the terminal or container output). It proves you are the person running tikontrol, so nobody else on your network can set it up. It stops working once you sign in with your MikroTik account.</p>
+      <label class="check"><input type="checkbox" bind:checked={backup} /> Also create a local backup account (optional)</label>
+      {#if backup}
+        <p class="hint">Only needed to get into tikontrol while the router is unreachable. Pick a name that is <b>not</b> your MikroTik username, e.g. <code>local-admin</code>: a local account always wins over a router account with the same name.</p>
+        <label>Username<input type="text" bind:value={name} required maxlength="32" autocomplete="username" /></label>
+        <label>Password (at least 12 characters)<input type="password" bind:value={password} required minlength="12" maxlength="256" autocomplete="new-password" /></label>
+        <label>Repeat password<input type="password" bind:value={password2} required minlength="12" maxlength="256" autocomplete="new-password" /></label>
+      {/if}
       {#if error}<p class="err" role="alert">{error}</p>{/if}
-      <button class="btn primary" disabled={busy}>Create account</button>
+      <button class="btn primary" disabled={busy}>Continue</button>
       <details class="adv"><summary>For advanced users</summary>
         <ul class="small muted">
-          <li>The password is stored as a PBKDF2-SHA256 hash (600,000 rounds) in <code>state.json</code> inside <code>TIK_DATA</code>; the plain password is never kept.</li>
+          <li>The token opens a temporary setup session that can only be used to connect the router; it ends when the first admin signs in. You can add local accounts later under Settings → Control plane.</li>
+          <li>A local password is stored as a PBKDF2-SHA256 hash (600,000 rounds) in <code>state.json</code> inside <code>TIK_DATA</code>; the plain password is never kept.</li>
           <li>Lost the token? Restart tikontrol while no account exists: it prints a new one.</li>
           <li>Sessions end after 30 minutes idle or 12 hours. Five wrong passwords lock the address out for a while.</li>
         </ul>
@@ -91,7 +100,9 @@
         <div class="status" role="status">
           <b>{me.router.host}</b> · {me.router.mode}
           {#if me.error}<p class="err">{me.error}</p><p class="muted small">Fix it on the router, or connect again below. Checking again in 30 s.</p>
-          {:else}<p class="muted small">Connected. Reading the router for the first time… Next: sign out and sign in with your MikroTik account.</p>{/if}
+          {:else if me.setup}<p class="small">Connected. Last step: sign in with your <b>MikroTik username and password</b>. That finishes setup and the setup token stops working.</p>
+            <button type="button" class="btn primary" onclick={logout}>Sign in with MikroTik account</button>
+          {:else}<p class="muted small">Connected. Reading the router for the first time…</p>{/if}
         </div>
       {/if}
 

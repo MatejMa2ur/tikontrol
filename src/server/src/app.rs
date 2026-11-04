@@ -61,7 +61,7 @@ pub fn real_connector() -> Connector {
 
 impl App {
     pub fn new(store: Store, connector: Connector, tls: bool) -> App {
-        let setup = store.state.admins.is_empty().then(|| crate::store::hex(&crate::store::random_bytes::<16>()));
+        let setup = (store.state.admins.is_empty() && !store.state.claimed).then(|| crate::store::hex(&crate::store::random_bytes::<16>()));
         let live = Live::load(&store.dir().join("history.json"));
         App {
             live,
@@ -76,6 +76,18 @@ impl App {
             tls,
             reader: Mutex::new(None),
         }
+    }
+
+    /// First admin signed in: the setup token and any setup sessions stop working, for good.
+    pub fn claim(&self) -> std::io::Result<()> {
+        *lock(&self.setup_token) = None;
+        lock(&self.sessions).remove_user(crate::auth::SETUP_USER);
+        let mut st = lock(&self.store);
+        if st.state.claimed {
+            return Ok(());
+        }
+        st.state.claimed = true;
+        st.save()
     }
 
     pub fn router_cfg(&self) -> Option<RouterCfg> {

@@ -21,9 +21,10 @@ All settings are environment variables.
 ## First start
 
 1. Start tikontrol and read its log. It prints the HTTPS certificate fingerprint and a one-time **setup token**.
-2. Open `https://<host>:8443`, check the certificate fingerprint, and create the admin account with the setup token. The token stops working once the admin exists.
+2. Open `https://<host>:8443`, check the certificate fingerprint, and enter the setup token. It proves you run tikontrol and opens a temporary setup session that can only connect the router. A local backup account is optional; add one only if you want to get in while the router is unreachable.
 3. The setup page shows the RouterOS commands that create a certificate for API-SSL, disable the plain API, and create a `tikontrol-read` group with only `read,api,test`. Run them in a RouterOS terminal and choose the passwords yourself.
-4. Enter the router address, read its certificate, compare the fingerprint with `/certificate/print detail where name=tikontrol-api`, and connect. tikontrol logs in, reads the user's real group policies, and refuses read-only mode if the user has `write`, `sensitive`, `password`, `policy` or `reboot`.
+4. Enter the router address, read its certificate, compare the fingerprint with `:put [/certificate/get tikontrol-api fingerprint]`, and connect. tikontrol logs in, reads the user's real group policies, and refuses read-only mode if the user has `write`, `sensitive`, `password`, `policy` or `reboot`.
+5. Sign in with your MikroTik account. The first admin sign-in finishes setup: the setup token and the setup session stop working for good, also after a restart.
 
 Once the router is connected, anyone with a MikroTik account on it can sign in to tikontrol with that account. tikontrol checks the password by logging in to the router and never stores it. A user whose group has `write` becomes an admin, everyone else a viewer. Local tikontrol accounts always win over a router account with the same name, and keep working when the router is unreachable.
 

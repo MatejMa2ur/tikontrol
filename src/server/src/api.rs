@@ -16,7 +16,7 @@ mod assets {
     include!(concat!(env!("OUT_DIR"), "/assets.rs"));
 }
 
-const PUBLIC: &[(&str, &str)] = &[("GET", "/api/v1/health"), ("POST", "/api/v1/setup/admin"), ("POST", "/api/v1/login")];
+const PUBLIC: &[(&str, &str)] = &[("GET", "/api/v1/health"), ("POST", "/api/v1/setup/admin"), ("POST", "/api/v1/setup/start"), ("POST", "/api/v1/login")];
 
 pub fn handle(app: &Arc<App>, req: Req) -> Resp {
     if !req.path.starts_with("/api/") && req.path != "/mcp" {
@@ -43,6 +43,7 @@ pub fn handle(app: &Arc<App>, req: Req) -> Resp {
         return match (req.method.as_str(), req.path.as_str()) {
             ("GET", "/api/v1/health") => health(app),
             ("POST", "/api/v1/setup/admin") => setup_admin(app, &req),
+            ("POST", "/api/v1/setup/start") => setup_start(app, &req),
             _ => login(app, &req),
         };
     }
@@ -103,7 +104,9 @@ pub fn body<T: for<'de> Deserialize<'de>>(req: &Req) -> Result<T, Resp> {
 }
 
 fn health(app: &App) -> Resp {
-    Resp::json(200, &json!({ "ok": true, "version": env!("CARGO_PKG_VERSION"), "needsSetup": lock(&app.setup_token).is_some() }))
+    // after the router is connected, the next step is signing in (with a MikroTik account), not the token
+    let needs = lock(&app.setup_token).is_some() && lock(&app.store).state.router.is_none() && app.demo.is_none();
+    Resp::json(200, &json!({ "ok": true, "version": env!("CARGO_PKG_VERSION"), "needsSetup": needs }))
 }
 
 #[derive(Deserialize)]
@@ -139,9 +142,38 @@ fn setup_admin(app: &App, req: &Req) -> Resp {
         st.state.admins.clear();
         return Resp::error(500, "could not save state");
     }
-    *tok = None;
     drop(st);
+    drop(tok);
+    if app.claim().is_err() {
+        return Resp::error(500, "could not save state");
+    }
     start_session(app, &b.name, Role::Admin)
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct SetupStart {
+    token: String,
+}
+
+/// The setup token opens a temporary admin session, only to connect the router. It ends, together
+/// with the token, as soon as a real admin signs in (see App::claim).
+fn setup_start(app: &App, req: &Req) -> Resp {
+    let b: SetupStart = match body(req) {
+        Ok(b) => b,
+        Err(r) => return r,
+    };
+    let ip = req.peer.unwrap_or(std::net::IpAddr::from([0, 0, 0, 0]));
+    if let Err(wait) = lock(&app.limiter).check(ip) {
+        return Resp::error(429, "too many attempts").with("retry-after", wait.to_string());
+    }
+    let ok = lock(&app.setup_token).as_ref().is_some_and(|want| ct_eq(want.as_bytes(), b.token.trim().as_bytes()));
+    if !ok {
+        lock(&app.limiter).fail(ip);
+        return Resp::error(403, "wrong or used setup token (it is printed in the tikontrol log)");
+    }
+    lock(&app.limiter).success(ip);
+    start_session(app, auth::SETUP_USER, Role::Admin)
 }
 
 #[derive(Deserialize)]
@@ -163,12 +195,18 @@ fn login(app: &App, req: &Req) -> Resp {
     let admins = lock(&app.store).state.admins.clone();
     if let Some(a) = auth::verify(&admins, &b.name, &b.password) {
         lock(&app.limiter).success(ip);
+        if a.role == Role::Admin && app.claim().is_err() {
+            return Resp::error(500, "could not save state");
+        }
         return start_session(app, &a.name, a.role.clone());
     }
     // not a local account: try it as a MikroTik account (local names always win, so they can't be shadowed)
     if !admins.iter().any(|a| a.name == b.name) {
         if let Some((role, ros)) = router_login(app, &b.name, &b.password) {
             lock(&app.limiter).success(ip);
+            if role == Role::Admin && app.claim().is_err() {
+                return Resp::error(500, "could not save state");
+            }
             let (token, s) = lock(&app.sessions).create_with(&b.name, role, ros);
             return Resp::json(200, &json!({ "user": s.user, "role": s.role, "csrf": s.csrf, "mikrotik": true })).with("set-cookie", auth::session_cookie(&token, app.tls));
         }
@@ -204,7 +242,7 @@ fn me(app: &App, s: &Session) -> Resp {
     Resp::json(
         200,
         &json!({
-            "user": s.user, "role": s.role, "csrf": s.csrf,
+            "user": s.user, "role": s.role, "csrf": s.csrf, "setup": s.user == auth::SETUP_USER,
             "router": if app.demo.is_some() { Some(json!({ "host": "demo", "mode": Mode::ReadOnly })) } else { r.map(|r| json!({ "host": r.host, "mode": r.mode })) },
             "readOnly": r.is_none_or(|r| r.mode == Mode::ReadOnly || (r.writer.is_none() && s.ros.is_none())) || s.role != Role::Admin,
             "mikrotik": s.ros.is_some(),

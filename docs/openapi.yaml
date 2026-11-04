@@ -61,6 +61,12 @@ paths:
       summary: Create the first admin with the one-time setup token from the log (public, once)
       requestBody: { content: { application/json: { schema: { type: object, required: [token, name, password], properties: { token: { type: string }, name: { type: string, maxLength: 32 }, password: { type: string, minLength: 12, maxLength: 256 } } } } } }
       responses: { '200': { description: signed in }, '403': { description: wrong token }, '409': { description: already set up }, '429': { description: rate limited } }
+  /api/v1/setup/start:
+    post:
+      security: []
+      summary: 'First run: trade the setup token from the log for a temporary admin session (user "(setup)") that connects the router. Ends, with the token, when the first admin signs in. Rate limited'
+      requestBody: { content: { application/json: { schema: { type: object, required: [token], properties: { token: { type: string } } } } } }
+      responses: { '200': { description: sets the session cookie; body has user, role, csrf }, '403': { description: wrong or used token }, '429': { description: rate limited } }
   /api/v1/login:
     post:
       security: []

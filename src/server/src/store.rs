@@ -153,6 +153,8 @@ pub struct McpCfg {
 #[derive(Serialize, Deserialize, Clone, Debug, Default)]
 #[serde(default)]
 pub struct State {
+    /// set once the first admin has signed in (local account or MikroTik account); the setup token is gone after that
+    pub claimed: bool,
     pub admins: Vec<Admin>,
     pub router: Option<RouterCfg>,
     pub prefs: Prefs,

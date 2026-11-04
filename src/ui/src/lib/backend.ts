@@ -9,6 +9,10 @@ export type Me = {
   readOnly: boolean
   policies: { user: string; group: string; policy: string[] } | null
   error: string | null
+  /** the temporary session opened with the setup token */
+  setup?: boolean
+  /** signed in with a MikroTik account */
+  mikrotik?: boolean
 }
 
 export type Boot =
@@ -46,17 +50,17 @@ export async function boot(): Promise<Boot> {
     if (r.ok && r.headers.get('content-type')?.includes('json')) health = await r.json()
   } catch { /* no server: mockup mode */ }
   if (!health) return { mode: 'mock' }
-  if (health.needsSetup) return { mode: 'setup' }
   try {
     const me = await api<Me>('/me')
     session.csrf = me.csrf
     session.me = me
-    if (!me.router) return { mode: 'router', me }
+    // the setup session only connects the router; using tikontrol needs a real sign-in
+    if (!me.router || me.setup) return { mode: 'router', me }
     const snapshot = await api('/snapshot').catch(() => null)
     if (!snapshot) return { mode: 'router', me }
     return { mode: 'app', me, snapshot }
   } catch (e) {
-    if (e instanceof ApiError && e.status === 401) return { mode: 'login' }
+    if (e instanceof ApiError && e.status === 401) return health.needsSetup ? { mode: 'setup' } : { mode: 'login' }
     throw e
   }
 }

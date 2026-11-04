@@ -255,6 +255,46 @@ mod tests {
     }
 
     #[test]
+    fn setup_token_opens_a_temporary_session_that_ends_when_a_mikrotik_admin_signs_in() {
+        use crate::store::Store;
+        // a fresh install: no admins, no router
+        let dir = crate::store::tests::tmpdir("claim");
+        let app = Arc::new(crate::app::App::new(Store::open(&dir).unwrap(), crate::app::tests::fake_connector("read,write,api,test"), true));
+        let tok = lock(&app.setup_token).clone().unwrap();
+        let health = |app: &Arc<crate::app::App>| id_of(&handle(app, req("GET", "/api/v1/health", "")))["needsSetup"].clone();
+        assert_eq!(health(&app), true);
+        assert_eq!(handle(&app, req("POST", "/api/v1/setup/start", r#"{"token":"wrong"}"#)).status, 403);
+        let r = handle(&app, req("POST", "/api/v1/setup/start", &format!(r#"{{"token":"{tok}"}}"#)));
+        assert_eq!(r.status, 200);
+        let setup_cookie = r.headers.iter().find(|(k, _)| *k == "set-cookie").unwrap().1.split(';').next().unwrap().split_once('=').unwrap().1.to_string();
+        let setup_csrf = id_of(&r)["csrf"].as_str().unwrap().to_string();
+        // the setup session may prepare the router
+        assert_eq!(handle(&app, with_session(req("GET", "/api/v1/router/setup-commands", ""), &setup_cookie, &setup_csrf)).status, 200);
+        // simulate the router being connected
+        {
+            let mut st = lock(&app.store);
+            let pw = st.sealer.seal("router-password:reader", "router-pass");
+            st.state.router = Some(crate::store::RouterCfg { host: "192.0.2.1".into(), port: 8729, pin: "00".into(), mode: Mode::ReadOnly, reader: Cred { user: "tik-read".into(), password: pw }, writer: None });
+        }
+        assert_eq!(health(&app), false, "router connected: next step is signing in");
+        // the first MikroTik admin finishes setup: token and setup session are gone, also after a restart
+        assert_eq!(login(&app, "alice", "router-pass").1["role"], "admin");
+        assert_eq!(handle(&app, with_session(req("GET", "/api/v1/me", ""), &setup_cookie, &setup_csrf)).status, 401);
+        assert_eq!(handle(&app, req("POST", "/api/v1/setup/start", &format!(r#"{{"token":"{tok}"}}"#))).status, 403);
+        drop(app);
+        let again = crate::app::App::new(Store::open(&dir).unwrap(), crate::app::tests::fake_connector("read,api,test"), true);
+        assert!(lock(&again.setup_token).is_none());
+    }
+
+    #[test]
+    fn a_viewer_signing_in_does_not_finish_setup() {
+        let app = Arc::new(app_with_router("read,api,test", Mode::ReadOnly));
+        assert!(lock(&app.setup_token).is_some());
+        assert_eq!(login(&app, "guest", "router-pass").1["role"], "viewer");
+        assert!(lock(&app.setup_token).is_some(), "only an admin claims the install");
+    }
+
+    #[test]
     fn mikrotik_account_without_write_is_a_viewer_and_keeps_no_password() {
         let app = Arc::new(app_with_router("read,api,test", Mode::ReadWrite));
         admin_session(&app);

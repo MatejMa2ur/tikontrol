@@ -15,6 +15,8 @@ const ITER: u32 = 600_000;
 const ITER: u32 = 1_000;
 
 pub const MIN_PASSWORD: usize = 12;
+/// Name of the temporary session the setup token opens. Contains characters no account name may have.
+pub const SETUP_USER: &str = "(setup)";
 pub const MAX_PASSWORD: usize = 256;
 
 fn derive(salt: &[u8], pw: &str) -> [u8; 32] {
