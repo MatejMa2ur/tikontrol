@@ -1,4 +1,5 @@
-//! The only outbound HTTP client in tikontrol: one POST per call, used by opt-in alert channels.
+//! The only outbound HTTP client in tikontrol: one POST per call, used by opt-in alert channels
+//! (the opt-in speed test in speedtest.rs reuses its TLS roots and URL check).
 //!
 //! - HTTPS verifies the server certificate against the bundled Mozilla roots (`webpki-roots`).
 //! - Plain `http://` is refused unless the host is a loopback or private address (a local ntfy),
@@ -110,7 +111,7 @@ pub fn parse_url(s: &str) -> Result<Url, String> {
     Ok(Url { https, host, port, path })
 }
 
-fn tls_config() -> Arc<ClientConfig> {
+pub fn tls_config() -> Arc<ClientConfig> {
     static CFG: OnceLock<Arc<ClientConfig>> = OnceLock::new();
     CFG.get_or_init(|| {
         let roots = RootCertStore { roots: webpki_roots::TLS_SERVER_ROOTS.to_vec() };
@@ -193,7 +194,7 @@ fn describe(e: std::io::Error) -> String {
     }
 }
 
-fn status_of(head: &[u8]) -> Option<u16> {
+pub fn status_of(head: &[u8]) -> Option<u16> {
     let line = head.split(|b| *b == b'\n').next()?;
     let line = std::str::from_utf8(line).ok()?;
     let mut it = line.split(' ');

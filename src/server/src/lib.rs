@@ -15,6 +15,7 @@ pub mod outbound;
 pub mod policy;
 pub mod ros;
 pub mod routes;
+pub mod speedtest;
 pub mod store;
 pub mod tools;
 pub mod tlscert;

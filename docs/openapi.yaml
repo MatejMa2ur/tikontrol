@@ -88,6 +88,19 @@ paths:
       summary: Internet Activity series
       parameters: [{ name: range, in: query, schema: { enum: ['1H', '1D', '1W'] } }]
       responses: { '200': { description: '{ t[], clients[], rx[], tx[], peak: { rx, tx } (highest minute average in the range, bit/s), peakAll: { rx, tx } (all stored history) }' } }
+  /api/v1/speedtest:
+    get:
+      summary: Speed test endpoint and the last 50 results (oldest first; down/up in bit/s, ping in ms); wait = seconds until the next run is allowed
+      responses: { '200': { description: '{ url, default, results[{ t, down, up, ping, host }], running, wait, minGap }' } }
+    put:
+      security: [{ session: [], csrf: [] }]
+      summary: Set the endpoint (admin). HTTPS only, no query; null restores the default (https://speed.cloudflare.com)
+      requestBody: { content: { application/json: { schema: { type: object, properties: { url: { type: string, nullable: true } } } } } }
+      responses: { '200': { description: ok }, '400': { description: invalid URL }, '403': { description: not admin } }
+    post:
+      security: [{ session: [], csrf: [] }]
+      summary: Run a speed test now (admin, opt-in; contacts the endpoint, Cloudflare by default). Measures tikontrol's host connection. One at a time, at most one per 3 minutes; about 25 MB down, 10 MB up, 10 s per direction
+      responses: { '200': { description: the new result }, '403': { description: not admin }, '429': { description: too soon or already running (retry-after) }, '502': { description: the endpoint failed } }
   /api/v1/health/internet:
     get: { summary: 'Last 12 h in 48 slots: ok | warn | bad | none', responses: { '200': { description: ok } } }
   /api/v1/history/client:

@@ -68,7 +68,6 @@ export const prefs = $state({
   // dashboard layout: card ids in order, and the hidden ones (pages/Dashboard.svelte)
   cardOrder: load<string[]>('tik.cardOrder', []),
   hiddenCards: load<string[]>('tik.hiddenCards', []),
-  speedtests: load<{ at: string; down: number; up: number; ping: number }[]>('tik.speedtests', []),
 })
 // Names, icons, notes, groups, hidden clients and the dashboard layout live on the server when there is one (shared by every
 // browser and by MCP); the theme (mode, palette, design) and "show RouterOS" stay per browser, which is
@@ -83,7 +82,6 @@ $effect.root(() => {
     localStorage.setItem('tik.palette', JSON.stringify(prefs.palette))
     localStorage.setItem('tik.design', JSON.stringify(prefs.design))
     localStorage.setItem('tik.showRos', JSON.stringify(prefs.showRos))
-    localStorage.setItem('tik.speedtests', JSON.stringify(prefs.speedtests))
     applyTheme(document.documentElement, prefs.theme, prefs.palette, prefs.design)
   })
   $effect(() => {

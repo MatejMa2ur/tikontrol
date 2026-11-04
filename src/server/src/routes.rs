@@ -15,6 +15,7 @@ pub fn extra(app: &Arc<App>, req: &Req, s: &Session) -> Option<Resp> {
     }
     if let Some(r) = crate::alerts::route(app, req, s) { return Some(r) }
     if let Some(r) = crate::tools::route(app, req, s) { return Some(r) }
+    if let Some(r) = crate::speedtest::route(app, req, s) { return Some(r) }
     if let Some(r) = crate::admins::route(app, req, s) { return Some(r) }
     Some(match (req.method.as_str(), req.path.as_str()) {
         ("GET", "/api/v1/live") => live(app),

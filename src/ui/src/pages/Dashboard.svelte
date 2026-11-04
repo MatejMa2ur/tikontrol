@@ -6,6 +6,26 @@
   import Icon from '../lib/Icon.svelte'
   import Ros from '../lib/Ros.svelte'
   import { prefs } from '../lib/live.svelte'
+  import { isBackend } from '../lib/data'
+  import { api, session } from '../lib/backend'
+
+  // speed test (server side, src/server/src/speedtest.rs)
+  type Run = { t: number; down: number; up: number; ping: number; host: string }
+  let st = $state<{ url: string; default: string; results: Run[]; running: boolean; wait: number }>({ url: '', default: 'https://speed.cloudflare.com', results: [], running: false, wait: 0 })
+  let stUrl = $state(''), stErr = $state('')
+  const testHost = $derived((() => { try { return new URL(st.url || st.default).hostname } catch { return '?' } })())
+  const lastTest = $derived(st.results.at(-1))
+  const loadTest = () => api<typeof st>('/speedtest').then((v) => { st = v; stUrl = v.url === v.default ? '' : v.url }).catch(() => {})
+  if (isBackend) loadTest()
+  async function runTest() {
+    stErr = ''; st.running = true
+    try { await api('/speedtest', { method: 'POST' }) } catch (e) { stErr = (e as Error).message }
+    await loadTest()
+  }
+  async function saveUrl() {
+    stErr = ''
+    try { await api('/speedtest', { method: 'PUT', body: { url: stUrl.trim() || null } }); await loadTest() } catch (e) { stErr = (e as Error).message }
+  }
 
   const online = clients.filter((c) => c.online)
   const wifiClients = online.filter((c) => !c.wired)
@@ -115,9 +135,24 @@
     <div class="health" title="Internet health, last 12 hours">{#each health as h}<i class={h}></i>{/each}</div>
     <div class="row between tiny muted"><span>-12h</span><span>Now</span></div>
     <hr />
-    <div class="row between"><b>Speed Test</b><button class="link small" title="Phase 3">Run Now</button></div>
-    <div class="tiny muted">Not scheduled</div>
-    <div class="row between last"><b>Last Speed Test</b><span class="tiny muted">Never</span></div>
+    <div class="row between"><b>Speed Test</b>
+      {#if isBackend && session.me?.role === 'admin'}<button class="link small" disabled={st.running || st.wait > 0} onclick={runTest} title={st.wait > 0 ? `Next run possible in ${Math.ceil(st.wait / 60)} min` : `Contacts ${testHost}`}>{st.running ? 'Running…' : 'Run Now'}</button>{/if}
+    </div>
+    <div class="tiny muted">{#if isBackend}Opt-in: runs only when an admin presses Run Now and contacts <b>{testHost}</b>{testHost === 'speed.cloudflare.com' ? ' (Cloudflare)' : ''}. It measures the connection of the host tikontrol runs on, which is the router's line only when tikontrol runs on the router.{:else}Needs the tikontrol server.{/if}</div>
+    {#if stErr}<div class="tiny bad" role="alert">{stErr}</div>{/if}
+    <div class="row between last"><b>Last Speed Test</b>{#if lastTest}<span class="tiny" title={new Date(lastTest.t * 1000).toLocaleString()}><span class="down">↓ {bps(lastTest.down)}</span> <span class="up">↑ {bps(lastTest.up)}</span> · {lastTest.ping} ms</span>{:else}<span class="tiny muted">Never</span>{/if}</div>
+    {#if st.results.length || (isBackend && session.me?.role === 'admin')}
+      <details class="tiny"><summary>History ({st.results.length})</summary>
+        <table class="mini">
+          <thead><tr><th>When</th><th class="r">Down</th><th class="r">Up</th><th class="r">Ping</th></tr></thead>
+          <tbody>{#each [...st.results].reverse() as r}<tr><td>{new Date(r.t * 1000).toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}</td><td class="r down">{bps(r.down)}</td><td class="r up">{bps(r.up)}</td><td class="r">{r.ping} ms</td></tr>{/each}</tbody>
+        </table>
+        {#if session.me?.role === 'admin'}
+          <label class="row">Endpoint <input type="url" bind:value={stUrl} placeholder={st.default} aria-label="Speed test endpoint (HTTPS)" /></label>
+          <button class="link small" onclick={saveUrl}>Save endpoint</button> <span class="muted">Must speak Cloudflare's /__down and /__up.</span>
+        {/if}
+      </details>
+    {/if}
     <hr />
     <div class="row between"><b>Default WiFi Speeds</b></div>
     <div class="tiny muted">Channel Widths (MHz)</div>
