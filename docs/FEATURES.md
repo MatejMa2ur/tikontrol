@@ -11,7 +11,7 @@ Clean-room: we copy the behaviour, never the assets.
 **Backing:** `ROS` = RouterOS API on the router · `CMR` = MikroTik CMR server · `tik` = our own logic/DB · `✗` = nothing can back it
 
 <!-- progress:start -->
-**Progress:** 5 ✅ · 32 🟨 · 155 🎨 · 26 ⬜ · 8 ➖ (226 items, 2% done)
+**Progress:** 5 ✅ · 36 🟨 · 155 🎨 · 22 ⬜ · 8 ➖ (226 items, 2% done)
 <!-- progress:end -->
 
 ---
@@ -66,7 +66,7 @@ Clean-room: we copy the behaviour, never the assets.
 | Gateway column (WAN/gateway IP, uptime, latency to 3 resolvers, channel widths) | ROS | 1 | 🎨 |
 | WiFi experience / satisfaction score | tik (signal + rate heuristic) | 2 | 🎨 |
 | Recent critical events | ROS log + tik | 1 | 🎨 |
-| Firmware update available banner | ROS / CMR | 2 | ⬜ |
+| Firmware update available banner | ROS / CMR | 2 | 🟨 |
 | Speed test (run + history) | tik container client | 3 | ⬜ |
 | Customisable widgets / layout | tik | 4 | ⬜ |
 
@@ -313,9 +313,9 @@ Not a UniFi feature: this is our own addition. We want a way to reach tikontrol 
 
 | Feature | Backing | Phase | Status |
 |---|---|---|---|
-| Decide how users open tikontrol from RouterOS | tik | 2 | ⬜ |
-| Package tikontrol as a custom RouterOS App, with a `ui-url` link | ROS `/app` (arm64, x86) | 4 | ⬜ |
-| Link with our own icon on the WebFig login page (`show-in-webfig`) | ROS `/app` | 4 | ⬜ |
+| Decide how users open tikontrol from RouterOS | tik | 2 | 🟨 |
+| Package tikontrol as a custom RouterOS App, with a `ui-url` link | ROS `/app` (arm64, x86) | 4 | 🟨 |
+| Link with our own icon on the WebFig login page (`show-in-webfig`) | ROS `/app` | 4 | 🟨 |
 | Check on hardware how an App appears in WinBox and what opening it does | ROS | 0 | ⬜ |
 
 ## Read-only mode

@@ -241,6 +241,9 @@ const insights: Insight[] = [
   ...(flappers.length
     ? [{ level: 'warn' as const, title: `${flappers.length} device${flappers.length > 1 ? 's' : ''} switching bands`, detail: `${flappers.map((c) => c.name).join(', ')} keep hopping between 2.4 and 5 GHz on the same SSID. Usually weak 5 GHz signal at their location.`, ros: '/interface/wireless/registration-table/print' }]
     : []),
+  ...(raw.update?.['latest-version'] && raw.update['installed-version'] && raw.update['latest-version'] !== raw.update['installed-version']
+    ? [{ level: 'warn' as const, title: `RouterOS ${raw.update['latest-version']} is available`, detail: `You run ${raw.update['installed-version']} on the ${raw.update.channel ?? 'stable'} channel. Read the changelog and take a backup before upgrading.`, ros: '/system/package/update/check-for-updates' }]
+    : []),
   ...(router.firmware && router.firmwareUpgrade && router.firmware !== router.firmwareUpgrade
     ? [{ level: 'warn' as const, title: 'RouterBOOT upgrade pending', detail: `Firmware ${router.firmware} → ${router.firmwareUpgrade} is ready and applies on next reboot.`, ros: '/system/routerboard/upgrade' }]
     : []),

@@ -1,0 +1,38 @@
+# tikontrol as a custom RouterOS App (RouterOS 7.22+, arm64 or x86 only).
+#
+# UNTESTED: MikroTik documents custom app YAML only briefly. This follows the compose-like shape the
+# Apps manual and third-party examples show; check every field on your RouterOS version first
+# (docs/NEXT_STEPS.md, "Opening tikontrol from RouterOS").
+#
+# Install (after building and uploading the image, see docs/DEPLOY.md):
+#   /app/add yaml=[/file/get tikontrol-app.yaml contents]
+# The app's `ui-url` then links to tikontrol, and `show-in-webfig` puts a link with our icon on the
+# WebFig login page.
+name: tikontrol
+descr: Read-only-by-default web UI for this router
+page: https://github.com/MatejMa2ur/tikontrol
+category: networking
+icon: https://raw.githubusercontent.com/MatejMa2ur/tikontrol/master/src/ui/public/favicon.svg
+default-credentials: "none: create the admin with the setup token from the app log"
+url-path: /
+auto-update: false
+services:
+  tikontrol:
+    image: tikontrol:latest
+    container_name: tikontrol
+    user: "65532:65532"
+    restart: unless-stopped
+    # never privileged; tikontrol needs no capabilities
+    privileged: false
+    environment:
+      TIK_DATA: /data
+      TIK_LISTEN: 0.0.0.0:8443
+      TIK_POLL: "30"
+    ports:
+      - 8443:8443/tcp:web
+    volumes:
+      - tikontrol-data:/data
+    # keep tikontrol small and bounded on the router
+    mem_limit: 64m
+volumes:
+  tikontrol-data: {}

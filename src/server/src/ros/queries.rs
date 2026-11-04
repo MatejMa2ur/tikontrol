@@ -108,6 +108,9 @@ const QUERIES: &[Q] = &[
     q("kidControl", "/ip/kid-control/print", &["name", "rate-limit", "disabled"]),
     q("services", "/ip/service/print", &["name", "port", "disabled", "address", "certificate"]),
     q("log", "/log/print", &["time", "topics", "message"]).arrays(&["topics"]),
+    // optional: MikroTik CMR (7.26+, `cmr` package). Routers without it just report an error for this key.
+    // ponytail: field names from the CMR manual, unverified over the API
+    q("cmrDevices", "/cmr/device/print", &["name", "identity", "model", "version", "state", "address", "labels"]).arrays(&["labels"]),
 ];
 
 /// Fields that are text even when they look like numbers (a host named "1234" stays a string).
