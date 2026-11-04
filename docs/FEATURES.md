@@ -11,7 +11,7 @@ Clean-room: we copy the behaviour, never the assets.
 **Backing:** `ROS` = RouterOS API on the router · `CMR` = MikroTik CMR server · `tik` = our own logic/DB · `✗` = nothing can back it
 
 <!-- progress:start -->
-**Progress:** 1 ✅ · 31 🟨 · 155 🎨 · 31 ⬜ · 8 ➖ (226 items, 0% done)
+**Progress:** 5 ✅ · 32 🟨 · 155 🎨 · 26 ⬜ · 8 ➖ (226 items, 2% done)
 <!-- progress:end -->
 
 ---
@@ -302,11 +302,11 @@ Not a UniFi feature: this is our own addition. Light or dark, the colour theme a
 
 | Feature | Backing | Phase | Status |
 |---|---|---|---|
-| Colour themes: choose a palette, in both light and dark | tik | 2 | ⬜ |
-| Design themes: corner rounding, spacing and density, borders and shadows, fonts, icon style | tik | 2 | ⬜ |
-| MikroTik-style colour theme: own palette based on MikroTik's current look, no logos or implied endorsement | tik | 2 | ⬜ |
-| Theme picker with live preview, saved per user | tik | 2 | ⬜ |
-| Every theme meets WCAG 2.2 AA contrast | tik | 2 | ⬜ |
+| Colour themes: choose a palette, in both light and dark | tik | 2 | ✅ |
+| Design themes: corner rounding, spacing and density, borders and shadows, fonts, icon style | tik | 2 | 🟨 |
+| MikroTik-style colour theme: own palette based on MikroTik's current look, no logos or implied endorsement | tik | 2 | ✅ |
+| Theme picker with live preview, saved per user | tik | 2 | ✅ |
+| Every theme meets WCAG 2.2 AA contrast | tik | 2 | ✅ |
 
 ## Opening tikontrol from RouterOS
 Not a UniFi feature: this is our own addition. We want a way to reach tikontrol from RouterOS, and the method is still undecided. A real tab inside WinBox looks impossible: no plugin or extension system was found, though this is untested. Findings are in [research/winbox_integration.md](research/winbox_integration.md).

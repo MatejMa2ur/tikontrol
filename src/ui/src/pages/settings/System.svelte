@@ -4,6 +4,9 @@
   import Section from '../../lib/ui/Section.svelte'
   import Field from '../../lib/ui/Field.svelte'
   import Toggle from '../../lib/ui/Toggle.svelte'
+  import Icon from '../../lib/Icon.svelte'
+  import { prefs } from '../../lib/live.svelte'
+  import { designs, palettes } from '../../lib/themes'
 
   const clock: any = raw.clock ?? {}
   const ntp: any = raw.ntp ?? {}
@@ -44,6 +47,30 @@
     <button class="btn" onclick={() => review(`Run ${diag.tool}`, [diag.tool === 'ping' ? `/ping ${diag.host} count=5` : diag.tool === 'traceroute' ? `/tool/traceroute ${diag.host} count=1` : diag.tool === 'dns' ? `:put [:resolve ${diag.host}]` : '/tool/torch interface=bridge duration=10'])}>Run</button></div>
 </Section>
 
+<Section title="Appearance" desc="Changes show right away and are saved in this browser, not on the router.">
+  <Field label="Mode"><div class="opts" role="radiogroup" aria-label="Mode">
+    {#each [['dark', 'Dark'], ['light', 'Light']] as const as [v, l]}<label class="opt" class:on={prefs.theme === v}><input type="radio" name="mode" value={v} bind:group={prefs.theme} />{l}</label>{/each}
+  </div></Field>
+  <Field label="Colours" help="Every palette meets WCAG AA contrast in light and dark"><div class="opts" role="radiogroup" aria-label="Colours">
+    {#each Object.entries(palettes) as [id, p]}{@const c = p[prefs.theme]}
+      <label class="opt" class:on={prefs.palette === id}><input type="radio" name="palette" value={id} bind:group={prefs.palette} />
+        <span class="sw" style:background={c.bg} style:border-color={c.line} aria-hidden="true"><i style:background={c.panel}></i><i style:background={c.accentBg}></i><i style:background={c.text}></i></span>{p.label}</label>
+    {/each}
+  </div></Field>
+  <Field label="Design" help="Corners, spacing, borders or shadows, font and icon lines"><div class="opts" role="radiogroup" aria-label="Design">
+    {#each Object.entries(designs) as [id, d]}
+      <label class="opt" class:on={prefs.design === id}><input type="radio" name="design" value={id} bind:group={prefs.design} />
+        <span class="shape" style:border-radius={d.radiusSm} style:border-width={d.cardBorder} style:box-shadow={d.cardShadow} aria-hidden="true"></span>{d.label}</label>
+    {/each}
+  </div></Field>
+  <div class="preview" role="group" aria-label="Preview">
+    <div class="card"><div class="row between"><b>Preview</b><span class="pill ok"><span class="dot ok"></span>Online</span></div>
+      <p class="muted small">Muted text, <a href="#/settings/system">a link</a> and status: <span class="pill warn">Warning</span> <span class="pill bad">Offline</span></p>
+      <div class="row"><button class="btn primary" type="button">Primary</button><button class="btn" type="button"><Icon name="edit" size={14} />Button</button><Toggle checked label="Example switch" /></div>
+    </div>
+  </div>
+</Section>
+
 <Section title="Safe apply" desc="Every change arms an automatic undo. If you don't press Keep in time, the router rolls back.">
   <Field label="Revert after"><select bind:value={safe.minutes}><option value={2}>2 minutes</option><option value={5}>5 minutes</option><option value={10}>10 minutes</option></select></Field>
 </Section>
@@ -55,4 +82,14 @@
   .add { display: flex; gap: 6px; flex-wrap: wrap; }
   .r { text-align: right; margin-top: 10px; }
   .small { font-size: 12px; }
+  .opts { display: flex; flex-wrap: wrap; gap: 6px; justify-content: flex-end; }
+  .opt { display: inline-flex; align-items: center; gap: 7px; padding: 5px 10px; border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--panel2); cursor: pointer; font-weight: 550; }
+  .opt.on { border-color: var(--accent); }
+  .opt input { margin: 0; accent-color: var(--accent-bg); }
+  .sw { display: inline-flex; gap: 2px; padding: 2px; border: 1px solid; border-radius: 4px; }
+  .sw i { width: 9px; height: 12px; border-radius: 2px; }
+  .shape { width: 18px; height: 14px; background: var(--line); border: 0 solid var(--muted); }
+  .preview { margin-top: 12px; padding: var(--pad); background: var(--bg); border-radius: var(--radius); }
+  .preview p { margin: 8px 0 10px; }
+  @media (max-width: 700px) { .opts { justify-content: flex-start; } }
 </style>

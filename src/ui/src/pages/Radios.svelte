@@ -104,7 +104,7 @@
   .b2 { background: color-mix(in srgb, var(--warn) 18%, transparent); color: var(--warn); }
   .plan { position: relative; cursor: crosshair; }
   .plan img { width: 100%; border-radius: 8px; display: block; }
-  .ap { position: absolute; transform: translate(-50%, -50%); width: 28px; height: 28px; border-radius: 50%; display: grid; place-items: center; background: var(--accent); color: #fff; box-shadow: 0 0 0 30px color-mix(in srgb, var(--accent) 15%, transparent); }
+  .ap { position: absolute; transform: translate(-50%, -50%); width: 28px; height: 28px; border-radius: 50%; display: grid; place-items: center; background: var(--accent-bg); color: #fff; box-shadow: 0 0 0 30px color-mix(in srgb, var(--accent) 15%, transparent); }
   .toastbox { position: fixed; bottom: 20px; right: 20px; z-index: 30; max-width: 380px; box-shadow: var(--shadow); }
   .small { font-size: 12px; }
   @media (max-width: 900px) { .cols { grid-template-columns: minmax(0, 1fr); } }
