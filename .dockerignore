@@ -1,0 +1,6 @@
+# keep the build context small and never send local router data to the builder
+**/target
+**/node_modules
+src/ui/dist
+**/snapshot.json
+.git

@@ -1,6 +1,6 @@
 # Deploying tikontrol
 
-tikontrol is one static binary (about 2 MB, with the UI built in) that uses a few MB of RAM. It runs on a home server (Docker), or as a RouterOS container on an arm64 or x86 router with enough storage. Read [FEASIBILITY.md](FEASIBILITY.md) first: a home server is the safer host, because a container on the router itself cannot notice when a change cuts the LAN off.
+tikontrol is one static binary (about 2.5 MB, with the UI built in) that uses a few MB of RAM. It runs on a home server (Docker), or as a RouterOS container on an arm64 or x86 router with enough storage. Read [FEASIBILITY.md](FEASIBILITY.md) first: a home server is the safer host, because a container on the router itself cannot notice when a change cuts the LAN off.
 
 Read-only is the default. Nothing is exposed to the internet by default: do not forward port 8443, use WireGuard or Back To Home to reach it from outside.
 
@@ -45,12 +45,40 @@ docker logs tikontrol   # setup token and certificate fingerprint
 
 ## RouterOS container
 
-Untested on hardware so far (see [NEXT_STEPS.md](NEXT_STEPS.md)). Needs RouterOS 7.18 or later, the `container` package, device-mode containers enabled (a physical button press), and external storage. The hAP ac² is too small.
+Untested on router hardware so far (see [NEXT_STEPS.md](NEXT_STEPS.md)). Needs RouterOS 7.18 or later, the `container` package, device-mode containers enabled (a physical button press), and external storage. The hAP ac² is too small.
+
+### Build the image
+
+The Containerfile builds `linux/arm/v7`, `linux/arm64` and `linux/amd64` (static musl binary, `scratch`, UID 65532). Both build stages run natively on the build machine and cross-compile with `cargo-zigbuild`, so no QEMU is needed. Check your router's architecture with `/system/resource/print` (`architecture-name`: `arm64`, `arm` or `x86_64`).
+
+RouterOS loads a `docker save` tarball of a single architecture, so build one per router:
 
 ```sh
-docker buildx build --platform linux/arm64 -f Containerfile -t tikontrol --output type=docker .
-docker save tikontrol > tikontrol.tar   # upload to the router's USB disk
+# arm64 (hAP ax², ax³, be³, RB5009, CCR2xxx)
+docker buildx build --platform linux/arm64 -f Containerfile -t tikontrol:arm64 --output type=docker .
+docker save tikontrol:arm64 > tikontrol-arm64.tar
+
+# arm/v7 (32-bit ARM: hAP ac³, RB4011, ...)
+docker buildx build --platform linux/arm/v7 -f Containerfile -t tikontrol:armv7 --output type=docker .
+docker save tikontrol:armv7 > tikontrol-armv7.tar
+
+# amd64 (CHR, x86 routers, home servers)
+docker buildx build --platform linux/amd64 -f Containerfile -t tikontrol:amd64 --output type=docker .
 ```
+
+All three at once need a `docker-container` builder and an OCI archive (it holds every architecture, so it is for a registry or a home server, not for RouterOS):
+
+```sh
+docker buildx create --name tik --driver docker-container --use
+docker buildx build --platform linux/arm/v7,linux/arm64,linux/amd64 -f Containerfile \
+    -t tikontrol --output type=oci,dest=tikontrol-multiarch.tar .
+```
+
+Sizes measured on one build (they change with the code): the image is about 2.4 MB for arm/v7, 2.5 MB for arm64 and 3.0 MB for amd64, and the `docker save` tarball is about the same size (1.3 to 1.5 MB gzipped). The single-architecture builds were run on an arm64 Mac with Docker Desktop. The combined OCI build and running on a router have not been tested yet.
+
+### Run it on the router
+
+Upload the tarball to the router's USB disk (Files, drag and drop, or `scp`), then:
 
 ```
 /interface/veth/add name=veth-tik address=172.17.0.2/24 gateway=172.17.0.1

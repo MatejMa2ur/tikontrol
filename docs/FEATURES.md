@@ -294,7 +294,7 @@ Clean-room: we copy the behaviour, never the assets.
 | Mobile app | ✗ → responsive PWA instead | – | ➖ |
 | Responsive layout / PWA install | tik | 1 | 🟨 |
 | Dark / light theme | tik | 1 | ✅ |
-| Runs as RouterOS container (arm/v7, arm64) | tik build | 1 | ⬜ |
+| Runs as RouterOS container (arm/v7, arm64) | tik build | 1 | 🟨 |
 | Runs on Docker (home server) | tik build | 0 | 🟨 |
 | CHR dev/test router | – | 0 | ⬜ |
 

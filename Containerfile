@@ -1,9 +1,10 @@
 # tikontrol container image: one static binary, no shell, no package manager, non-root.
-# Build for the router's architecture, for example:
-#   docker buildx build --platform linux/arm64,linux/arm/v7,linux/amd64 -f Containerfile -t tikontrol .
-# RouterOS needs a tarball: docker save tikontrol > tikontrol.tar (see docs/DEPLOY.md).
+# Multi-arch: linux/arm/v7, linux/arm64, linux/amd64 (and linux/arm/v5). Both build stages run on the
+# build machine's own architecture and cross-compile with cargo-zigbuild, so no QEMU is needed.
+#   docker buildx build --platform linux/arm64 -f Containerfile -t tikontrol:arm64 --output type=docker .
+# RouterOS needs one tarball per architecture: see docs/DEPLOY.md.
 
-FROM node:22-alpine AS ui
+FROM --platform=$BUILDPLATFORM node:22-alpine AS ui
 WORKDIR /ui
 COPY src/ui/package.json src/ui/package-lock.json ./
 RUN npm ci --ignore-scripts
