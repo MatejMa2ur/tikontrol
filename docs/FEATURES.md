@@ -11,7 +11,7 @@ Clean-room: we copy the behaviour, never the assets.
 **Backing:** `ROS` = RouterOS API on the router · `CMR` = MikroTik CMR server · `tik` = our own logic/DB · `✗` = nothing can back it
 
 <!-- progress:start -->
-**Progress:** 6 ✅ · 186 🟨 · 21 🎨 · 7 ⬜ · 8 ➖ (228 items, 3% done)
+**Progress:** 6 ✅ · 188 🟨 · 19 🎨 · 7 ⬜ · 8 ➖ (228 items, 3% done)
 <!-- progress:end -->
 
 ---
@@ -40,7 +40,7 @@ Clean-room: we copy the behaviour, never the assets.
 | P18 | Settings → Routing | Settings · Routing | 2 | 🟨 |
 | P19 | Settings → Profiles | Settings · Profiles | 3 |🎨 |
 | P20 | Settings → Control Plane (admins, backups, updates, integrations, console) | Settings · System | 2 | 🟨 |
-| P21 | Settings → System (site, logging, SNMP, device auth) | Settings · System | 2 |🎨 |
+| P21 | Settings → System (site, logging, SNMP, device auth) | Settings · System | 2 | 🟨 |
 | P22 | Site Manager (multi-site, cloud) | Sites switcher | 4 | ⬜ |
 | P23 | Login / onboarding wizard | Login + first-run wizard | 1 | 🟨 |
 | P24 | Global search (⌘K): clients, devices, SSIDs, settings pages | Command palette | 2 | 🟨 |
@@ -282,7 +282,7 @@ Clean-room: we copy the behaviour, never the assets.
 | Site settings (name, country, timezone, NTP) | ROS `/system/clock`, ntp | 2 | 🟨 |
 | SNMP | ROS `/snmp` | 3 | 🟨 |
 | Remote logging / NetFlow export settings | ROS | 3 | 🟨 |
-| Data retention settings | tik | 2 |🎨 |
+| Data retention settings | tik | 2 | 🟨 |
 | Device auth / SSH settings, service hardening | ROS `/ip/service` | 2 | 🟨 |
 | Debug tools: ping, traceroute, packet capture | ROS `/ping`, `/tool/traceroute`, sniffer | 3 | 🟨 |
 | Safe apply (auto-revert) | tik + ROS scheduler | 3 | 🟨 |

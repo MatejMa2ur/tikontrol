@@ -40,6 +40,28 @@ pub fn extra(app: &Arc<App>, req: &Req, s: &Session) -> Option<Resp> {
             Resp::json(200, &json!(v))
         }
         ("GET", "/api/v1/events") => events(app, req),
+        ("GET", "/api/v1/retention") => Resp::json(200, &json!({ "days": crate::live::retention_days(lock(&app.store).state.history_days), "max": crate::live::MAX_DAYS })),
+        ("PUT", "/api/v1/retention") if s.role != crate::store::Role::Admin => Resp::error(403, "admin role required"),
+        ("PUT", "/api/v1/retention") => {
+            #[derive(serde::Deserialize)]
+            #[serde(deny_unknown_fields)]
+            struct B {
+                days: u64,
+            }
+            let b: B = match crate::api::body(req) {
+                Ok(b) => b,
+                Err(r) => return Some(r),
+            };
+            if b.days == 0 || b.days > crate::live::MAX_DAYS {
+                return Some(Resp::error(400, &format!("days must be 1-{}", crate::live::MAX_DAYS)));
+            }
+            let mut st = lock(&app.store);
+            st.state.history_days = b.days;
+            let r = st.save();
+            drop(st);
+            lock(&app.live.history).prune(now().saturating_sub(b.days * 86400));
+            crate::api::saved(r)
+        }
         ("GET", "/api/v1/flows") => {
             let (mut v, countries) = {
                 let a = lock(crate::flows::agg());

@@ -21,6 +21,13 @@ pub const HOURS: usize = 90 * 24;
 pub const CLIENT_HOURS: usize = 7 * 24;
 pub const MAX_EVENTS: usize = 1000;
 pub const MAX_CLIENTS: usize = 2000;
+/// Longest history kept (hour points); the default when no retention is set.
+pub const MAX_DAYS: u64 = 90;
+
+/// Stored setting → days kept (0 = default).
+pub fn retention_days(d: u64) -> u64 {
+    if d == 0 { MAX_DAYS } else { d.min(MAX_DAYS) }
+}
 
 #[derive(Serialize, Deserialize, Clone, Copy, Debug, Default, PartialEq)]
 pub struct Point {
@@ -81,6 +88,18 @@ impl History {
             }
         }
         self.acc.push(p);
+    }
+
+    /// Data retention (Settings · System): drops everything older than `cutoff`.
+    pub fn prune(&mut self, cutoff: u64) {
+        self.minutes.retain(|p| p.t >= cutoff);
+        self.hours.retain(|p| p.t >= cutoff);
+        self.events.retain(|e| e.t >= cutoff);
+        self.clients.retain(|_, q| {
+            q.retain(|x| x.0 >= cutoff);
+            !q.is_empty()
+        });
+        self.seen.retain(|_, x| x.1 >= cutoff);
     }
 
     pub fn event(&mut self, e: Ev) {
@@ -391,6 +410,8 @@ pub fn spawn(app: Arc<App>, path: PathBuf) {
                 }
             }
             if now() - last_save >= 300 {
+                let days = retention_days(lock(&app.store).state.history_days);
+                lock(&app.live.history).prune(now().saturating_sub(days * 86400));
                 app.live.save(&path);
                 last_save = now();
             }

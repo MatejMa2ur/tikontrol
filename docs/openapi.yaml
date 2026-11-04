@@ -142,6 +142,13 @@ paths:
       summary: 'Run one read command as the reader: a print of a menu the snapshot reads (with its fixed proplist) or `/interface/monitor-traffic <name> once`. Rate limited with the other tools'
       requestBody: { content: { application/json: { schema: { type: object, required: [command], properties: { command: { type: string } } } } } }
       responses: { '200': { description: '{ tool, command, rows[], note }' }, '400': { description: not on the read-only list }, '429': { description: too soon } }
+  /api/v1/retention:
+    get: { summary: "Days of tikontrol's own history kept (traffic, events, per-client usage)", responses: { '200': { description: '{ days, max }' } } }
+    put:
+      security: [{ session: [], csrf: [] }]
+      summary: Set retention in days (admin, 1-max); older history is deleted right away
+      requestBody: { content: { application/json: { schema: { type: object, required: [days], properties: { days: { type: integer } } } } } }
+      responses: { '200': { description: ok }, '400': { description: out of range }, '403': { description: not admin } }
   /api/v1/prefs:
     get: { summary: Shared names, icons, notes, groups and hidden clients, responses: { '200': { description: ok } } }
     put: { security: [{ session: [], csrf: [] }], summary: Replace prefs (size-capped), responses: { '200': { description: ok }, '413': { description: too large } } }

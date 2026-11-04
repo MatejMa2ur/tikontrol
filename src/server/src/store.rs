@@ -169,6 +169,8 @@ pub struct State {
     pub site: serde_json::Value,
     /// local API keys (hashed), see apikeys.rs
     pub api_keys: Vec<crate::apikeys::ApiKey>,
+    /// days of tikontrol's own history to keep (0 = default, see live::retention_days)
+    pub history_days: u64,
 }
 
 pub struct Store {

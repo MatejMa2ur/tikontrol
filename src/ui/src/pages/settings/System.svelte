@@ -1,7 +1,7 @@
 <script lang="ts">
   import { raw, router, isBackend } from '../../lib/data'
   import { review } from '../../lib/apply.svelte'
-  import { api } from '../../lib/backend'
+  import { api, session } from '../../lib/backend'
   import Section from '../../lib/ui/Section.svelte'
   import Field from '../../lib/ui/Field.svelte'
   import Toggle from '../../lib/ui/Toggle.svelte'
@@ -21,8 +21,17 @@
 
   const servers = (Array.isArray(ntp.servers) ? ntp.servers : []).join(', ')
   let site = $state({ name: router.identity, tz: clock['time-zone-name'] ?? 'UTC', ntp: !!ntp.enabled, servers: servers || 'pool.ntp.org' })
-  let mon = $state({ snmp: !!snmp.enabled, contact: snmp.contact ?? '', location: snmp.location ?? '', syslog: '', topics: 'info,warning,error,critical', flow: '', flowVersion: '9', retention: '30' })
+  let mon = $state({ snmp: !!snmp.enabled, contact: snmp.contact ?? '', location: snmp.location ?? '', syslog: '', topics: 'info,warning,error,critical', flow: '', flowVersion: '9' })
   let safe = $state({ minutes: 5 })
+  // tikontrol's own history (src/server/src/live.rs prune): days kept, stored on the tikontrol server
+  const isAdmin = isBackend && session.me?.role === 'admin'
+  let keep = $state({ days: 90, saved: 90, msg: '' })
+  if (isBackend) api<{ days: number }>('/retention').then((r) => { keep.days = keep.saved = r.days }).catch(() => {})
+  async function saveRetention() {
+    keep.msg = ''
+    if (+keep.days < keep.saved && !confirm('Delete history older than this now?')) return
+    try { await api('/retention', { method: 'PUT', body: { days: +keep.days } }); keep.saved = +keep.days; keep.msg = 'Saved. Older history was deleted.' } catch (e) { keep.msg = (e as Error).message }
+  }
   let diag = $state({ tool: 'ping', host: '1.1.1.1', count: 4 })
   let out = $state<{ command: string; rows: Record<string, string>[]; note?: string | null } | null>(null)
   let diagErr = $state('')
@@ -96,7 +105,13 @@
   {/if}
   <Field label="NetFlow / IPFIX" help={flow.enabled ? 'Traffic-flow is on' : 'Collector address, optional :port'}><input type="text" bind:value={mon.flow} placeholder="192.0.2.60:2055" aria-label="Flow collector" /><select bind:value={mon.flowVersion} aria-label="Flow version"><option value="9">v9</option><option value="ipfix">IPFIX</option><option value="5">v5</option></select></Field>
   <div class="r">{#if flow.enabled}<button class="btn" onclick={() => review('Disable traffic-flow', ['/ip/traffic-flow/set enabled=no'], { kind: 'set-traffic-flow', enabled: false })}>Turn off</button> {/if}<button class="btn primary" onclick={flowReview}>Review & apply</button></div>
-  <Field label="Keep history for" help="Stored by tikontrol, not on the router (fixed size for now)"><select bind:value={mon.retention} disabled={isBackend}><option value="7">7 days</option><option value="30">30 days</option><option value="365">1 year</option></select></Field>
+</Section>
+
+<Section title="Data retention" desc="How long tikontrol keeps its own history: traffic charts, events and per-client usage. Stored on the tikontrol server, not the router. Minute detail is kept for at most 7 days.">
+  <Field label="Keep history for" help={isBackend ? (isAdmin ? 'Shortening it deletes older history right away' : 'Only an admin can change this') : 'Available with the tikontrol server'}>
+    <select bind:value={keep.days} disabled={!isAdmin} aria-label="History retention">{#each [[1, '1 day'], [7, '7 days'], [30, '30 days'], [90, '90 days']] as [d, l]}<option value={d}>{l}</option>{/each}</select>
+    <button class="btn" disabled={!isAdmin || +keep.days === keep.saved} onclick={saveRetention}>Save</button></Field>
+  {#if keep.msg}<div class="muted small" role="status">{keep.msg}</div>{/if}
 </Section>
 
 <Section title="Debug tools" desc="Run from the router. Read-only: ping, traceroute and a DNS cache lookup. Packet capture needs the sniff policy, which tikontrol doesn't use.">
