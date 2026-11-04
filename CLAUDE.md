@@ -24,6 +24,7 @@ tikontrol holds credentials that can change a whole router. A write credential e
 - **Access.** Every backend and MCP endpoint needs authentication and authorisation, denied by default, with CSRF protection and rate limiting on login. Nothing is exposed to the internet by default.
 - **Untrusted data.** Hostnames, SSIDs, DHCP fields, logs and comments come from other devices. Escape them in the UI, never build RouterOS commands by joining strings, and treat them as prompt injection risks in MCP.
 - **Input.** Validate all input on the server, at the trust boundary, even when the UI already checks it.
+- **Read-only mode.** The router must enforce it, not just the UI. In this mode tikontrol connects with a custom group that has no `write`, `sensitive`, `password`, `policy` or `reboot` policy, stores no write credential, and shows the policies it detected. Never treat a setting in tikontrol as protection by itself, and prove rejection with a test on CHR.
 - **Writes.** Read-only by default. Every write goes through Safe apply, must be confirmed from the user's browser and must have a tested rollback. High-risk changes (VLAN filtering, input firewall, `/ip/service`, management addresses) need explicit warnings.
 - **Containers.** Run as non-root, never privileged, with `memory-max` set and our own pinned image.
 - **Dependencies.** Keep lockfiles committed, add as few as possible, and check `npm audit` (and `cargo audit` once Rust exists) before each release.

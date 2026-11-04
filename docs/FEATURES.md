@@ -11,7 +11,7 @@ Clean-room: we copy the behaviour, never the assets.
 **Backing:** `ROS` = RouterOS API on the router · `CMR` = MikroTik CMR server · `tik` = our own logic/DB · `✗` = nothing can back it
 
 <!-- progress:start -->
-**Progress:** 0 ✅ · 0 🟨 · 178 🎨 · 22 ⬜ · 8 ➖ (208 items, 0% done)
+**Progress:** 0 ✅ · 0 🟨 · 178 🎨 · 31 ⬜ · 8 ➖ (217 items, 0% done)
 <!-- progress:end -->
 
 ---
@@ -296,6 +296,21 @@ Clean-room: we copy the behaviour, never the assets.
 | Runs as RouterOS container (arm/v7, arm64) | tik build | 1 | ⬜ |
 | Runs on Docker (home server) | tik build | 0 | ⬜ |
 | CHR dev/test router | – | 0 | ⬜ |
+
+## Read-only mode
+Not a UniFi feature: this is our own addition. The router enforces it, not tikontrol. tikontrol connects with a RouterOS user that has no `write` policy, so RouterOS refuses edits even if the app has a bug or is compromised.
+
+| Feature | Backing | Phase | Status |
+|---|---|---|---|
+| Choose read-only or read and write at setup, with read-only as the default | tik | 1 | ⬜ |
+| Router-enforced read-only: connect with a user that has no `write` policy | ROS user groups | 1 | ⬜ |
+| Guided setup: show the commands to create the read-only group and user | tik + ROS | 1 | ⬜ |
+| Detect the connected user's real policies and show them, instead of trusting a setting | ROS `/user` | 1 | ⬜ |
+| Read-only badge, with edit controls disabled and the reason shown | tik | 1 | ⬜ |
+| Store no write credential in read-only mode | tik | 1 | ⬜ |
+| Switching to read and write needs a new credential and an explicit confirmation | tik | 2 | ⬜ |
+| MCP follows the same mode: no proposed changes in read-only mode | tik | 2 | ⬜ |
+| Test on CHR that the router rejects writes from the read-only user | tik | 0 | ⬜ |
 
 ## AI assistants (MCP)
 Not a UniFi feature: this is our own addition. An MCP server lets an AI assistant query tikontrol and propose changes.
