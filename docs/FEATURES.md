@@ -11,7 +11,7 @@ Clean-room: we copy the behaviour, never the assets.
 **Backing:** `ROS` = RouterOS API on the router · `CMR` = MikroTik CMR server · `tik` = our own logic/DB · `✗` = nothing can back it
 
 <!-- progress:start -->
-**Progress:** 1 ✅ · 18 🟨 · 168 🎨 · 31 ⬜ · 8 ➖ (226 items, 0% done)
+**Progress:** 1 ✅ · 31 🟨 · 155 🎨 · 31 ⬜ · 8 ➖ (226 items, 0% done)
 <!-- progress:end -->
 
 ---
@@ -98,12 +98,12 @@ Clean-room: we copy the behaviour, never the assets.
 | Per-client traffic history | tik SQLite | 2 | 🟨 |
 | Per-client apps / domains | tik DNS correlation (CMR is per-device) | 3 |🎨 |
 | Rename / alias, custom icon, notes | tik | 1 | 🎨 |
-| Fixed IP (reservation) | ROS lease make-static | 2 | 🎨 |
-| Local DNS record for client | ROS `/ip/dns/static` | 2 |🎨 |
-| Block / unblock | ROS address-list + filter | 2 | 🎨 |
-| Pause internet / schedules | ROS kid-control | 2 | 🎨 |
-| Speed limit (client groups) | ROS simple queues | 2 | 🎨 |
-| Kick / reconnect wireless client | ROS reg-table remove | 2 |🎨 |
+| Fixed IP (reservation) | ROS lease make-static | 2 | 🟨 |
+| Local DNS record for client | ROS `/ip/dns/static` | 2 | 🟨 |
+| Block / unblock | ROS address-list + filter | 2 | 🟨 |
+| Pause internet / schedules | ROS kid-control | 2 | 🟨 |
+| Speed limit (client groups) | ROS simple queues | 2 | 🟨 |
+| Kick / reconnect wireless client | ROS reg-table remove | 2 | 🟨 |
 | Override network/VLAN for client | ROS (MAC-based VLAN / access list) | 4 |🎨 |
 | Offline / historical clients list | tik | 2 | 🟨 |
 | Roaming history (which AP, when) | tik (reg-table changes) · CMR wifi-logs | 3 |🎨 |
@@ -231,7 +231,7 @@ Clean-room: we copy the behaviour, never the assets.
 | Firewall policies (custom rules) | ROS filter | 3 |🎨 |
 | Simple app blocking | ROS tls-host + DNS · CMR app classes | 3 |🎨 |
 | Traffic rules (block/limit by client, app, time) | ROS filter + queues + scheduler | 3 | ⬜ |
-| Ad blocking | ROS `/ip/dns/adlist` | 2 | 🎨 |
+| Ad blocking | ROS `/ip/dns/adlist` | 2 | 🟨 |
 | Content filtering (family, adult) | ROS adlist / DNS | 2 |🎨 |
 | Region (country) blocking | ROS address-lists + tik feed | 4 |🎨 |
 | IP groups / port groups | ROS address-lists | 3 |🎨 |
@@ -244,11 +244,11 @@ Clean-room: we copy the behaviour, never the assets.
 ## Routing
 | Feature | Backing | Phase | Status |
 |---|---|---|---|
-| Port forwarding | ROS NAT dst-nat | 2 |🎨 |
-| Static routes | ROS `/ip/route` | 2 |🎨 |
+| Port forwarding | ROS NAT dst-nat | 2 | 🟨 |
+| Static routes | ROS `/ip/route` | 2 | 🟨 |
 | Policy-based routes | ROS routing rules | 3 |🎨 |
-| UPnP / NAT-PMP | ROS `/ip/upnp` | 2 |🎨 |
-| Local DNS records | ROS dns static | 2 |🎨 |
+| UPnP / NAT-PMP | ROS `/ip/upnp` | 2 | 🟨 |
+| Local DNS records | ROS dns static | 2 | 🟨 |
 | Dynamic routing (OSPF / BGP) | ROS (advanced: show only) | 4 |🎨 |
 
 ## Profiles
@@ -281,9 +281,9 @@ Clean-room: we copy the behaviour, never the assets.
 | SNMP | ROS `/snmp` | 3 |🎨 |
 | Remote logging / NetFlow export settings | ROS | 3 |🎨 |
 | Data retention settings | tik | 2 |🎨 |
-| Device auth / SSH settings, service hardening | ROS `/ip/service` | 2 |🎨 |
+| Device auth / SSH settings, service hardening | ROS `/ip/service` | 2 | 🟨 |
 | Debug tools: ping, traceroute, packet capture | ROS `/ping`, `/tool/traceroute`, sniffer | 3 |🎨 |
-| Safe apply (auto-revert) | tik + ROS scheduler | 3 |🎨 |
+| Safe apply (auto-revert) | tik + ROS scheduler | 3 | 🟨 |
 | "Show in RouterOS" for every object | tik | 2 | 🎨 |
 
 ## Platform

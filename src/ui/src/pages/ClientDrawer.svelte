@@ -65,11 +65,11 @@
       <div><div class="muted small"><Icon name="up" size={12} /> Upload</div><div class="big">{bps(live.rate[c.mac]?.tx ?? 0)}</div></div>
     </div>
     <div class="actions">
-      <button class="btn" onclick={() => review('Pause internet', [`/ip/kid-control/add name=tik-paused`, `/ip/kid-control/device/add name="${displayName(c)}" mac-address=${c.mac} user=tik-paused`, '/ip/kid-control/pause [find name=tik-paused]'])}><Icon name="pause" size={14} /> Pause</button>
+      <button class="btn" onclick={() => review('Pause internet', [`/ip/kid-control/add name=tik-paused`, `/ip/kid-control/device/add name="${displayName(c)}" mac-address=${c.mac} user=tik-paused`, '/ip/kid-control/pause [find name=tik-paused]'], { kind: 'pause-client', mac: c.mac })}><Icon name="pause" size={14} /> Pause</button>
       <button class="btn" onclick={() => (tab = 'settings')}><Icon name="gauge" size={14} /> Limit</button>
-      <button class="btn" disabled={c.fixedIp} onclick={() => review('Fixed IP', `/ip/dhcp-server/lease/make-static [find mac-address=${c.mac}]`)}><Icon name="pin" size={14} /> {c.fixedIp ? 'Fixed IP' : 'Fix IP'}</button>
-      {#if !c.wired}<button class="btn" onclick={() => review('Reconnect client', `/interface/wireless/registration-table/remove [find mac-address=${c.mac}]`)}><Icon name="wifi" size={14} /> Reconnect</button>{/if}
-      <button class="btn danger" onclick={() => review('Block client', [`/ip/firewall/address-list/add list=tik-blocked address=${c.ip} comment=${c.mac}`, '/ip/firewall/filter/add chain=forward src-address-list=tik-blocked action=drop comment="tik:block" place-before=0'])}><Icon name="block" size={14} /> Block</button>
+      <button class="btn" disabled={c.fixedIp} onclick={() => review('Fixed IP', `/ip/dhcp-server/lease/make-static [find mac-address=${c.mac}]`, { kind: 'fixed-ip', mac: c.mac })}><Icon name="pin" size={14} /> {c.fixedIp ? 'Fixed IP' : 'Fix IP'}</button>
+      {#if !c.wired}<button class="btn" onclick={() => review('Reconnect client', `/interface/wireless/registration-table/remove [find mac-address=${c.mac}]`, { kind: 'kick-wifi', mac: c.mac })}><Icon name="wifi" size={14} /> Reconnect</button>{/if}
+      <button class="btn danger" onclick={() => review('Block client', [`/ip/firewall/address-list/add list=tik-blocked address=${c.ip} comment=${c.mac}`, '/ip/firewall/filter/add chain=forward src-address-list=tik-blocked action=drop comment="tik:block" place-before=0'], { kind: 'block-client', mac: c.mac })}><Icon name="block" size={14} /> Block</button>
     </div>
     <dl>
       <dt>Experience</dt><dd><span class="pill {sq.level}">{sq.label}</span>{#if c.signal}<span class="mono muted"> {c.signal} dBm</span>{/if}</dd>

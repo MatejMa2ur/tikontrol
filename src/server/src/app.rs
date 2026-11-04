@@ -179,6 +179,7 @@ pub mod tests {
             f.answers.insert("/user/print".into(), Ok(vec![row(&[("name", user), ("group", "g")])]));
             f.answers.insert("/user/group/print".into(), Ok(vec![row(&[("name", "g"), ("policy", policy)])]));
             f.answers.insert("/system/identity/print".into(), Ok(vec![row(&[("name", "TestRouter")])]));
+            f.answers.insert("/system/clock/print".into(), Ok(vec![row(&[("date", "2026-01-15"), ("time", "10:00:00")])]));
             Ok(Box::new(f) as Box<dyn Router + Send>)
         })
     }

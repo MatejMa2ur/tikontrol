@@ -28,7 +28,7 @@
 
 <Section title="Router services" desc="Turn off what you don't use. Red ones send passwords unencrypted." ros="/ip/service/print">
   <div class="svc">{#each services as s}<label class="row" class:bad={INSECURE.includes(s.name) && svc[s.name]}><Toggle bind:checked={svc[s.name]} label={s.name} /><span>{s.name}</span><span class="muted mono small">:{s.port}</span></label>{/each}</div>
-  <div class="r"><button class="btn primary" onclick={() => review('Router services', services.filter((s) => svc[s.name] === !!s.disabled).map((s) => `/ip/service/set ${s.name} disabled=${svc[s.name] ? 'no' : 'yes'}`))}>Review & apply</button></div>
+  <div class="r"><button class="btn primary" onclick={() => review('Router services', services.filter((s) => svc[s.name] === !!s.disabled).map((s) => `/ip/service/set ${s.name} disabled=${svc[s.name] ? 'no' : 'yes'}`), (() => { const off = services.filter((s) => !svc[s.name] && !s.disabled).map((s) => s.name as string); return off.length && off.every((n) => ['telnet', 'ftp', 'www', 'api'].includes(n)) && services.every((s) => svc[s.name] !== !!s.disabled || !svc[s.name]) ? { kind: 'disable-services', names: off } : undefined })())}>Review & apply</button></div>
 </Section>
 
 <Section title="Monitoring" ros="/snmp/print; /system/logging/action/print">

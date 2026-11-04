@@ -25,7 +25,7 @@
     <input type="text" bind:value={fwd.port} placeholder="WAN port" style="width:90px" />
     <select bind:value={fwd.to}><option value="">Device…</option>{#each clients as c}<option value={c.ip}>{c.name} ({c.ip})</option>{/each}</select>
     <input type="text" bind:value={fwd.toPort} placeholder="Device port" style="width:100px" />
-    <button class="btn primary" disabled={!fwd.name || !fwd.port || !fwd.to} onclick={() => review(`Port forward ${fwd.name}`, [`/ip/firewall/nat/add chain=dstnat in-interface-list=WAN protocol=${fwd.proto} dst-port=${fwd.port} action=dst-nat to-addresses=${fwd.to} to-ports=${fwd.toPort || fwd.port} comment="tik:${fwd.name}"`])}><Icon name="plus" size={14} /> Add</button>
+    <button class="btn primary" disabled={!fwd.name || !fwd.port || !fwd.to} onclick={() => review(`Port forward ${fwd.name}`, [`/ip/firewall/nat/add chain=dstnat in-interface-list=WAN protocol=${fwd.proto} dst-port=${fwd.port} action=dst-nat to-addresses=${fwd.to} to-ports=${fwd.toPort || fwd.port} comment="tik:${fwd.name}"`], { kind: 'port-forward', protocol: fwd.proto, port: +fwd.port, to_ip: fwd.to, to_port: +(fwd.toPort || fwd.port), name: fwd.name })}><Icon name="plus" size={14} /> Add</button>
   </div>
 </Section>
 
@@ -33,19 +33,19 @@
   <table><thead><tr><th>Destination</th><th>Gateway</th><th>Distance</th><th>Table</th><th>Type</th></tr></thead>
     <tbody>{#each routes as r}<tr class="nohover"><td class="mono">{r['dst-address']}</td><td class="mono">{r.gateway}</td><td>{r.distance}</td><td>{r['routing-table']}</td><td><span class="pill">{r.dynamic ? 'Auto' : 'Static'}</span></td></tr>{/each}</tbody></table>
   <div class="add"><input type="text" bind:value={rt.dst} placeholder="10.0.0.0/8" /><input type="text" bind:value={rt.gw} placeholder="Gateway" />
-    <button class="btn primary" disabled={!rt.dst || !rt.gw} onclick={() => review('Static route', [`/ip/route/add dst-address=${rt.dst} gateway=${rt.gw} comment=tik:route`])}><Icon name="plus" size={14} /> Add</button></div>
+    <button class="btn primary" disabled={!rt.dst || !rt.gw} onclick={() => review('Static route', [`/ip/route/add dst-address=${rt.dst} gateway=${rt.gw} comment=tik:route`], { kind: 'static-route', dst: rt.dst, gateway: rt.gw })}><Icon name="plus" size={14} /> Add</button></div>
 </Section>
 
 <Section title="Local DNS records" desc="Names for devices on your network." ros="/ip/dns/static/print">
   <table><thead><tr><th>Name</th><th>Type</th><th>Address</th></tr></thead>
     <tbody>{#each dnsStatic as d}<tr class="nohover"><td class="mono">{d.name}</td><td>{d.type ?? 'A'}</td><td class="mono">{d.address}</td></tr>{/each}</tbody></table>
   <div class="add"><input type="text" bind:value={dns.name} placeholder="nas.lan" /><input type="text" bind:value={dns.ip} placeholder="10.0.0.50" />
-    <button class="btn primary" disabled={!dns.name || !dns.ip} onclick={() => review(`DNS ${dns.name}`, [`/ip/dns/static/add name=${dns.name} address=${dns.ip} comment=tik:dns`])}><Icon name="plus" size={14} /> Add</button></div>
+    <button class="btn primary" disabled={!dns.name || !dns.ip} onclick={() => review(`DNS ${dns.name}`, [`/ip/dns/static/add name=${dns.name} address=${dns.ip} comment=tik:dns`], { kind: 'dns-record', name: dns.name, address: dns.ip })}><Icon name="plus" size={14} /> Add</button></div>
 </Section>
 
 <Section title="UPnP" desc="Lets games and consoles open ports themselves. Convenient, but any device can use it." ros="/ip/upnp/print">
   <Field label="Enabled"><Toggle bind:checked={upnp.on} label="UPnP" /></Field>
-  <div class="r"><button class="btn primary" onclick={() => review('UPnP', upnp.on ? ['/ip/upnp/set enabled=yes', '/ip/upnp/interfaces/add interface=ether1 type=external', '/ip/upnp/interfaces/add interface=bridge type=internal'] : ['/ip/upnp/set enabled=no'])}>Review & apply</button></div>
+  <div class="r"><button class="btn primary" onclick={() => review('UPnP', upnp.on ? ['/ip/upnp/set enabled=yes', '/ip/upnp/interfaces/add interface=ether1 type=external', '/ip/upnp/interfaces/add interface=bridge type=internal'] : ['/ip/upnp/set enabled=no'], { kind: 'set-upnp', enabled: upnp.on })}>Review & apply</button></div>
 </Section>
 
 <Section title="Dynamic routing" desc="OSPF and BGP are shown read-only; configure them in RouterOS." ros="/routing/ospf/instance/print; /routing/bgp/connection/print">
