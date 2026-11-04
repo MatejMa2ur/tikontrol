@@ -27,9 +27,11 @@
     add = { name: 'Phone', ip: `10.66.0.${n}/32`, full: true, priv: '', pub: '' }
     try { Object.assign(add, await keypair()) } catch { add.err = 'This browser has no X25519 in WebCrypto; the backend will generate keys instead.' }
   }
-  const conf = $derived(add ? `[Interface]\nPrivateKey = ${add.priv}\nAddress = ${add.ip}\nDNS = ${internet.gatewayIp}\n\n[Peer]\nPublicKey = <router public key>\nEndpoint = ${raw.cloud?.['dns-name'] ?? internet.publicIp}:13231\nAllowedIPs = ${add.full ? '0.0.0.0/0' : '192.168.88.0/24'}\nPersistentKeepalive = 25` : '')
+  const srv = wg.find((w) => w.name === 'wg-tik')
+  const conf = $derived(add ? `[Interface]\nPrivateKey = ${add.priv}\nAddress = ${add.ip}\nDNS = ${internet.gatewayIp}\n\n[Peer]\nPublicKey = ${srv?.['public-key'] ?? '<router public key>'}\nEndpoint = ${raw.cloud?.['dns-name'] ?? internet.publicIp}:13231\nAllowedIPs = ${add.full ? '0.0.0.0/0' : '192.168.88.0/24'}\nPersistentKeepalive = 25` : '')
 
-  let ovpn = $state({ on: (raw.ovpn ?? []).length > 0 })
+  const ovpnName: string = (raw.ovpn ?? [])[0]?.name ?? ''
+  let ovpn = $state({ on: (raw.ovpn ?? []).some((o: any) => !o.disabled) })
   let l2 = $state({ on: !!l2tp.enabled })
   let client = $state({ kind: 'wireguard', endpoint: '', all: false })
   let s2s = $state({ remote: '', subnet: '10.0.1.0/24' })
@@ -38,7 +40,7 @@
 
 <Section title="WireGuard server" desc="Phones and laptops connect home. One QR code per device." ros="/interface/wireguard/print; /interface/wireguard/peers/print">
   {#snippet actions()}<button class="btn primary" onclick={newPeer}><Icon name="plus" size={14} /> Add device</button>{/snippet}
-  {#if !wg.some((w) => w.name !== 'back-to-home-vpn')}<div class="muted small">No tikontrol WireGuard server yet. Adding a device creates <span class="mono">wg-tik</span> on port 13231.</div>{/if}
+  {#if !srv}<div class="muted small">No tikontrol WireGuard server yet. <button class="btn small" onclick={() => review('WireGuard server wg-tik', ['/interface/wireguard/add name=wg-tik listen-port=13231', '/ip/address/add address=10.66.0.1/24 interface=wg-tik', '/interface/list/member/add list=LAN interface=wg-tik', '/ip/firewall/filter/add chain=input protocol=udp dst-port=13231 action=accept comment=tik:wgsrv:wg-tik'], { kind: 'wireguard-server', name: 'wg-tik', listen_port: 13231, address: '10.66.0.1/24', lan: true })}>Create <span class="mono">wg-tik</span> on port 13231</button></div>{/if}
   <table>
     <thead><tr><th>Device</th><th>Interface</th><th>Allowed IPs</th><th>Last handshake</th><th class="r">Traffic</th></tr></thead>
     <tbody>{#each peers as p}<tr class="nohover"><td><b>{p.name}</b> <span class="muted small">{p.comment ?? ''}</span></td><td class="mono small">{p.interface}</td><td class="mono small">{(p['allowed-address'] ?? []).join(', ')}</td><td>{p['last-handshake'] ?? 'never'}</td><td class="r mono small">{p.rx ?? 0} / {p.tx ?? 0}</td></tr>{/each}</tbody>
@@ -53,10 +55,10 @@
 <Section title="OpenVPN & L2TP servers" desc="For devices without WireGuard. L2TP/IPsec is built into every OS." ros="/interface/ovpn-server/server/print; /interface/l2tp-server/server/print">
   <Field label="OpenVPN"><Toggle bind:checked={ovpn.on} label="OpenVPN" /></Field>
   <Field label="L2TP / IPsec"><Toggle bind:checked={l2.on} label="L2TP" /></Field>
-  <div class="r"><button class="btn primary" onclick={() => review('VPN servers', [
-    `/interface/ovpn-server/server/add disabled=${ovpn.on ? 'no' : 'yes'} port=1194 certificate=tik-ovpn default-profile=default-encryption`,
-    `/interface/l2tp-server/server/set enabled=${l2.on ? 'yes' : 'no'} use-ipsec=required ipsec-secret="••••"`,
-  ])}>Review & apply</button></div>
+  <div class="r">
+    <button class="btn" onclick={() => review('OpenVPN server', [`/interface/ovpn-server/server/set ${ovpnName ? `[find name="${ovpnName}"] disabled=${ovpn.on ? 'no' : 'yes'}` : `enabled=${ovpn.on ? 'yes' : 'no'}`}`], { kind: 'vpn-server', server: 'ovpn', enabled: ovpn.on, name: ovpnName })}>Review OpenVPN</button>
+    <button class="btn primary" onclick={() => review('L2TP server', [`/interface/l2tp-server/server/set enabled=${l2.on ? 'yes' : 'no'}`], { kind: 'vpn-server', server: 'l2tp', enabled: l2.on })}>Review L2TP</button>
+  </div>
 </Section>
 
 <Section title="VPN client" desc="Send some or all traffic through a commercial or remote VPN.">
@@ -89,10 +91,10 @@
       </div>
       <div class="qr">{#if add.priv}<Qr text={conf} size={220} /><span class="muted small">Scan with the WireGuard app. The private key is shown only now.</span>{/if}</div>
     </div>
-    {#snippet footer()}<button class="btn" onclick={() => (add = null)}>Cancel</button><button class="btn primary" onclick={() => { review(`VPN device ${add!.name}`, [
+    {#snippet footer()}<button class="btn" onclick={() => (add = null)}>Cancel</button><button class="btn primary" disabled={!srv || !add?.pub} title={srv ? undefined : 'Create the WireGuard server first'} onclick={() => { review(`VPN device ${add!.name}`, [
       ...(wg.some((w) => w.name === 'wg-tik') ? [] : ['/interface/wireguard/add name=wg-tik listen-port=13231', '/ip/address/add address=10.66.0.1/24 interface=wg-tik', '/interface/list/member/add list=LAN interface=wg-tik', '/ip/firewall/filter/add chain=input protocol=udp dst-port=13231 action=accept place-before=0 comment="tik:wireguard"']),
-      `/interface/wireguard/peers/add interface=wg-tik name="${add!.name}" public-key="${add!.pub}" allowed-address=${add!.ip} comment="tik:vpn"`,
-    ]); add = null }}>Review & apply</button>{/snippet}
+      `/interface/wireguard/peers/add interface=wg-tik name="${add!.name}" public-key="${add!.pub}" allowed-address=${add!.ip} comment="tik:wg:${add!.pub}"`,
+    ], { kind: 'wireguard-peer', interface: 'wg-tik', name: add!.name, public_key: add!.pub, allowed_address: add!.ip }); add = null }}>Review & apply</button>{/snippet}
   </Modal>
 {/if}
 

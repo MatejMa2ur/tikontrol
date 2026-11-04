@@ -11,7 +11,7 @@ Clean-room: we copy the behaviour, never the assets.
 **Backing:** `ROS` = RouterOS API on the router · `CMR` = MikroTik CMR server · `tik` = our own logic/DB · `✗` = nothing can back it
 
 <!-- progress:start -->
-**Progress:** 1 ✅ · 31 🟨 · 155 🎨 · 31 ⬜ · 8 ➖ (226 items, 0% done)
+**Progress:** 1 ✅ · 41 🟨 · 145 🎨 · 31 ⬜ · 8 ➖ (226 items, 0% done)
 <!-- progress:end -->
 
 ---
@@ -169,22 +169,22 @@ Clean-room: we copy the behaviour, never the assets.
 ## WiFi settings
 | Feature | Backing | Phase | Status |
 |---|---|---|---|
-| Create/edit SSID (name, password, security WPA2/WPA3) | ROS wireless/wifi · CMR wifi | 2 |🎨 |
+| Create/edit SSID (name, password, security WPA2/WPA3) | ROS wireless/wifi · CMR wifi | 2 |🟨 |
 | Band selection (2.4 / 5 / 6 GHz) | ROS | 2 |🎨 |
 | Which APs broadcast it | CMR labels | 3 |🎨 |
 | Network/VLAN per SSID | ROS · CMR | 3 |🎨 |
-| Guest network (isolation, portal) | ROS + hotspot | 3 |🎨 |
-| Client isolation | ROS default-forwarding / wifi datapath | 2 |🎨 |
-| Hide SSID | ROS | 2 |🎨 |
-| WiFi schedule (on/off by time) | ROS scheduler | 3 |🎨 |
+| Guest network (isolation, portal) | ROS + hotspot | 3 |🟨 |
+| Client isolation | ROS default-forwarding / wifi datapath | 2 |🟨 |
+| Hide SSID | ROS | 2 |🟨 |
+| WiFi schedule (on/off by time) | ROS scheduler | 3 |🟨 |
 | Per-SSID speed limit | ROS queues | 3 |🎨 |
-| MAC filter | ROS access-list | 3 |🎨 |
+| MAC filter | ROS access-list | 3 |🟨 |
 | Private PSK (per-client passwords) | ROS wifi access-list passphrase (new wifi pkg) | 4 |🎨 |
 | Band steering / fast roaming (802.11r/k/v) | ROS wifi (new pkg) | 4 |🎨 |
 | MLO (WiFi 7) | ROS wifi-qcom-be (hw dependent) | 4 |🎨 |
 | Hotspot 2.0 / Passpoint | ROS wifi interworking | 4 |🎨 |
 | QR code to join WiFi | tik (browser) | 2 |🎨 |
-| Channel / tx power per radio | ROS · CMR radio | 3 |🎨 |
+| Channel / tx power per radio | ROS · CMR radio | 3 |🟨 |
 
 ## Networks
 | Feature | Backing | Phase | Status |
@@ -215,9 +215,9 @@ Clean-room: we copy the behaviour, never the assets.
 ## VPN
 | Feature | Backing | Phase | Status |
 |---|---|---|---|
-| WireGuard server + peers + QR | ROS `/interface/wireguard` | 2 |🎨 |
-| OpenVPN server | ROS ovpn-server | 4 |🎨 |
-| L2TP/IPsec server | ROS | 4 |🎨 |
+| WireGuard server + peers + QR | ROS `/interface/wireguard` | 2 |🟨 |
+| OpenVPN server | ROS ovpn-server | 4 |🟨 |
+| L2TP/IPsec server | ROS | 4 |🟨 |
 | VPN client (to a provider) | ROS wg / ovpn client | 3 |🎨 |
 | Site-to-site (WireGuard / IPsec) | ROS | 3 |🎨 |
 | Teleport (one-click remote access) | ROS Back To Home (`/ip/cloud`) | 2 |🎨 |

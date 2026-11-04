@@ -40,9 +40,20 @@ impl Op {
             s.push_str(&format!(" [find {k}={}]", quoted(v)));
         }
         for (k, v) in &self.args {
-            s.push_str(&format!(" {k}={}", cli_quote(v)));
+            // secrets never reach the browser, the audit log or error messages
+            if SECRET_KEYS.contains(k) {
+                s.push_str(&format!(" {k}=\"********\""));
+            } else {
+                s.push_str(&format!(" {k}={}", cli_quote(v)));
+            }
         }
         s
+    }
+
+    /// True when the op carries a secret: such ops may run, but never in an inverse (the revert
+    /// script is rendered from CLI text, where secrets are masked).
+    pub fn has_secret(&self) -> bool {
+        self.args.iter().any(|(k, _)| SECRET_KEYS.contains(k))
     }
 
     fn valid(&self) -> bool {
@@ -72,6 +83,9 @@ impl Op {
         }
     }
 }
+
+/// Argument names whose values are secrets (Wi-Fi passphrases, WireGuard private keys, IPsec secrets).
+pub const SECRET_KEYS: &[&str] = &["wpa-pre-shared-key", "wpa2-pre-shared-key", "wpa3-pre-shared-key", "security.passphrase", "passphrase", "private-key", "preshared-key", "ipsec-secret"];
 
 /// Always-quoted string for `[find k="v"]`, escaping like `cli_quote`.
 fn quoted(v: &str) -> String {
@@ -375,7 +389,7 @@ pub fn compile(i: &Intent, current: &mut dyn Router) -> Result<Plan, String> {
 /// Intents from feature areas live in `crate::intents::*`. Each area parses the JSON intent (its own
 /// `kind`s) and returns None when the kind isn't its own. Add an area with one line here.
 pub type Area = fn(&serde_json::Value, &mut dyn Router) -> Option<Result<Plan, String>>;
-pub const AREAS: &[Area] = &[];
+pub const AREAS: &[Area] = &[crate::intents::wifi::compile, crate::intents::vpn::compile];
 
 /// Entry point for the API: core intents first, then the areas. Unknown kinds are rejected.
 pub fn compile_value(v: &serde_json::Value, r: &mut dyn Router) -> Result<Plan, String> {
@@ -385,6 +399,9 @@ pub fn compile_value(v: &serde_json::Value, r: &mut dyn Router) -> Result<Plan, 
             let p = p?;
             if !p.ops.iter().chain(&p.undo).all(Op::valid) {
                 return Err("a value contains characters RouterOS commands can't carry".into());
+            }
+            if p.undo.iter().any(Op::has_secret) {
+                return Err("internal: an inverse must not carry a secret".into());
             }
             return Ok(p);
         }
