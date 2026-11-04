@@ -61,7 +61,8 @@ pub fn setup_commands(tik_ip: &str, write: bool) -> Vec<String> {
     let addr = cli_quote(&addr);
     let mut v = vec![
         "# 1. A certificate for API-SSL (skip if api-ssl already has one)".into(),
-        "/certificate/add name=tikontrol-api common-name=router key-usage=tls-server days-valid=3650".into(),
+        // self-signed: RouterOS 7.26 refuses to sign without key-cert-sign ("CA not found")
+        "/certificate/add name=tikontrol-api common-name=router key-usage=tls-server,key-cert-sign days-valid=3650".into(),
         "/certificate/sign tikontrol-api".into(),
         format!("/ip/service/set api-ssl certificate=tikontrol-api tls-version=only-1.2 address={addr} disabled=no"),
         "# 2. Turn off the plain-text API".into(),
