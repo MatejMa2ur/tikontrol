@@ -1,11 +1,12 @@
 <script lang="ts">
-  import { clients, offline, subtitle, signalQuality, bps, dur, type Client } from '../lib/data'
+  import { clients, offline, isBackend, subtitle, signalQuality, bps, dur, type Client } from '../lib/data'
   import { live, prefs, displayName, iconOf } from '../lib/live.svelte'
   import { review } from '../lib/apply.svelte'
   import Tabs from '../lib/ui/Tabs.svelte'
   import Section from '../lib/ui/Section.svelte'
   import Icon from '../lib/Icon.svelte'
   import Ros from '../lib/Ros.svelte'
+  import { api } from '../lib/backend'
   import ClientDrawer from './ClientDrawer.svelte'
 
   let { selected }: { selected?: string } = $props()
@@ -33,11 +34,31 @@
   const arrow = (key: string) => (sort.key === key ? (sort.dir === 1 ? '↑' : '↓') : '')
   const current = $derived(clients.find((c) => c.mac === selected))
   const nameOf = (mac: string) => { const c = clients.find((x) => x.mac === mac); return c ? displayName(c) : mac }
+  // with the server, devices it has seen before (first/last seen) join the router's own offline list
+  type Seen = { mac: string; first: number; last: number; interface?: string }
+  let seen = $state<Seen[]>([])
+  if (isBackend) api<Seen[]>('/clients/offline').then((v) => (seen = Array.isArray(v) ? v : [])).catch(() => {})
+  const when = (t: number) => new Date(t * 1000).toLocaleString()
+  const offlineRows = $derived([
+    ...offline.map((o) => { const s = seen.find((x) => x.mac === o.mac); return { mac: o.mac, ip: o.ip, seen: s ? `last seen ${when(s.last)}` : o.seen } }),
+    ...seen.filter((s) => !offline.some((o) => o.mac === s.mac) && !clients.some((c) => c.mac === s.mac)).sort((a, b) => b.last - a.last)
+      .map((s) => ({ mac: s.mac, ip: '—', seen: `last seen ${when(s.last)} · first ${when(s.first)}${s.interface ? ` · ${s.interface}` : ''}` })),
+  ])
+  const slug = (n: string) => n.trim().replace(/[^A-Za-z0-9_-]+/g, '-').slice(0, 32)
+  const groupMembers = (g: { members: string[] }) => g.members.map((m) => ({ mac: m, ip: clients.find((c) => c.mac === m)?.ip ?? '' })).filter((m) => m.ip)
+  const applyGroup = (g: { name: string; members: string[] }) => {
+    const s = slug(g.name), ms = groupMembers(g)
+    review(`Group ${g.name}`, [`/ip/firewall/address-list/remove [find list=tik-${s}]`, ...ms.map((m) => `/ip/firewall/address-list/add list=tik-${s} address=${m.ip} comment=tik:group:${s}:${m.mac}`)], { kind: 'client-group', group: s, members: ms })
+  }
+  const applyLimit = (g: { name: string; limit: string }) => {
+    const s = slug(g.name), [down, up] = g.limit.split('/').map((x) => x.trim())
+    review(`Limit ${g.name}`, [`/queue/type/add name=tik-${s}-down kind=pcq pcq-rate=${down} pcq-classifier=dst-address`, `/queue/type/add name=tik-${s}-up kind=pcq pcq-rate=${up} pcq-classifier=src-address`, `# + mangle marks on list tik-${s} and /queue/tree entries, comment=tik:profile:${s}`], { kind: 'group-limit', group: s, down: down ?? '', up: up ?? down ?? '' })
+  }
   const counts = { all: clients.length, wifi: clients.filter((c) => !c.wired).length, wired: clients.filter((c) => c.wired).length }
 </script>
 
 <div class="grid">
-  <Tabs base="clients" active={tab} tabs={[{ id: 'online', label: 'Online', count: clients.length }, { id: 'offline', label: 'Offline', count: offline.length }, { id: 'groups', label: 'Groups', count: prefs.groups.length }]} />
+  <Tabs base="clients" active={tab} tabs={[{ id: 'online', label: 'Online', count: clients.length }, { id: 'offline', label: 'Offline', count: offlineRows.length }, { id: 'groups', label: 'Groups', count: prefs.groups.length }]} />
   {#if tab === 'online'}
   <div class="row between wrap">
     <h1>Clients <span class="muted">{rows.length}</span></h1>
@@ -100,7 +121,7 @@
       <table>
         <thead><tr><th>Device</th><th>IP address</th><th>Last state</th><th></th></tr></thead>
         <tbody>
-          {#each offline as o}
+          {#each offlineRows as o}
             <tr class="nohover"><td class="row"><span class="icon-box"><Icon name="unknown" /></span><span class="mono">{o.mac}</span></td><td class="mono">{o.ip}</td><td class="muted">{o.seen}</td>
               <td class="r"><button class="btn" onclick={() => review('Forget device', [`/ip/arp/remove [find mac-address=${o.mac}]`, `/ip/dhcp-server/lease/remove [find mac-address=${o.mac} dynamic]`])}>Forget</button></td></tr>
           {:else}<tr><td colspan="4" class="muted">Nobody offline.</td></tr>{/each}
@@ -112,8 +133,9 @@
       {#snippet actions()}<input type="text" bind:value={newGroup} placeholder="New group name" /><button class="btn" disabled={!newGroup} onclick={() => { prefs.groups.push({ name: newGroup, limit: '', members: [] }); newGroup = '' }}><Icon name="plus" size={14} /> Add</button>{/snippet}
       {#each prefs.groups as g, gi}
         <div class="group">
-          <div class="row between"><b>{g.name}</b><span class="row"><input type="text" bind:value={g.limit} placeholder="Speed limit e.g. 20M/20M" />
-            <button class="btn primary" onclick={() => review(`Group ${g.name}`, [...g.members.map((m) => `/ip/firewall/address-list/add list=tik-${g.name} address=${clients.find((c) => c.mac === m)?.ip} comment=${m}`), ...(g.limit ? [`/queue/simple/add name=tik-${g.name} target=tik-${g.name} max-limit=${g.limit}`] : [])])}>Apply</button>
+          <div class="row between"><b>{g.name}</b><span class="row"><input type="text" bind:value={g.limit} placeholder="Per device, down/up e.g. 20M/5M" aria-label="Speed limit" />
+            <button class="btn primary" onclick={() => applyGroup(g)}>Apply members</button>
+            <button class="btn" disabled={!g.limit} onclick={() => applyLimit(g)}>Apply limit</button>
             <button class="btn ghost" aria-label="Delete group" onclick={() => prefs.groups.splice(gi, 1)}><Icon name="trash" size={14} /></button></span></div>
           <div class="members">
             {#each clients as c}<label class="chip" class:on={g.members.includes(c.mac)}><input type="checkbox" hidden checked={g.members.includes(c.mac)} onchange={() => (g.members = g.members.includes(c.mac) ? g.members.filter((m) => m !== c.mac) : [...g.members, c.mac])} /><Icon name={iconOf(c)} size={12} /> {nameOf(c.mac)}</label>{/each}

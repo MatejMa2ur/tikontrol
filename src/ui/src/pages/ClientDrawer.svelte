@@ -1,6 +1,7 @@
 <script lang="ts">
   import { untrack } from 'svelte'
-  import { subtitle, signalQuality, bps, bytes, dur, events, type Client } from '../lib/data'
+  import { subtitle, signalQuality, bps, bytes, dur, events, isBackend, type Client } from '../lib/data'
+  import { api } from '../lib/backend'
   import { live, prefs, displayName, iconOf } from '../lib/live.svelte'
   import { review } from '../lib/apply.svelte'
   import Icon from '../lib/Icon.svelte'
@@ -31,6 +32,12 @@
     return Array.from({ length: 48 }, (_, i) => base * (0.2 + rnd() * (i > 30 ? 1.6 : 0.8)) * (rnd() < 0.05 ? 6 : 1))
   })
   const max = $derived(Math.max(...pts, 1))
+
+  // stored hourly bytes from the server: [unix hour, down, up]
+  let hours = $state<[number, number, number][]>([])
+  if (isBackend) api<{ hours: [number, number, number][] }>(`/history/client?mac=${encodeURIComponent(untrack(() => c.mac))}`).then((h) => (hours = (h?.hours ?? []).slice(-24))).catch(() => {})
+  const hourMax = $derived(Math.max(...hours.map(([, d, u]) => d + u), 1))
+  const limitIntent = () => { const [down, up] = s.limit.split('/').map((x) => x.trim()); return { kind: 'limit-client', mac: c.mac, ip: c.ip, down: down ?? '', up: up ?? down ?? '' } }
   const area = $derived(`0,60 ${pts.map((v, i) => `${(i / 47) * 300},${60 - (v / max) * 56}`).join(' ')} 300,60`)
 </script>
 
@@ -85,8 +92,16 @@
     </dl>
   {:else if tab === 'insights'}
     <h3>Traffic, last 24 h</h3>
-    <svg viewBox="0 0 300 60" class="chart" preserveAspectRatio="none"><polygon points={area} /></svg>
-    <div class="row between tiny muted"><span>-24h</span><span>peak {bps(max)}</span><span>now</span></div>
+    {#if isBackend}
+      {#each hours as [t, d, u]}
+        <div class="hour small"><span class="muted mono">{new Date(t * 1000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+          <span class="track"><i class="d" style="width:{(d / hourMax) * 100}%"></i><i class="u" style="width:{(u / hourMax) * 100}%"></i></span>
+          <span class="mono">{bytes(d + u)}</span></div>
+      {:else}<div class="muted small">No stored history for this device yet.</div>{/each}
+    {:else}
+      <svg viewBox="0 0 300 60" class="chart" preserveAspectRatio="none"><polygon points={area} /></svg>
+      <div class="row between tiny muted"><span>-24h</span><span>peak {bps(max)}</span><span>now</span></div>
+    {/if}
     {#if !c.wired}
       <h3>Roaming history</h3>
       {#each roams as e}<div class="row small ev"><span class="muted mono">{e.time.slice(11, 16)}</span> {e.text}</div>
@@ -95,21 +110,22 @@
     <h3>Recent activity</h3>
     {#each history as e}<div class="row small ev"><span class="muted mono">{e.time.slice(11, 16)}</span> {e.text}</div>
     {:else}<div class="muted small">Nothing recent.</div>{/each}
-    <p class="tiny muted">Traffic chart is simulated until tikontrol stores history.</p>
+    {#if !isBackend}<p class="tiny muted">Traffic chart is simulated without the tikontrol server.</p>{/if}
   {:else}
     <Field label="Icon"><div class="icons">{#each KINDS as k}<button class="ico" class:on={iconOf(c) === k} onclick={() => (prefs.icons[c.mac] = k)} aria-label={k}><Icon name={k} size={15} /></button>{/each}</div></Field>
     <Field label="Notes"><input type="text" value={prefs.notes[c.mac] ?? ''} oninput={(e) => (prefs.notes[c.mac] = (e.target as HTMLInputElement).value)} placeholder="e.g. Living room TV" /></Field>
     <Field label="Fixed IP"><input type="text" bind:value={s.fixedIp} /></Field>
     <Field label="Local DNS name" help="Reach it as name.lan"><input type="text" bind:value={s.dns} placeholder="tv" /></Field>
     <Field label="Network override" help="Put this device on another VLAN"><input type="text" bind:value={s.vlan} placeholder="VLAN ID (none)" /></Field>
-    <Field label="Speed limit" help="Download/upload, e.g. 20M/5M"><input type="text" bind:value={s.limit} placeholder="Unlimited" /></Field>
+    <Field label="Speed limit" help="Download/upload, e.g. 20M/5M"><input type="text" bind:value={s.limit} placeholder="Unlimited" />
+      <button class="btn" disabled={!s.limit} onclick={() => { const i = limitIntent(); review(`Limit ${displayName(c)}`, [`/queue/simple/add name=tik-limit-${c.mac.replaceAll(':', '')} target=${c.ip}/32 max-limit=${i.up}/${i.down} comment=tik:limit:${c.mac}`], i) }}>Apply limit</button>
+      <button class="btn ghost" onclick={() => review(`Remove limit for ${displayName(c)}`, [`/queue/simple/remove [find comment="tik:limit:${c.mac}"]`], { kind: 'unlimit-client', mac: c.mac })}>Remove</button></Field>
     <Field label="Scheduled pause"><Toggle bind:checked={s.pause} label="Scheduled pause" /></Field>
     {#if s.pause}<Field label="Pause between"><input type="text" bind:value={s.from} /><input type="text" bind:value={s.to} /></Field>{/if}
     <div class="save"><button class="btn primary" onclick={() => review(`Settings for ${displayName(c)}`, [
       ...(s.fixedIp !== c.ip || !c.fixedIp ? [`/ip/dhcp-server/lease/make-static [find mac-address=${c.mac}]`, `/ip/dhcp-server/lease/set [find mac-address=${c.mac}] address=${s.fixedIp}`] : []),
       ...(s.dns ? [`/ip/dns/static/add name=${s.dns}.lan address=${s.fixedIp} comment=tik:${c.mac}`] : []),
       ...(s.vlan ? [`/interface/bridge/port/set [find interface=${c.port}] pvid=${s.vlan}`] : []),
-      ...(s.limit ? [`/queue/simple/add name="tik:${displayName(c)}" target=${s.fixedIp} max-limit=${s.limit}`] : []),
       ...(s.pause ? [`/ip/kid-control/add name="tik-${c.mac}" mon=${s.to}-${s.from} tue=${s.to}-${s.from} wed=${s.to}-${s.from} thu=${s.to}-${s.from} fri=${s.to}-${s.from} sat=${s.to}-${s.from} sun=${s.to}-${s.from}`, `/ip/kid-control/device/add mac-address=${c.mac} user="tik-${c.mac}"`] : []),
     ])}>Review & apply</button></div>
   {/if}
@@ -138,4 +154,8 @@
   .ico { width: 30px; height: 30px; border-radius: 7px; border: 1px solid var(--line); background: var(--panel2); display: grid; place-items: center; cursor: pointer; color: var(--muted); }
   .ico.on { border-color: var(--accent); color: var(--accent); }
   .save { text-align: right; margin-top: 12px; }
+  .hour { display: grid; grid-template-columns: 50px 1fr 70px; gap: 8px; align-items: center; padding: 2px 0; }
+  .track { display: flex; height: 8px; background: var(--panel2); border-radius: 4px; overflow: hidden; }
+  .track i { display: block; height: 100%; }
+  .d { background: var(--down); } .u { background: var(--up); }
 </style>

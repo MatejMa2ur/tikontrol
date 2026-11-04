@@ -62,7 +62,7 @@
         <tbody>
           {#each domains.filter((d) => !dq || d.d.includes(dq)) as d}
             <tr class="nohover"><td><b>{d.d}</b></td><td class="r">{d.names.length}</td><td class="muted small ell">{d.names.slice(0, 3).join(', ')}</td>
-              <td class="r"><button class="btn small" onclick={() => review(`Block ${d.d}`, [`/ip/dns/static/add name=${d.d} type=NXDOMAIN match-subdomain=yes comment=tik:block`, `/ip/firewall/filter/add chain=forward tls-host=*.${d.d} action=reject comment=tik:block`])}>Block</button></td></tr>
+              <td class="r"><button class="btn small" onclick={() => review(`Block ${d.d}`, [`/ip/dns/static/add name=${d.d} type=NXDOMAIN match-subdomain=yes comment=tik:domain:${d.d}`, '/ip/dns/cache/flush'], { kind: 'block-domain', name: d.d })}>Block</button></td></tr>
           {/each}
         </tbody>
       </table>

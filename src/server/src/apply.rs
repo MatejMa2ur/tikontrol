@@ -40,7 +40,9 @@ impl Op {
             s.push_str(&format!(" [find {k}={}]", quoted(v)));
         }
         for (k, v) in &self.args {
-            s.push_str(&format!(" {k}={}", cli_quote(v)));
+            // secrets go to the router only: never into the preview, error messages or the revert job
+            let v = if SECRET_KEYS.contains(k) { "\"********\"".to_string() } else { cli_quote(v) };
+            s.push_str(&format!(" {k}={v}"));
         }
         s
     }
@@ -72,6 +74,9 @@ impl Op {
         }
     }
 }
+
+/// Arguments whose values are masked in every CLI rendering of an op.
+pub const SECRET_KEYS: &[&str] = &["password", "secret", "private-key", "preshared-key"];
 
 /// Always-quoted string for `[find k="v"]`, escaping like `cli_quote`.
 fn quoted(v: &str) -> String {
@@ -375,7 +380,7 @@ pub fn compile(i: &Intent, current: &mut dyn Router) -> Result<Plan, String> {
 /// Intents from feature areas live in `crate::intents::*`. Each area parses the JSON intent (its own
 /// `kind`s) and returns None when the kind isn't its own. Add an area with one line here.
 pub type Area = fn(&serde_json::Value, &mut dyn Router) -> Option<Result<Plan, String>>;
-pub const AREAS: &[Area] = &[];
+pub const AREAS: &[Area] = &[crate::intents::internet::compile, crate::intents::profiles::compile, crate::intents::hotspot::compile];
 
 /// Entry point for the API: core intents first, then the areas. Unknown kinds are rejected.
 pub fn compile_value(v: &serde_json::Value, r: &mut dyn Router) -> Result<Plan, String> {
@@ -385,6 +390,9 @@ pub fn compile_value(v: &serde_json::Value, r: &mut dyn Router) -> Result<Plan, 
             let p = p?;
             if !p.ops.iter().chain(&p.undo).all(Op::valid) {
                 return Err("a value contains characters RouterOS commands can't carry".into());
+            }
+            if p.undo.iter().any(|o| o.args.iter().any(|(k, _)| SECRET_KEYS.contains(k))) {
+                return Err("a revert can't carry a secret".into());
             }
             return Ok(p);
         }
@@ -595,6 +603,19 @@ mod tests {
         let p = plan(Intent::BlockClient { mac: "AA:BB:CC:DD:EE:FF".into() });
         assert!(start(&mut f, "x", &p).unwrap_err().contains("nothing was changed"));
         assert!(!f.seen.iter().any(|w| w[0] == "/ip/firewall/filter/add"));
+    }
+
+    #[test]
+    fn secrets_are_masked_in_cli() {
+        let op = Op::add("/radius", vec![("address", "10.0.0.1".into()), ("secret", "topsecret".into())]);
+        assert_eq!(op.to_cli(), r#"/radius/add address=10.0.0.1 secret="********""#);
+    }
+
+    #[test]
+    fn areas_are_reached_through_compile_value() {
+        let v = serde_json::json!({"kind": "block-domain", "name": "example.com"});
+        assert!(compile_value(&v, &mut Fake::default()).unwrap().title.contains("example.com"));
+        assert!(compile_value(&serde_json::json!({"kind": "nope"}), &mut Fake::default()).is_err());
     }
 
     #[test]

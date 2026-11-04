@@ -11,7 +11,7 @@ Clean-room: we copy the behaviour, never the assets.
 **Backing:** `ROS` = RouterOS API on the router · `CMR` = MikroTik CMR server · `tik` = our own logic/DB · `✗` = nothing can back it
 
 <!-- progress:start -->
-**Progress:** 1 ✅ · 31 🟨 · 155 🎨 · 31 ⬜ · 8 ➖ (226 items, 0% done)
+**Progress:** 1 ✅ · 46 🟨 · 140 🎨 · 31 ⬜ · 8 ➖ (226 items, 0% done)
 <!-- progress:end -->
 
 ---
@@ -108,7 +108,7 @@ Clean-room: we copy the behaviour, never the assets.
 | Offline / historical clients list | tik | 2 | 🟨 |
 | Roaming history (which AP, when) | tik (reg-table changes) · CMR wifi-logs | 3 |🎨 |
 | Filters (wired / wireless / guest / offline) and search | tik | 1 | 🎨 |
-| Client groups | tik | 3 |🎨 |
+| Client groups | tik | 3 | 🟨 |
 
 ## Ports
 | Feature | Backing | Phase | Status |
@@ -144,7 +144,7 @@ Clean-room: we copy the behaviour, never the assets.
 |---|---|---|---|
 | Traffic by application / category | CMR apptraffic | 3 |🎨 |
 | Traffic by client over time | tik | 2 |🎨 |
-| Top domains | ROS DNS cache + tik | 3 |🎨 |
+| Top domains | ROS DNS cache + tik | 3 | 🟨 |
 | Flow log (src, dst, port, bytes) | ROS traffic-flow (IPFIX) → tik collector | 3 |🎨 |
 | Traffic by country | tik GeoIP on flows | 4 |🎨 |
 | Blocked threats view | ✗ (no IDS) | – | ➖ |
@@ -202,14 +202,14 @@ Clean-room: we copy the behaviour, never the assets.
 ## Internet (WAN)
 | Feature | Backing | Phase | Status |
 |---|---|---|---|
-| WAN type: DHCP / static / PPPoE | ROS | 3 |🎨 |
-| VLAN tagged WAN | ROS | 3 |🎨 |
-| Multi-WAN failover | ROS routes + check-gateway / netwatch | 3 |🎨 |
+| WAN type: DHCP / static / PPPoE | ROS | 3 | 🟨 |
+| VLAN tagged WAN | ROS | 3 | 🟨 |
+| Multi-WAN failover | ROS routes + check-gateway / netwatch | 3 | 🟨 |
 | Load balancing | ROS PCC / ECMP | 4 |🎨 |
-| Smart Queues (bufferbloat / CAKE / fq_codel) | ROS queue types | 3 |🎨 |
-| DNS servers / DoH (encrypted DNS) | ROS `/ip/dns` use-doh-server | 2 |🎨 |
-| Dynamic DNS | ROS `/ip/cloud` ddns | 2 |🎨 |
-| IPv6 WAN | ROS | 4 |🎨 |
+| Smart Queues (bufferbloat / CAKE / fq_codel) | ROS queue types | 3 | 🟨 |
+| DNS servers / DoH (encrypted DNS) | ROS `/ip/dns` use-doh-server | 2 | 🟨 |
+| Dynamic DNS | ROS `/ip/cloud` ddns | 2 | 🟨 |
+| IPv6 WAN | ROS | 4 | 🟨 |
 | ISP status / outage history | tik | 2 | 🟨 |
 
 ## VPN
@@ -254,17 +254,17 @@ Clean-room: we copy the behaviour, never the assets.
 ## Profiles
 | Feature | Backing | Phase | Status |
 |---|---|---|---|
-| Speed limit profiles (client groups) | ROS queues | 3 |🎨 |
+| Speed limit profiles (client groups) | ROS queues | 3 | 🟨 |
 | Port profiles | ROS bridge VLAN | 3 |🎨 |
-| RADIUS profiles | ROS `/radius` | 4 |🎨 |
-| QoS / DSCP rules | ROS mangle + queue tree | 4 |🎨 |
+| RADIUS profiles | ROS `/radius` | 4 | 🟨 |
+| QoS / DSCP rules | ROS mangle + queue tree | 4 | 🟨 |
 
 ## Hotspot / Guest portal
 | Feature | Backing | Phase | Status |
 |---|---|---|---|
-| Captive portal (branded) | ROS `/ip/hotspot` + custom html | 4 |🎨 |
-| Vouchers (create, print, expiry) | ROS User Manager | 4 |🎨 |
-| Terms acceptance / password portal | ROS hotspot | 4 |🎨 |
+| Captive portal (branded) | ROS `/ip/hotspot` + custom html | 4 | 🟨 |
+| Vouchers (create, print, expiry) | ROS User Manager | 4 | 🟨 |
+| Terms acceptance / password portal | ROS hotspot | 4 | 🟨 |
 | Payments (Stripe etc.) | ✗ out of scope | – | ➖ |
 | Guest session overview | ROS hotspot active | 4 |🎨 |
 
