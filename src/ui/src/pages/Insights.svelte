@@ -1,5 +1,6 @@
 <script lang="ts">
-  import { clients, raw, bytes, bps, hw, router } from '../lib/data'
+  import { clients, raw, bytes, bps, hw, router, isBackend } from '../lib/data'
+  import { api } from '../lib/backend'
   import { live, displayName, iconOf, activity } from '../lib/live.svelte'
   import { review } from '../lib/apply.svelte'
   import Icon from '../lib/Icon.svelte'
@@ -21,6 +22,18 @@
   const domains = Object.entries(cache.reduce((acc: Record<string, string[]>, d) => ((acc[base(d.name)] ??= []).push(d.name), acc), {}))
     .map(([d, names]) => ({ d, names: names as string[] })).sort((a, b) => b.names.length - a.names.length)
   let dq = $state('')
+
+  // NetFlow v5 aggregates from the server's collector (TIK_FLOWS)
+  type Flows = { flows: number; since: number; talkers: { ip: string; down: number; up: number }[]; destinations: { ip: string; bytes: number; name: string | null }[]; ports: { proto: string; port: number; service: string; bytes: number }[] }
+  let flows = $state<Flows | null>(null)
+  $effect(() => {
+    if (!isBackend || tab !== 'flows') return
+    const load = () => api<Flows>('/flows').then((f) => (flows = f)).catch(() => {})
+    load()
+    const i = setInterval(load, 15_000)
+    return () => clearInterval(i)
+  })
+  const nameOfIp = (ip: string) => { const c = clients.find((x) => x.ip === ip); return c ? displayName(c) : ip }
 
   const CATS = ['Streaming', 'Social', 'Gaming', 'Web', 'Cloud & storage', 'Messaging', 'Updates', 'Other']
 </script>
@@ -74,13 +87,26 @@
           <Icon name="route" size={28} />
           <b>Traffic Flow is off on the router</b>
           <p class="muted small">Turning it on costs some CPU on the {router.board}. tikontrol would collect flows on port 2055 and keep a day of history.</p>
-          <button class="btn primary" onclick={() => review('Enable Traffic Flow', ['/ip/traffic-flow/set enabled=yes interfaces=WAN active-flow-timeout=1m', '/ip/traffic-flow/target/add dst-address=10.0.0.50 port=2055 version=ipfix'])}>Enable flows</button>
+          <button class="btn primary" onclick={() => review('Enable Traffic Flow', ['/ip/traffic-flow/set enabled=yes interfaces=WAN active-flow-timeout=1m', '/ip/traffic-flow/target/add dst-address=<tikontrol-ip> port=2055 version=5'])}>Enable flows</button>
+          <p class="muted small">tikontrol's collector is off by default: start the server with <code>TIK_FLOWS=0.0.0.0:2055</code>.</p>
         </div>
       {/if}
-      <table class:dimmed={!flowOn}>
-        <thead><tr><th>Time</th><th>Client</th><th>Destination</th><th>Port</th><th>Protocol</th><th class="r">Bytes</th></tr></thead>
-        <tbody><tr class="nohover"><td colspan="6" class="muted">No flows collected yet.</td></tr></tbody>
-      </table>
+      {#if flows && flows.flows}
+        <p class="muted small">{flows.flows.toLocaleString()} flows since {new Date(flows.since * 1000).toLocaleString()} · in memory only</p>
+        <div class="fgrid">
+          <table><thead><tr><th>Client</th><th class="r">Down</th><th class="r">Up</th></tr></thead>
+            <tbody>{#each flows.talkers as t}<tr class="nohover"><td>{nameOfIp(t.ip)}</td><td class="r">{bytes(t.down)}</td><td class="r">{bytes(t.up)}</td></tr>{/each}</tbody></table>
+          <table><thead><tr><th>Destination</th><th class="r">Bytes</th></tr></thead>
+            <tbody>{#each flows.destinations as d}<tr class="nohover"><td class="mono small">{d.name ?? d.ip}</td><td class="r">{bytes(d.bytes)}</td></tr>{/each}</tbody></table>
+          <table><thead><tr><th>Service</th><th>Port</th><th class="r">Bytes</th></tr></thead>
+            <tbody>{#each flows.ports as p}<tr class="nohover"><td>{p.service || '—'}</td><td class="mono small">{p.proto}/{p.port}</td><td class="r">{bytes(p.bytes)}</td></tr>{/each}</tbody></table>
+        </div>
+      {:else}
+        <table class:dimmed={!flowOn}>
+          <thead><tr><th>Client</th><th>Destination</th><th>Port</th><th class="r">Bytes</th></tr></thead>
+          <tbody><tr class="nohover"><td colspan="4" class="muted">No flows collected yet.</td></tr></tbody>
+        </table>
+      {/if}
     </Section>
   {:else}
     <Section title="Traffic by country" desc="GeoIP lookup on flow destinations. Needs Traffic Flow (see Flows).">
@@ -92,6 +118,7 @@
 <style>
   .empty { display: grid; justify-items: center; gap: 8px; text-align: center; padding: 26px 10px; color: var(--muted); }
   .empty b { color: var(--text); }
+  .fgrid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 16px; }
   .empty p { max-width: 520px; margin: 0; }
   .cats { display: flex; flex-wrap: wrap; gap: 6px; justify-content: center; margin: 6px 0; }
   .bar-row { display: grid; grid-template-columns: 200px 1fr 80px 80px; gap: 12px; align-items: center; padding: 6px 0; color: var(--text); }
