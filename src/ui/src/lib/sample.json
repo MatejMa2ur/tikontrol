@@ -185,7 +185,12 @@
    "mode": "ap-bridge",
    "name": "wlan1",
    "running": true,
-   "ssid": "HomeNet"
+   "ssid": "HomeNet",
+   "security-profile": "default",
+   "hide-ssid": false,
+   "default-forwarding": true,
+   "default-ap-tx-limit": 0,
+   "default-client-tx-limit": 0
   },
   {
    ".id": "*13",
@@ -196,7 +201,12 @@
    "mode": "ap-bridge",
    "name": "wlan2",
    "running": true,
-   "ssid": "HomeNet"
+   "ssid": "HomeNet",
+   "security-profile": "default",
+   "hide-ssid": false,
+   "default-forwarding": true,
+   "default-ap-tx-limit": 0,
+   "default-client-tx-limit": 0
   }
  ],
  "stations": [

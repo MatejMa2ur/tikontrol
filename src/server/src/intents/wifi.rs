@@ -50,6 +50,14 @@ enum W {
         isolated: Option<bool>,
         security: Option<String>,
         passphrase: Option<String>,
+        /// radios that stop broadcasting this SSID (band selection): they are disabled
+        #[serde(default)]
+        off: Vec<String>,
+        /// bridge port PVID for the SSID's interfaces (1 = default network)
+        vlan: Option<u16>,
+        /// per-client limits ("50M", "0" = unlimited), legacy wireless only
+        limit_down: Option<String>,
+        limit_up: Option<String>,
     },
     /// Band, channel (frequency in MHz or "auto"), width and tx power ("default" or dBm) per radio.
     WifiRadio {
@@ -166,6 +174,21 @@ fn hhmm(s: &str) -> Result<String, String> {
     Ok(format!("{h:02}:{m:02}:00"))
 }
 
+/// "50M", "1.5G", "800k" or plain bits per second -> bps (0 = unlimited).
+fn bps(s: &str) -> Result<u64, String> {
+    let s = s.trim();
+    let bad = || format!("invalid speed {s:?} (e.g. 50M, 0 = unlimited)");
+    let (n, mul) = match s.as_bytes().last() {
+        Some(b'k' | b'K') => (&s[..s.len() - 1], 1e3),
+        Some(b'M') => (&s[..s.len() - 1], 1e6),
+        Some(b'G') => (&s[..s.len() - 1], 1e9),
+        _ => (s, 1.0),
+    };
+    let v: f64 = n.parse().map_err(|_| bad())?;
+    let v = v * mul;
+    (v.is_finite() && (0.0..=4_294_967_295.0).contains(&v)).then_some(v as u64).ok_or_else(bad)
+}
+
 fn slug(s: &str) -> String {
     let s: String = s.chars().filter(|c| c.is_ascii_alphanumeric()).take(20).collect::<String>().to_ascii_lowercase();
     if s.is_empty() { "guest".into() } else { s }
@@ -233,20 +256,36 @@ const SCHED: &str = "/system/scheduler";
 
 fn build(w: W, r: &mut dyn Router) -> Result<Plan, String> {
     match w {
-        W::WifiNetwork { package: pkg, interfaces, ssid: name, hidden, isolated, security, passphrase: pass } => {
-            if interfaces.is_empty() || interfaces.len() > 8 {
+        W::WifiNetwork { package: pkg, interfaces, ssid: name, hidden, isolated, security, passphrase: pass, off, vlan, limit_down, limit_up } => {
+            if interfaces.is_empty() || interfaces.len() > 8 || off.len() > 8 {
                 return Err("pick 1-8 Wi-Fi interfaces".into());
             }
             let ifs = interfaces.iter().map(|i| ifname(i)).collect::<Result<Vec<_>, _>>()?;
+            let off = off.iter().map(|i| ifname(i)).collect::<Result<Vec<_>, _>>()?;
+            if off.iter().any(|o| ifs.contains(o)) {
+                return Err("a radio can't both broadcast and stop broadcasting the SSID".into());
+            }
             let name = name.as_deref().map(ssid).transpose()?;
             let auth = security.as_deref().map(auth_types).transpose()?;
             let pass = pass.as_deref().filter(|p| !p.is_empty()).map(passphrase).transpose()?;
-            if name.is_none() && hidden.is_none() && isolated.is_none() && auth.is_none() && pass.is_none() {
+            if vlan.is_some_and(|v| !(1..=4094).contains(&v)) {
+                return Err("VLAN must be 1-4094".into());
+            }
+            let limits = match (limit_down.as_deref(), limit_up.as_deref()) {
+                (None, None) => None,
+                _ if pkg == Pkg::Wifi => return Err("per-client speed limits are only supported on the legacy wireless package".into()),
+                (d, u) => Some((bps(d.unwrap_or("0"))?, bps(u.unwrap_or("0"))?)),
+            };
+            if name.is_none() && hidden.is_none() && isolated.is_none() && auth.is_none() && pass.is_none() && off.is_empty() && vlan.is_none() && limits.is_none() {
                 return Err("nothing to change".into());
             }
             let (mut ops, mut undo) = (vec![], vec![]);
             for i in &ifs {
                 let mut f: Vec<(&'static str, Option<String>)> = vec![];
+                if let Some((d, u)) = &limits {
+                    f.push(("default-ap-tx-limit", Some(d.to_string())));
+                    f.push(("default-client-tx-limit", Some(u.to_string())));
+                }
                 if let Some(s) = &name {
                     f.push((pkg.key("ssid", "configuration.ssid"), Some(s.clone())));
                 }
@@ -272,8 +311,28 @@ fn build(w: W, r: &mut dyn Router) -> Result<Plan, String> {
                     ops.extend(o);
                     undo.splice(0..0, u);
                 }
+                if let Some(v) = vlan {
+                    let rows = r.run(&Cmd::new("/interface/bridge/port/print").proplist(&["pvid"]).query("interface", i))?;
+                    let was = rows.first().and_then(|x| x.get("pvid")).cloned().ok_or_else(|| format!("{i} is not a bridge port"))?;
+                    ops.push(Op::on("/interface/bridge/port", "set", "interface", i, vec![("pvid", v.to_string())]));
+                    undo.insert(0, Op::on("/interface/bridge/port", "set", "interface", i, vec![("pvid", was)]));
+                }
+            }
+            for i in &off {
+                let (o, u) = set_fields(r, pkg.path(), i, vec![("disabled", Some("yes".into()))])?;
+                ops.extend(o);
+                undo.splice(0..0, u);
             }
             let mut warnings = vec![];
+            if !off.is_empty() {
+                warnings.push(format!("{} turns off: every client on it disconnects, and any other SSID on that radio goes off too.", off.join(", ")));
+            }
+            if vlan.is_some() {
+                warnings.push("The SSID's clients move to that network and get a new address. The VLAN only takes effect with bridge VLAN filtering on, and the bridge must be tagged in that VLAN (networks made by tikontrol are).".into());
+            }
+            if limits.is_some() {
+                warnings.push("The limit applies to each client on this SSID, not to the SSID as a whole.".into());
+            }
             if pkg == Pkg::Wireless && (auth.is_some() || pass.is_some()) {
                 // legacy: security lives in the interface's security profile
                 let mut profiles: Vec<String> = vec![];
@@ -302,7 +361,7 @@ fn build(w: W, r: &mut dyn Router) -> Result<Plan, String> {
                     }
                 }
             }
-            let risk = if pass.is_some() || auth.is_some() { Risk::High } else if name.is_some() { Risk::Medium } else { Risk::Low };
+            let risk = if pass.is_some() || auth.is_some() { Risk::High } else if name.is_some() || vlan.is_some() || !off.is_empty() { Risk::Medium } else { Risk::Low };
             if pass.is_some() {
                 warnings.insert(0, PASS_WARNING.into());
             } else if auth.is_some() {
@@ -639,6 +698,33 @@ mod tests {
         let mut f = Fake::default();
         f.answers.insert("/interface/wireless/print".into(), Ok(vec![row(&[("frequency", "5640")])]));
         assert!(go(json!({"kind": "wifi-radio", "interface": "wlan2", "frequency": "5180"}), &mut f).unwrap().warnings.iter().any(|w| w.contains("200 mW")));
+    }
+
+    #[test]
+    fn bands_vlan_and_limit_compile_with_undo() {
+        let mut f = Fake::default();
+        f.answers.insert("/interface/wireless/print".into(), Ok(vec![row(&[("default-ap-tx-limit", "0"), ("default-client-tx-limit", "0"), ("disabled", "false")])]));
+        f.answers.insert("/interface/bridge/port/print".into(), Ok(vec![row(&[("pvid", "1")])]));
+        let p = go(json!({"kind": "wifi-network", "interfaces": ["wlan2"], "off": ["wlan1"], "vlan": 30, "limit_down": "50M", "limit_up": "10M"}), &mut f).unwrap();
+        assert_eq!(p.cli(), [
+            r#"/interface/wireless/set [find name="wlan2"] default-ap-tx-limit=50000000 default-client-tx-limit=10000000"#,
+            r#"/interface/bridge/port/set [find interface="wlan2"] pvid=30"#,
+            r#"/interface/wireless/set [find name="wlan1"] disabled=yes"#,
+        ]);
+        assert_eq!(p.undo_cli(), [
+            r#"/interface/wireless/set [find name="wlan1"] disabled=no"#,
+            r#"/interface/bridge/port/set [find interface="wlan2"] pvid=1"#,
+            r#"/interface/wireless/set [find name="wlan2"] default-ap-tx-limit=0 default-client-tx-limit=0"#,
+        ]);
+        for b in [
+            json!({"kind": "wifi-network", "interfaces": ["wlan2"], "off": ["wlan2"]}),
+            json!({"kind": "wifi-network", "interfaces": ["wlan2"], "vlan": 5000}),
+            json!({"kind": "wifi-network", "interfaces": ["wlan2"], "limit_down": "50M; /system/reboot"}),
+            json!({"kind": "wifi-network", "package": "wifi", "interfaces": ["wifi1"], "limit_down": "50M"}),
+            json!({"kind": "wifi-network", "interfaces": ["wlan2"], "off": ["wlan1\"]"]}),
+        ] {
+            assert!(go(b.clone(), &mut f).is_err(), "{b}");
+        }
     }
 
     #[test]

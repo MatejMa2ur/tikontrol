@@ -6,11 +6,13 @@ const list = (v: unknown): any[] => (Array.isArray(v) ? v : [])
 
 // RouterOS has two WiFi packages: legacy `wireless` (hAP ac²) and `wifi` (hAP ax/be).
 // Map `wifi` onto the legacy shape so the rest of the UI only knows one.
+// Each row also gets `auth` (authentication types; [] = open) and a virtual AP inherits its master's band.
 export function normalizeWifi(raw: any) {
   const legacy = list(raw.wifi)
-  return {
-    ...raw,
-    wifi: legacy.length ? legacy : list(raw.wifiNew).map((w) => ({
+  const profiles = list(raw.secProfiles)
+  const rows = legacy.length
+    ? legacy.map((w) => { const p = profiles.find((x) => x.name === w['security-profile']); return { ...w, auth: p ? (p.mode === 'none' ? [] : list(p['authentication-types'])) : undefined } })
+    : list(raw.wifiNew).map((w) => ({
       pkg: 'wifi',
       name: w.name,
       ssid: w['configuration.ssid'],
@@ -18,7 +20,15 @@ export function normalizeWifi(raw: any) {
       'channel-width': w['channel.width'],
       running: w.running,
       disabled: w.disabled,
-    })),
+      'master-interface': w['master-interface'],
+      'hide-ssid': w['configuration.hide-ssid'],
+      'default-forwarding': w['datapath.client-isolation'] == null ? undefined : !w['datapath.client-isolation'],
+      auth: w['security.authentication-types'] == null ? undefined : list(w['security.authentication-types']),
+      comment: w.comment,
+    }))
+  return {
+    ...raw,
+    wifi: rows.map((w) => ({ ...w, band: w.band || rows.find((m) => m.name === w['master-interface'])?.band || '' })),
     stations: legacy.length ? list(raw.stations) : list(raw.stationsNew).map((s) => ({ ...s, 'signal-strength': String(s.signal) })),
     // ponytail: the wifi monitor's field names are from the manual, unverified on hardware
     radios: legacy.length ? list(raw.radios) : list(raw.radiosNew),

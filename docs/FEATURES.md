@@ -32,7 +32,7 @@ Clean-room: we copy the behaviour, never the assets.
 | P10 | Alarm Manager | Alerts | 2 |🎨 |
 | P11 | System Log (events, admin activity, security, updates) | Events | 1 | 🟨 |
 | P12 | Hotspot Manager | Guest portal | 4 |🎨 |
-| P13 | Settings → WiFi | Settings · WiFi | 2 |🎨 |
+| P13 | Settings → WiFi | Settings · WiFi | 2 |🟨 |
 | P14 | Settings → Networks | Settings · Networks | 3 |🎨 |
 | P15 | Settings → Internet | Settings · Internet | 3 |🎨 |
 | P16 | Settings → VPN | Settings · VPN | 2 | 🟨 |
@@ -171,20 +171,20 @@ Clean-room: we copy the behaviour, never the assets.
 | Feature | Backing | Phase | Status |
 |---|---|---|---|
 | Create/edit SSID (name, password, security WPA2/WPA3) | ROS wireless/wifi · CMR wifi | 2 |🟨 |
-| Band selection (2.4 / 5 / 6 GHz) | ROS | 2 |🎨 |
+| Band selection (2.4 / 5 / 6 GHz) | ROS | 2 |🟨 |
 | Which APs broadcast it | CMR labels | 3 |🎨 |
-| Network/VLAN per SSID | ROS · CMR | 3 |🎨 |
+| Network/VLAN per SSID | ROS bridge port PVID | 3 |🟨 |
 | Guest network (isolation, portal) | ROS + hotspot | 3 |🟨 |
 | Client isolation | ROS default-forwarding / wifi datapath | 2 |🟨 |
 | Hide SSID | ROS | 2 |🟨 |
 | WiFi schedule (on/off by time) | ROS scheduler | 3 |🟨 |
-| Per-SSID speed limit | ROS queues | 3 |🎨 |
+| Per-SSID speed limit (per client, legacy `wireless` default-*-tx-limit) | ROS wireless | 3 |🟨 |
 | MAC filter | ROS access-list | 3 |🟨 |
 | Private PSK (per-client passwords) | ROS wifi access-list passphrase (new wifi pkg) | 4 |🎨 |
 | Band steering / fast roaming (802.11r/k/v) | ROS wifi (new pkg) | 4 |🎨 |
 | MLO (WiFi 7) | ROS wifi-qcom-be (hw dependent) | 4 |🎨 |
 | Hotspot 2.0 / Passpoint | ROS wifi interworking | 4 |🎨 |
-| QR code to join WiFi | tik (browser) | 2 |🎨 |
+| QR code to join WiFi (password typed in the browser, never stored) | tik (browser) | 2 |🟨 |
 | Channel / tx power per radio | ROS · CMR radio | 3 |🟨 |
 
 ## Networks

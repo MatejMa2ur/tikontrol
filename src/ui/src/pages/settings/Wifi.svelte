@@ -9,61 +9,74 @@
   import Modal from '../../lib/ui/Modal.svelte'
   import Qr from '../../lib/ui/Qr.svelte'
 
-  const sec: any = (raw.secProfiles ?? [])[0] ?? {}
-  // ponytail: the commands below are still legacy /interface/wireless. Port them before writes reach a `wifi` package router.
-  const legacy = hw.wifiPackage !== 'wifi' // the new `wifi` package unlocks the greyed options
-  const NEW_PKG = `Needs the new wifi package (hAP ax/be). Not available on ${router.board}`
+  const legacy = hw.wifiPackage !== 'wifi'
+  const pkg = legacy ? 'wireless' : 'wifi'
+  const NEW_PKG = `Needs the new wifi package (hAP ax/be). Not available on ${router.board ?? 'this router'}`
+  const NOT_WIRED = 'Not wired in tikontrol yet'
 
-  type Ssid = { name: string; password: string; security: string; bands: string[]; network: string; hidden: boolean; isolation: boolean; guest: boolean; schedule: boolean; from: string; to: string; limit: string; macFilter: boolean; ppsk: boolean; steering: boolean; fastRoam: boolean; mlo: boolean; hs20: boolean; aps: string }
-  const fromRouter = (s: (typeof ssids)[number]): Ssid => ({ name: s.ssid, password: '', security: sec['authentication-types']?.includes('wpa3-psk') || hw.bands.includes('6 GHz') ? 'wpa2-wpa3' : 'wpa2', bands: s.radios.map((r) => r.band), network: 'Default', hidden: false, isolation: false, guest: false, schedule: false, from: '07:00', to: '23:00', limit: '', macFilter: (raw.accessList ?? []).length > 0, ppsk: false, steering: false, fastRoam: false, mlo: false, hs20: false, aps: 'All' })
+  // real rows: the snapshot's wifi interfaces (normalizeWifi: auth, master band), bridge ports, VLANs, schedules
+  const W: any[] = raw.wifi ?? []
+  const pvidOf = (ifn: string) => +((raw.bridgePorts ?? []).find((p: any) => p.interface === ifn)?.pvid ?? 1)
+  const networks: { id: number; name: string }[] = [{ id: 1, name: 'Default' }, ...(raw.vlans ?? []).map((v: any) => ({ id: +v['vlan-id'], name: String(v.comment ?? '').startsWith('tik:net:') ? v.comment.slice(8) : v.name }))]
+  const netName = (id: number) => networks.find((n) => n.id === id)?.name ?? `VLAN ${id}`
+  const secOf = (auth?: string[]) => (!auth ? 'wpa2' : !auth.length ? 'open' : auth.includes('wpa3-psk') ? (auth.includes('wpa2-psk') ? 'wpa2-wpa3' : 'wpa3') : 'wpa2')
+  const mbit = (n: unknown) => (+(n ?? 0) ? `${+(+n! / 1e6).toFixed(1)}M` : '0')
+  const sched = (ifn: string, on: boolean) => String((raw.scheduler ?? []).find((x: any) => x.name === `tik-wifi-${on ? 'on' : 'off'}-${ifn}`)?.['start-time'] ?? '').slice(0, 5)
+  // physical radios (virtual APs ride on their master); one checkbox per band
+  const phys = radios.filter((r) => !W.find((w) => w.name === r.name)?.['master-interface'])
+
+  type Ssid = { name: string; password: string; security: string; bands: string[]; ifaces: string[]; network: number; hidden: boolean; isolation: boolean; guest: boolean; schedule: boolean; from: string; to: string; limit: string; macFilter: boolean }
+  const fromRouter = (s: (typeof ssids)[number]): Ssid => {
+    const rows = W.filter((w) => w.ssid === s.ssid), w0 = rows[0] ?? {}
+    const lim = rows.length && (+w0['default-ap-tx-limit'] || +w0['default-client-tx-limit']) ? `${mbit(w0['default-ap-tx-limit'])}/${mbit(w0['default-client-tx-limit'])}` : ''
+    return { name: s.ssid, password: '', security: secOf(w0.auth), bands: s.radios.map((r) => r.band), ifaces: s.radios.map((r) => r.name), network: w0.name ? pvidOf(w0.name) : 1, hidden: !!w0['hide-ssid'], isolation: w0['default-forwarding'] === false, guest: String(w0.comment ?? '').startsWith('tik:guest'), schedule: !!(w0.name && sched(w0.name, true)), from: (w0.name && sched(w0.name, true)) || '07:00', to: (w0.name && sched(w0.name, false)) || '23:00', limit: lim, macFilter: (raw.accessList ?? []).length > 0 }
+  }
   let list = $state(ssids.map(fromRouter))
   let edit = $state<Ssid | null>(null)
   let editIdx = $state(-1)
   let qr = $state<Ssid | null>(null)
   let qrPass = $state('')
 
-  function open(i: number) { editIdx = i; edit = i < 0 ? { ...fromRouter({ ssid: 'New network', radios: radios.map((r) => ({ name: r.name, band: r.band, running: true })), clients: 0 }), name: '' } : structuredClone($state.snapshot(list[i])) }
-  function cmds(s: Ssid) {
-    const radiosFor = radios.filter((r) => s.bands.includes(r.band))
-    const prof = `tik-${s.name.replace(/\W/g, '')}`
-    const out = [`/interface/wireless/security-profiles/add name=${prof} mode=dynamic-keys authentication-types=${s.security === 'wpa2' ? 'wpa2-psk' : 'wpa2-psk,wpa3-psk'} wpa2-pre-shared-key="••••••" ${s.security !== 'wpa2' ? 'wpa3-pre-shared-key="••••••"' : ''}`.trim()]
-    if (editIdx >= 0) radiosFor.forEach((r) => out.push(`/interface/wireless/set ${r.name} ssid="${s.name}" security-profile=${prof} hide-ssid=${s.hidden ? 'yes' : 'no'} default-forwarding=${s.isolation ? 'no' : 'yes'}`))
-    else radiosFor.forEach((r) => out.push(`/interface/wireless/add master-interface=${r.name} name=${prof}-${r.band[0]}g ssid="${s.name}" security-profile=${prof} hide-ssid=${s.hidden ? 'yes' : 'no'} default-forwarding=${s.isolation ? 'no' : 'yes'}`))
-    if (s.network !== 'Default') out.push(`/interface/wireless/set [find ssid="${s.name}"] vlan-mode=use-tag vlan-id=${s.network}`)
-    if (s.limit) out.push(`/interface/wireless/set [find ssid="${s.name}"] default-client-tx-limit=${s.limit.split('/')[0]} default-ap-tx-limit=${s.limit.split('/')[1] ?? s.limit.split('/')[0]}`)
-    if (s.schedule) out.push(`/system/scheduler/add name=${prof}-off start-time=${s.to}:00 interval=1d on-event="/interface/wireless/disable [find ssid=\\"${s.name}\\"]"`, `/system/scheduler/add name=${prof}-on start-time=${s.from}:00 interval=1d on-event="/interface/wireless/enable [find ssid=\\"${s.name}\\"]"`)
-    if (s.macFilter) out.push(`/interface/wireless/set [find ssid="${s.name}"] default-authentication=no`)
-    return out
-  }
-  const pkg = hw.wifiPackage === 'wifi' ? 'wifi' : 'wireless'
+  function open(i: number) { editIdx = i; edit = i < 0 ? { ...fromRouter({ ssid: '', radios: phys.map((r) => ({ name: r.name, band: r.band, running: true })), clients: 0 }), name: '' } : structuredClone($state.snapshot(list[i])) }
   // Safe apply intents (server: src/server/src/intents/wifi.rs). One intent per review.
   function intentFor(s: Ssid): Intent | undefined {
-    const ifs = radios.filter((r) => s.bands.includes(r.band)).map((r) => r.name)
-    if (!ifs.length) return
-    if (editIdx < 0) return s.password.length >= 8 ? { kind: 'wifi-guest', package: pkg, master: ifs[0], ssid: s.name, passphrase: s.password } : undefined
+    if (editIdx < 0) { const m = phys.find((r) => s.bands.includes(r.band)); return m && s.password.length >= 8 ? { kind: 'wifi-guest', package: pkg, master: m.name, ssid: s.name, passphrase: s.password } : undefined }
     const before = list[editIdx]
+    // keep this SSID's own interfaces on ticked bands, add the physical radio of a newly ticked band, switch off unticked ones
+    const keep = before.ifaces.filter((i) => s.bands.includes(radios.find((r) => r.name === i)?.band ?? ''))
+    const added = phys.filter((r) => s.bands.includes(r.band) && !before.bands.includes(r.band)).map((r) => r.name)
+    const ifs = [...keep, ...added]
+    if (!ifs.length) return
+    const [down, up] = s.limit ? s.limit.split('/') : ['0', '0']
     return {
       kind: 'wifi-network', package: pkg, interfaces: ifs,
-      ...(s.name !== before.name ? { ssid: s.name } : {}),
+      ...(s.name !== before.name || added.length ? { ssid: s.name } : {}),
       ...(s.hidden !== before.hidden ? { hidden: s.hidden } : {}),
       ...(s.isolation !== before.isolation ? { isolated: s.isolation } : {}),
       ...(s.security !== before.security && s.security !== 'open' ? { security: s.security } : {}),
       ...(s.password ? { passphrase: s.password } : {}),
+      ...(before.ifaces.some((i) => !keep.includes(i)) ? { off: before.ifaces.filter((i) => !keep.includes(i)) } : {}),
+      ...(s.network !== before.network ? { vlan: s.network } : {}),
+      ...(legacy && s.limit !== before.limit ? { limit_down: down || '0', limit_up: up || down || '0' } : {}),
     }
   }
+  // offline mockup only: with the server the review shows the commands it compiled
+  const cmds = (i?: Intent) => (i ? [`# ${i.kind}: ${JSON.stringify({ ...i, kind: undefined, passphrase: i.passphrase ? '********' : undefined })}`] : ['# pick at least one band (and a password of 8+ characters for a new network)'])
   function save() {
-    review(editIdx < 0 ? `Create SSID ${edit!.name}` : `Update SSID ${edit!.name}`, cmds(edit!), intentFor(edit!))
-    if (editIdx < 0) list.push(edit!); else list[editIdx] = edit!
+    const i = intentFor(edit!)
+    review(editIdx < 0 ? `Create SSID ${edit!.name}` : `Update SSID ${edit!.name}`, cmds(i), i)
     edit = null
   }
   function reviewSchedule(s: Ssid) {
-    const r = radios.find((x) => s.bands.includes(x.band))
-    if (r) review(`Wi-Fi schedule for ${s.name}`, cmds(s).filter((c) => c.startsWith('/system/scheduler')), { kind: 'wifi-schedule', package: pkg, interface: r.name, on: s.from, off: s.to })
+    const r = s.ifaces[0]
+    if (r) { const i: Intent = { kind: 'wifi-schedule', package: pkg, interface: r, on: s.from, off: s.to }; review(`Wi-Fi schedule for ${s.name}`, cmds(i), i) }
   }
-  const wifiQr = (s: Ssid) => `WIFI:T:${s.security === 'open' ? 'nopass' : 'WPA'};S:${s.name};P:${qrPass};H:${s.hidden ? 'true' : 'false'};;`
+  // WIFI: QR payload; \ ; , : " are escaped (zxing spec). The password is typed here and never leaves the browser.
+  const esc = (v: string) => v.replace(/([\\;,:"])/g, '\\$1')
+  const wifiQr = (s: Ssid) => `WIFI:T:${s.security === 'open' ? 'nopass' : 'WPA'};S:${esc(s.name)};${s.security === 'open' ? '' : `P:${esc(qrPass)};`}${s.hidden ? 'H:true;' : ''};`
 
   // per-radio channel / power
-  let rf = $state(radios.map((r) => ({ name: r.name, band: r.band, widths: r.widths.filter((w) => w <= r.maxWidth), channel: 'auto', width: r.width ?? r.maxWidth, power: 'default', on: r.running })))
+  let rf = $state(phys.map((r) => ({ name: r.name, band: r.band, widths: r.widths.filter((w) => w <= r.maxWidth), channel: 'auto', width: r.width ?? r.maxWidth, power: 'default', on: r.running })))
   type Rf = (typeof rf)[number]
   const pkgPath = pkg === 'wifi' ? '/interface/wifi' : '/interface/wireless'
   const freqOf = (r: Rf) => (r.channel === 'auto' ? 'auto' : String((r.band.startsWith('2') ? 2407 : r.band.startsWith('6') ? 5950 : 5000) + 5 * +r.channel))
@@ -90,7 +103,7 @@
           <td><span class="row"><Icon name="wifi" size={15} /><b>{s.name}</b>{#if s.hidden}<span class="pill">hidden</span>{/if}{#if s.guest}<span class="pill">guest</span>{/if}</span></td>
           <td>{s.security === 'wpa2' ? 'WPA2' : s.security === 'wpa3' ? 'WPA3' : s.security === 'open' ? 'Open' : 'WPA2/WPA3'}</td>
           <td>{s.bands.join(' + ')}</td>
-          <td>{s.network}</td>
+          <td>{netName(s.network)}</td>
           <td>{clients.filter((c) => c.ssid === s.name).length}</td>
           <td class="r"><button class="btn small" onclick={(e) => { e.stopPropagation(); qr = s; qrPass = '' }}>QR code</button></td>
         </tr>
@@ -117,32 +130,31 @@
     <Field label="Name (SSID)"><input type="text" bind:value={edit.name} /></Field>
     <Field label="Password" help="Never read back from the router"><input type="password" bind:value={edit.password} placeholder="unchanged" /></Field>
     <Field label="Security"><select bind:value={edit.security}><option value="wpa2">WPA2</option><option value="wpa2-wpa3">WPA2/WPA3</option><option value="wpa3">WPA3</option><option value="open">Open</option></select></Field>
-    <Field label="Bands">{#each radios as r}<label class="chk"><input type="checkbox" checked={edit.bands.includes(r.band)} onchange={() => (edit!.bands = edit!.bands.includes(r.band) ? edit!.bands.filter((b) => b !== r.band) : [...edit!.bands, r.band])} /> {r.band}</label>{/each}<label class="chk na"><input type="checkbox" disabled /> 6 GHz</label></Field>
-    <Field label="Network" help="VLAN for this SSID"><select bind:value={edit.network}><option>Default</option><option value="10">VLAN 10</option><option value="20">VLAN 20</option><option value="30">VLAN 30</option></select></Field>
-    <Field label="Broadcasting APs"><select bind:value={edit.aps}><option>All</option><option>{radios[0] ? 'hAP' : ''}</option></select></Field>
-    <Field label="Guest network" help="Isolated, internet only, optional portal"><Toggle bind:checked={edit.guest} label="Guest" /></Field>
+    <Field label="Bands" help={editIdx < 0 ? 'A new network starts on one radio' : 'Unticking a band turns that radio off; ticking one renames the SSID that radio broadcasts'}>{#each phys as r}<label class="chk"><input type="checkbox" checked={edit.bands.includes(r.band)} onchange={() => (edit!.bands = edit!.bands.includes(r.band) ? edit!.bands.filter((b) => b !== r.band) : [...edit!.bands, r.band])} /> {r.band}</label>{/each}{#if !hw.bands.includes('6 GHz')}<label class="chk na" title="No 6 GHz radio on this router"><input type="checkbox" disabled /> 6 GHz</label>{/if}</Field>
+    <Field label="Network" help={editIdx < 0 ? 'Set it after creating the network' : 'Bridge VLAN (PVID) for this SSID'}><select bind:value={edit.network} disabled={editIdx < 0}>{#each networks as n}<option value={n.id}>{n.name}{n.id > 1 ? ` (VLAN ${n.id})` : ''}</option>{/each}</select></Field>
+    <Field label="Broadcasting APs" na="Only this router: more APs need MikroTik CMR/CAPsMAN"><span class="muted small">{router.identity}</span></Field>
+    <Field label="Guest network" help="Isolated, internet only, optional portal"><Toggle bind:checked={edit.guest} disabled={editIdx >= 0} label="Guest" /></Field>
     <Field label="Client isolation" help="Clients can't see each other"><Toggle bind:checked={edit.isolation} label="Isolation" /></Field>
     <Field label="Hide SSID"><Toggle bind:checked={edit.hidden} label="Hide" /></Field>
     <details><summary class="small">Advanced</summary>
       <Field label="WiFi schedule"><Toggle bind:checked={edit.schedule} label="Schedule" /></Field>
       {#if edit.schedule}<Field label="On between" help="Applies to one radio"><input type="time" bind:value={edit.from} /><input type="time" bind:value={edit.to} /><button class="btn small" onclick={() => reviewSchedule(edit!)}>Review schedule</button></Field>{/if}
-      <Field label="Speed limit per client" help="e.g. 50M/10M"><input type="text" bind:value={edit.limit} placeholder="Unlimited" /></Field>
-      <Field label="MAC address filter" help="Only allow listed devices"><Toggle bind:checked={edit.macFilter} label="MAC filter" /></Field>
-      <Field label="Private PSK" na={legacy ? NEW_PKG : undefined} help="Different password per device"><Toggle bind:checked={edit.ppsk} disabled={legacy} label="PPSK" /></Field>
-      <Field label="Band steering" na={legacy ? NEW_PKG : undefined}><Toggle bind:checked={edit.steering} disabled={legacy} label="Band steering" /></Field>
-      <Field label="Fast roaming (802.11r/k/v)" na={legacy ? NEW_PKG : undefined}><Toggle bind:checked={edit.fastRoam} disabled={legacy} label="Fast roaming" /></Field>
-      <Field label="MLO (WiFi 7)" na={hw.wifiStandard === 'WiFi 7' ? 'RouterOS support for MLO on this board is unconfirmed' : 'Needs WiFi 7 hardware (e.g. hAP be³)'}><Toggle bind:checked={edit.mlo} disabled label="MLO" /></Field>
-      <Field label="Hotspot 2.0 / Passpoint" na={legacy ? NEW_PKG : undefined}><Toggle bind:checked={edit.hs20} disabled={legacy} label="Hotspot 2.0" /></Field>
+      <Field label="Speed limit per client" help="Download/upload, e.g. 50M/10M" na={legacy ? undefined : 'Not supported on the wifi package by tikontrol'}><input type="text" bind:value={edit.limit} placeholder="Unlimited" disabled={!legacy || editIdx < 0} /></Field>
+      <Field label="MAC address filter" help="Access-list entries exist; manage them per device on the Clients page"><Toggle bind:checked={edit.macFilter} disabled label="MAC filter" /></Field>
+      <Field label="Private PSK" na={legacy ? NEW_PKG : NOT_WIRED} help="Different password per device"><Toggle checked={false} disabled label="PPSK" /></Field>
+      <Field label="Band steering / fast roaming (802.11r/k/v)" na={legacy ? NEW_PKG : NOT_WIRED}><Toggle checked={false} disabled label="Band steering" /></Field>
+      <Field label="MLO (WiFi 7)" na={hw.wifiStandard === 'WiFi 7' ? 'RouterOS support for MLO on this board is unconfirmed' : 'Needs WiFi 7 hardware (e.g. hAP be³)'}><Toggle checked={false} disabled label="MLO" /></Field>
+      <Field label="Hotspot 2.0 / Passpoint" na={legacy ? NEW_PKG : NOT_WIRED}><Toggle checked={false} disabled label="Hotspot 2.0" /></Field>
     </details>
     {#snippet footer()}<button class="btn" onclick={() => (edit = null)}>Cancel</button><button class="btn primary" disabled={!edit?.name} onclick={save}>Review & apply</button>{/snippet}
   </Modal>
 {/if}
 
 {#if qr}
-  <Modal title="Join {qr.name}" onclose={() => (qr = null)}>
+  <Modal title="Join {qr.name}" onclose={() => { qr = null; qrPass = '' }}>
     <p class="muted small">tikontrol never reads Wi-Fi passwords from the router. Type it to make the code; it stays in this browser.</p>
-    <Field label="Password"><input type="password" bind:value={qrPass} /></Field>
-    <div class="qrbox"><Qr text={wifiQr(qr)} /><span class="muted small">Point a phone camera at it</span></div>
+    {#if qr.security !== 'open'}<Field label="Password"><input type="password" bind:value={qrPass} autocomplete="off" /></Field>{/if}
+    <div class="qrbox">{#if qr.security === 'open' || qrPass.length >= 8}<Qr text={wifiQr(qr)} />{:else}<span class="muted small">Type the password to show the code</span>{/if}<span class="muted small">Point a phone camera at it</span></div>
   </Modal>
 {/if}
 

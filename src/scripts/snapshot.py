@@ -20,7 +20,7 @@ Q = {
     "wanTraffic": "[/interface/monitor-traffic ether1 once as-value]",
     "interfaces": "[/interface/print as-value proplist=name,type,running,disabled,rx-byte,tx-byte,comment,mac-address]",
     "ethernet": "[/interface/ethernet/print as-value proplist=name,running,disabled]",
-    "wifi": "[/interface/wireless/print as-value proplist=name,ssid,band,frequency,channel-width,running,disabled,mode]",
+    "wifi": "[/interface/wireless/print as-value proplist=name,ssid,band,frequency,channel-width,running,disabled,mode,master-interface,security-profile,hide-ssid,default-forwarding,default-ap-tx-limit,default-client-tx-limit,comment]",
     "stations": "[/interface/wireless/registration-table/print as-value proplist=interface,mac-address,signal-strength,tx-rate,rx-rate,uptime,bytes,last-ip]",
     "leases": "[/ip/dhcp-server/lease/print as-value proplist=address,mac-address,host-name,comment,status,dynamic,last-seen]",
     "arp": "[/ip/arp/print as-value proplist=address,mac-address,interface,status]",
@@ -34,7 +34,7 @@ Q = {
     "linkQuality": "[/interface/wireless/registration-table/print as-value proplist=mac-address,tx-ccq,p-throughput]",
     "radios": "[/interface/wireless/monitor [find] once as-value]",
     # newer boards use the `wifi` package instead; each router answers one of the two sets
-    "wifiNew": "[/interface/wifi/print as-value proplist=name,channel.band,channel.width,configuration.ssid,running,disabled]",
+    "wifiNew": "[/interface/wifi/print as-value proplist=name,channel.band,channel.width,configuration.ssid,running,disabled,master-interface,configuration.hide-ssid,datapath.client-isolation,security.authentication-types,comment]",
     "radiosNew": "[/interface/wifi/monitor [find] once as-value]",
     "stationsNew": "[/interface/wifi/registration-table/print as-value proplist=interface,mac-address,signal,tx-rate,rx-rate,uptime,bytes,last-ip,band,ssid]",
     # --- settings pages (explicit proplists: never keys, passphrases or script bodies) ---
@@ -59,6 +59,7 @@ Q = {
     "pools": "[/ip/pool/print as-value proplist=name,ranges]",
     "dhcpServers": "[/ip/dhcp-server/print as-value proplist=name,interface,address-pool,lease-time,disabled]",
     "dhcpNetworks": "[/ip/dhcp-server/network/print as-value proplist=address,gateway,dns-server,domain,comment]",
+    "vlans": "[/interface/vlan/print as-value proplist=name,vlan-id,interface,comment]",
     "bridges": "[/interface/bridge/print as-value proplist=name,vlan-filtering,protocol-mode,igmp-snooping,comment]",
     "bridgePorts": "[/interface/bridge/port/print as-value proplist=interface,bridge,pvid,frame-types,hw,disabled]",
     "bridgeVlans": "[/interface/bridge/vlan/print as-value proplist=bridge,vlan-ids,tagged,untagged]",
