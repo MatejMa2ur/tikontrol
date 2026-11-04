@@ -38,8 +38,11 @@ Q = {
     "radiosNew": "[/interface/wifi/monitor [find] once as-value]",
     "stationsNew": "[/interface/wifi/registration-table/print as-value proplist=interface,mac-address,signal,tx-rate,rx-rate,uptime,bytes,last-ip,band,ssid]",
     # --- settings pages (explicit proplists: never keys, passphrases or script bodies) ---
-    "wireguard": "[/interface/wireguard/print as-value proplist=name,listen-port,mtu,running,disabled,comment]",
-    "wgPeers": "[/interface/wireguard/peers/print as-value proplist=interface,name,allowed-address,endpoint-address,endpoint-port,last-handshake,rx,tx,comment,disabled]",
+    "wireguard": "[/interface/wireguard/print as-value proplist=name,listen-port,mtu,running,disabled,comment,public-key]",
+    "wgPeers": "[/interface/wireguard/peers/print as-value proplist=interface,name,allowed-address,endpoint-address,endpoint-port,last-handshake,rx,tx,comment,disabled,public-key]",
+    # no private-key: Back To Home users carry their WireGuard keys
+    "bthUsers": "[/ip/cloud/back-to-home-users/print as-value proplist=name,allow-lan,disabled,comment,expires]",
+    "routingRules": "[/routing/rule/print as-value proplist=src-address,dst-address,action,table,interface,routing-mark,disabled,comment]",
     "routes": "[/ip/route/print as-value proplist=dst-address,gateway,distance,routing-table,active,dynamic,static,comment,disabled]",
     "dnsStatic": "[/ip/dns/static/print as-value proplist=name,address,type,comment,disabled]",
     "dnsCfg": '({"servers"=[/ip/dns/get servers];"use-doh-server"=[/ip/dns/get use-doh-server];"allow-remote-requests"=[/ip/dns/get allow-remote-requests];"mdns-repeat-ifaces"=[/ip/dns/get mdns-repeat-ifaces]})',

@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { raw, internet } from '../../lib/data'
+  import { raw, internet, clients } from '../../lib/data'
   import { review } from '../../lib/apply.svelte'
   import Icon from '../../lib/Icon.svelte'
   import Section from '../../lib/ui/Section.svelte'
@@ -33,9 +33,35 @@
   const ovpnName: string = (raw.ovpn ?? [])[0]?.name ?? ''
   let ovpn = $state({ on: (raw.ovpn ?? []).some((o: any) => !o.disabled) })
   let l2 = $state({ on: !!l2tp.enabled })
-  let client = $state({ kind: 'wireguard', endpoint: '', all: false })
-  let s2s = $state({ remote: '', subnet: '10.0.1.0/24' })
-  let policy = $state({ client: '', via: 'vpn-client' })
+  const tagged = (k: string) => wg.filter((w) => String(w.comment ?? '').startsWith(`tik:${k}:`))
+  const vpnClients = tagged('vpnc')
+  const tunnels = tagged('s2s')
+  const rules: any[] = raw.routingRules ?? []
+  const bthUsers: any[] = raw.bthUsers ?? []
+  const peerOf = (n: string) => peers.find((p) => p.interface === n)
+  const sourcesOf = (n: string) => rules.filter((r) => r.comment === `tik:vpnc:${n}` && r.table === `tik-vpn-${n}`).map((r) => r['src-address'])
+  const lans = [...new Set<string>((raw.dhcpNetworks ?? []).map((n: any) => n.address as string).filter(Boolean))]
+  const splitEp = (s: string): [string, number] => { const [h, p] = s.trim().split(':'); return [h ?? '', +(p || 51820)] }
+
+  // provider's private key is pasted, generated here, or left empty for the router to generate one
+  let client = $state({ name: 'vpn1', address: '', publicKey: '', endpoint: '', privateKey: '', myPub: '', all: false, only: [] as string[], err: '' })
+  async function genClientKey() {
+    try { const k = await keypair(); client.privateKey = k.priv; client.myPub = k.pub } catch { client.err = 'This browser has no X25519 in WebCrypto: leave the key empty and the router generates one.' }
+  }
+  const clientSources = $derived(client.all ? lans : client.only)
+  function clientReview() {
+    const [ep, port] = splitEp(client.endpoint)
+    review(`VPN client ${client.name}`, [`/interface/wireguard/add name=${client.name}${client.privateKey ? ' private-key="********"' : ''}`, `/interface/wireguard/peers/add interface=${client.name} endpoint-address=${ep} endpoint-port=${port} allowed-address=0.0.0.0/0`, ...clientSources.map((s) => `/routing/rule/add src-address=${s} action=lookup table=tik-vpn-${client.name}`)],
+      { kind: 'wireguard-client', name: client.name, private_key: client.privateKey, address: client.address, public_key: client.publicKey.trim(), endpoint: ep, endpoint_port: port, sources: clientSources })
+  }
+
+  let s2s = $state({ name: 's2s1', port: 13232, address: '10.255.0.1/30', publicKey: '', endpoint: '', remote: '10.0.1.0/24' })
+  function s2sReview() {
+    const [ep, port] = s2s.endpoint ? splitEp(s2s.endpoint) : ['', 0]
+    const remote = s2s.remote.split(',').map((x) => x.trim()).filter(Boolean)
+    review(`Site-to-site ${s2s.name}`, [`/interface/wireguard/add name=${s2s.name} listen-port=${s2s.port}`, `/interface/wireguard/peers/add interface=${s2s.name} allowed-address=${remote.join(',')}`, ...remote.map((r) => `/ip/route/add dst-address=${r} gateway=${s2s.name}`)],
+      { kind: 'site-to-site', name: s2s.name, listen_port: +s2s.port, address: s2s.address, public_key: s2s.publicKey.trim(), endpoint: ep, endpoint_port: port || +s2s.port, remote_subnets: remote })
+  }
 </script>
 
 <Section title="WireGuard server" desc="Phones and laptops connect home. One QR code per device." ros="/interface/wireguard/print; /interface/wireguard/peers/print">
@@ -47,9 +73,12 @@
   </table>
 </Section>
 
-<Section title="Back To Home" desc="MikroTik's built-in relay VPN. Works behind double NAT, managed from the MikroTik app." ros="/ip/cloud/back-to-home-users/print">
-  <Field label="Status"><span class="pill" class:ok={bth?.running}>{bth?.running ? 'Running' : 'Off'}</span></Field>
-  <Field label="Devices"><span>{peers.filter((p) => p.interface === 'back-to-home-vpn').length}</span></Field>
+<Section title="Back To Home" desc="MikroTik's built-in relay VPN (Teleport). Works behind double NAT; devices are added in the MikroTik app, so this is read-only." ros="/ip/cloud/print; /ip/cloud/back-to-home-users/print">
+  <Field label="Status"><span class="pill" class:ok={internet.bth && bth?.running}>{internet.bth ? (bth?.running ? 'Running' : 'Enabled, not running') : (raw.cloud?.['back-to-home-vpn'] ?? 'Not available')}</span></Field>
+  {#if bthUsers.length}
+    <table><thead><tr><th>User</th><th>LAN access</th><th>Expires</th><th>State</th></tr></thead>
+      <tbody>{#each bthUsers as u}<tr class="nohover"><td><b>{u.name}</b> <span class="muted small">{u.comment ?? ''}</span></td><td>{u['allow-lan'] ? 'Yes' : 'Internet only'}</td><td>{u.expires || 'never'}</td><td><span class="pill">{u.disabled ? 'Disabled' : 'Active'}</span></td></tr>{/each}</tbody></table>
+  {:else}<Field label="Devices"><span>{peers.filter((p) => p.interface === 'back-to-home-vpn').length}</span></Field>{/if}
 </Section>
 
 <Section title="OpenVPN & L2TP servers" desc="For devices without WireGuard. L2TP/IPsec is built into every OS." ros="/interface/ovpn-server/server/print; /interface/l2tp-server/server/print">
@@ -61,22 +90,36 @@
   </div>
 </Section>
 
-<Section title="VPN client" desc="Send some or all traffic through a commercial or remote VPN.">
-  <Field label="Type"><select bind:value={client.kind}><option value="wireguard">WireGuard</option><option value="ovpn">OpenVPN</option></select></Field>
-  <Field label="Endpoint"><input type="text" bind:value={client.endpoint} placeholder="vpn.example.com:51820" /></Field>
-  <Field label="Route all traffic"><Toggle bind:checked={client.all} label="All traffic" /></Field>
-  <Field label="Only for client" help="Policy-based routing: send one device through the VPN"><input type="text" bind:value={policy.client} placeholder="IP or leave empty" /></Field>
-  <div class="r"><button class="btn primary" disabled={!client.endpoint} onclick={() => review('VPN client', [
-    `/interface/wireguard/add name=vpn-client`, `/interface/wireguard/peers/add interface=vpn-client endpoint-address=${client.endpoint.split(':')[0]} endpoint-port=${client.endpoint.split(':')[1] ?? 51820} allowed-address=0.0.0.0/0`,
-    '/routing/table/add name=via-vpn fib', '/ip/route/add dst-address=0.0.0.0/0 gateway=vpn-client routing-table=via-vpn',
-    client.all ? '/ip/firewall/mangle/add chain=prerouting in-interface-list=LAN action=mark-routing new-routing-mark=via-vpn' : `/routing/rule/add src-address=${policy.client || '0.0.0.0/0'} action=lookup table=via-vpn`,
-  ])}>Review & apply</button></div>
+<Section title="VPN client" desc="WireGuard tunnel to a VPN provider. Pick which devices or networks go through it (policy-based routing); the rest keeps your normal connection." ros="/interface/wireguard/print; /routing/rule/print">
+  {#if vpnClients.length}
+    <table><thead><tr><th>Tunnel</th><th>Provider</th><th>Routed through it</th><th>State</th></tr></thead>
+      <tbody>{#each vpnClients as v}{@const p = peerOf(v.name)}<tr class="nohover"><td><b>{v.name}</b>{#if v['public-key']}<div class="mono tiny muted">{v['public-key']}</div>{/if}</td><td class="mono small">{p ? `${p['endpoint-address']}:${p['endpoint-port']}` : '—'}</td><td class="mono small">{sourcesOf(v.name).join(', ') || 'nothing'}</td><td><span class="pill" class:ok={v.running}>{v.running ? 'Up' : 'Down'}</span>{#if p?.['last-handshake']} <span class="muted small">{p['last-handshake']}</span>{/if}</td></tr>{/each}</tbody></table>
+  {/if}
+  <Field label="Name"><input type="text" bind:value={client.name} aria-label="Tunnel name" /></Field>
+  <Field label="Tunnel address" help="From the provider's config, e.g. 10.2.0.2/32"><input type="text" bind:value={client.address} aria-label="Tunnel address" /></Field>
+  <Field label="Provider public key"><input type="text" class="mono" bind:value={client.publicKey} aria-label="Provider public key" /></Field>
+  <Field label="Endpoint" help="host:port"><input type="text" bind:value={client.endpoint} placeholder="vpn.example.com:51820" aria-label="Endpoint" /></Field>
+  <Field label="Private key" help="Paste the provider's, generate one here, or leave empty for the router to make one. Sent to the router once, never stored by tikontrol.">
+    <input type="password" class="mono" bind:value={client.privateKey} autocomplete="off" aria-label="Private key" /><button class="btn small" onclick={genClientKey}>Generate</button></Field>
+  {#if client.myPub}<Field label="Your public key" help="Register this with the provider"><span class="mono small">{client.myPub}</span></Field>{/if}
+  {#if client.err}<div class="muted small">{client.err}</div>{/if}
+  <Field label="Route all LAN devices" help={lans.join(', ') || 'No DHCP networks found'}><Toggle bind:checked={client.all} label="All LAN devices" /></Field>
+  {#if !client.all}<Field label="Only these devices" help="Policy-based routing per device"><select multiple bind:value={client.only} aria-label="Devices routed through the VPN" size="4">{#each clients.filter((c) => c.ip && c.ip !== '—') as c}<option value={`${c.ip}/32`}>{c.name} ({c.ip})</option>{/each}</select></Field>{/if}
+  <div class="r"><button class="btn primary" disabled={!client.name || !client.address || !client.publicKey || !client.endpoint} onclick={clientReview}>Review & apply</button></div>
 </Section>
 
-<Section title="Site-to-site" desc="Join another office or home network over WireGuard.">
-  <Field label="Remote router"><input type="text" bind:value={s2s.remote} placeholder="vpn.example.com" /></Field>
-  <Field label="Remote subnet"><input type="text" bind:value={s2s.subnet} /></Field>
-  <div class="r"><button class="btn primary" disabled={!s2s.remote} onclick={() => review('Site-to-site', [`/interface/wireguard/add name=s2s listen-port=13232`, `/interface/wireguard/peers/add interface=s2s endpoint-address=${s2s.remote} endpoint-port=13232 allowed-address=${s2s.subnet}`, `/ip/route/add dst-address=${s2s.subnet} gateway=s2s`])}>Review & apply</button></div>
+<Section title="Site-to-site" desc="Join another office or home network over WireGuard. Both sides need each other's public key." ros="/interface/wireguard/print; /ip/route/print">
+  {#if tunnels.length}
+    <table><thead><tr><th>Tunnel</th><th>This router's public key</th><th>Remote subnets</th><th>State</th></tr></thead>
+      <tbody>{#each tunnels as t}{@const p = peerOf(t.name)}<tr class="nohover"><td><b>{t.name}</b> <span class="muted small">:{t['listen-port']}</span></td><td class="mono tiny">{t['public-key'] ?? '—'}</td><td class="mono small">{(p?.['allowed-address'] ?? []).slice(1).join(', ')}</td><td><span class="pill" class:ok={t.running}>{t.running ? 'Up' : 'Down'}</span>{#if p?.['last-handshake']} <span class="muted small">{p['last-handshake']}</span>{/if}</td></tr>{/each}</tbody></table>
+  {/if}
+  <Field label="Name"><input type="text" bind:value={s2s.name} aria-label="Tunnel name" /></Field>
+  <Field label="Listen port"><input type="number" bind:value={s2s.port} aria-label="Listen port" /></Field>
+  <Field label="Tunnel address" help="This side, e.g. 10.255.0.1/30; the other side takes .2"><input type="text" bind:value={s2s.address} aria-label="Tunnel address" /></Field>
+  <Field label="Remote public key"><input type="text" class="mono" bind:value={s2s.publicKey} aria-label="Remote public key" /></Field>
+  <Field label="Remote router" help="host:port, empty if only the other side connects"><input type="text" bind:value={s2s.endpoint} placeholder="vpn.example.com:13232" aria-label="Remote router" /></Field>
+  <Field label="Remote subnets" help="Comma separated"><input type="text" bind:value={s2s.remote} aria-label="Remote subnets" /></Field>
+  <div class="r"><button class="btn primary" disabled={!s2s.name || !s2s.publicKey || !s2s.remote} onclick={s2sReview}>Review & apply</button></div>
 </Section>
 
 {#if add}
@@ -103,6 +146,6 @@
   .qr { display: grid; justify-items: center; align-content: start; gap: 8px; text-align: center; }
   .cmds { background: var(--code-bg); border: 1px solid var(--line); border-radius: 8px; padding: 10px; font: 11px/1.6 var(--mono); white-space: pre-wrap; word-break: break-all; }
   .r { text-align: right; margin-top: 10px; }
-  .small { font-size: 12px; }
+  .small { font-size: 12px; } .tiny { font-size: 11px; word-break: break-all; }
   @media (max-width: 800px) { .cols { grid-template-columns: minmax(0, 1fr); } }
 </style>

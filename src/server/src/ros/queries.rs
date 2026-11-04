@@ -72,6 +72,9 @@ const QUERIES: &[Q] = &[
     q("stationsNew", "/interface/wifi/registration-table/print", &["interface", "mac-address", "signal", "tx-rate", "rx-rate", "uptime", "bytes", "last-ip", "band", "ssid"]),
     q("wireguard", "/interface/wireguard/print", &["name", "listen-port", "mtu", "running", "disabled", "comment", "public-key"]),
     q("wgPeers", "/interface/wireguard/peers/print", &["interface", "name", "allowed-address", "endpoint-address", "endpoint-port", "last-handshake", "rx", "tx", "comment", "disabled", "public-key"]).arrays(&["allowed-address"]),
+    // no private-key: Back To Home users carry their WireGuard keys
+    q("bthUsers", "/ip/cloud/back-to-home-users/print", &["name", "allow-lan", "disabled", "comment", "expires"]),
+    q("routingRules", "/routing/rule/print", &["src-address", "dst-address", "action", "table", "interface", "routing-mark", "disabled", "comment"]),
     q("routes", "/ip/route/print", &["dst-address", "gateway", "distance", "routing-table", "active", "dynamic", "static", "comment", "disabled"]),
     q("dnsStatic", "/ip/dns/static/print", &["name", "address", "type", "comment", "disabled"]),
     one("dnsCfg", "/ip/dns/print", &["servers", "use-doh-server", "allow-remote-requests", "mdns-repeat-ifaces"]).arrays(&["servers", "mdns-repeat-ifaces"]),

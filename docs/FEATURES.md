@@ -11,7 +11,7 @@ Clean-room: we copy the behaviour, never the assets.
 **Backing:** `ROS` = RouterOS API on the router · `CMR` = MikroTik CMR server · `tik` = our own logic/DB · `✗` = nothing can back it
 
 <!-- progress:start -->
-**Progress:** 6 ✅ · 147 🟨 · 59 🎨 · 8 ⬜ · 8 ➖ (228 items, 3% done)
+**Progress:** 6 ✅ · 153 🟨 · 54 🎨 · 7 ⬜ · 8 ➖ (228 items, 3% done)
 <!-- progress:end -->
 
 ---
@@ -35,7 +35,7 @@ Clean-room: we copy the behaviour, never the assets.
 | P13 | Settings → WiFi | Settings · WiFi | 2 |🎨 |
 | P14 | Settings → Networks | Settings · Networks | 3 |🎨 |
 | P15 | Settings → Internet | Settings · Internet | 3 |🎨 |
-| P16 | Settings → VPN | Settings · VPN | 2 |🎨 |
+| P16 | Settings → VPN | Settings · VPN | 2 | 🟨 |
 | P17 | Settings → Security / CyberSecure | Settings · Security | 3 |🎨 |
 | P18 | Settings → Routing | Settings · Routing | 2 |🎨 |
 | P19 | Settings → Profiles | Settings · Profiles | 3 |🎨 |
@@ -219,10 +219,10 @@ Clean-room: we copy the behaviour, never the assets.
 | WireGuard server + peers + QR | ROS `/interface/wireguard` | 2 |🟨 |
 | OpenVPN server | ROS ovpn-server | 4 |🟨 |
 | L2TP/IPsec server | ROS | 4 |🟨 |
-| VPN client (to a provider) | ROS wg / ovpn client | 3 |🎨 |
-| Site-to-site (WireGuard / IPsec) | ROS | 3 |🎨 |
-| Teleport (one-click remote access) | ROS Back To Home (`/ip/cloud`) | 2 |🎨 |
-| Policy-based routing through VPN | ROS routing rules / mangle | 3 |🎨 |
+| VPN client (to a provider) | ROS wg / ovpn client | 3 | 🟨 |
+| Site-to-site (WireGuard / IPsec) | ROS | 3 | 🟨 |
+| Teleport (one-click remote access) | ROS Back To Home (`/ip/cloud`) | 2 | 🟨 |
+| Policy-based routing through VPN | ROS routing rules / mangle | 3 | 🟨 |
 | Connected VPN users view | ROS | 2 | 🟨 |
 
 ## Security / CyberSecure
