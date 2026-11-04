@@ -7,7 +7,8 @@ const noSnapshot: Plugin = {
   name: 'tik-no-snapshot',
   apply: 'build',
   load(id) {
-    if (id.endsWith('/lib/snapshot.json')) return 'export default undefined'
+    // valid JSON: Vite's built-in JSON plugin still parses what we return
+    if (id.endsWith('/lib/snapshot.json')) return 'null'
   },
 }
 
