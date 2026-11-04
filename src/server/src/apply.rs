@@ -375,7 +375,7 @@ pub fn compile(i: &Intent, current: &mut dyn Router) -> Result<Plan, String> {
 /// Intents from feature areas live in `crate::intents::*`. Each area parses the JSON intent (its own
 /// `kind`s) and returns None when the kind isn't its own. Add an area with one line here.
 pub type Area = fn(&serde_json::Value, &mut dyn Router) -> Option<Result<Plan, String>>;
-pub const AREAS: &[Area] = &[];
+pub const AREAS: &[Area] = &[crate::intents::networks::compile, crate::intents::security::compile];
 
 /// Entry point for the API: core intents first, then the areas. Unknown kinds are rejected.
 pub fn compile_value(v: &serde_json::Value, r: &mut dyn Router) -> Result<Plan, String> {

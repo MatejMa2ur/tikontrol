@@ -30,7 +30,7 @@
   const prefix = $derived(n.subnet.split('/')[1] ?? '24')
   const base = $derived(n.subnet.split('.').slice(0, 3).join('.'))
   const cmds = $derived([
-    ...(bridge['vlan-filtering'] ? [] : ['# turn on VLAN filtering once (safe apply guards this step)', '/interface/bridge/set bridge vlan-filtering=yes']),
+    ...(bridge['vlan-filtering'] ? [] : ['# VLAN filtering is off: tagged ports need it, which is a separate high-risk change']),
     `/interface/vlan/add name=vlan${n.vlan} interface=bridge vlan-id=${n.vlan} comment="tik:${n.name}"`,
     `/interface/bridge/vlan/add bridge=bridge vlan-ids=${n.vlan} tagged=bridge comment="tik:${n.name}"`,
     `/ip/address/add address=${gw}/${prefix} interface=vlan${n.vlan} comment="tik:${n.name}"`,
@@ -48,6 +48,10 @@
     ...(n.filter !== 'none' ? [`# content filter: DNS for this network goes to ${n.filter === 'family' ? 'family-safe resolvers' : 'ad-blocking resolver'}`, `/ip/dhcp-server/network/set [find address=${n.subnet}] dns-server=${n.filter === 'family' ? '1.1.1.3,1.0.0.3' : gw}`] : []),
   ])
   const objects = $derived(cmds.filter((c) => !c.startsWith('#')).length)
+  // the server compiles create-network; extras (mDNS, IGMP, IPv6, filtering, options) stay commands to copy
+  const intent = $derived(!n.mdns && !n.igmp && !n.ipv6 && n.filter === 'none' && !n.options
+    ? { kind: 'create-network', name: n.name, vlan: n.vlan, subnet: n.subnet, dhcp: n.dhcp, lease_time: n.lease, dns: n.dns === 'router' ? [] : [n.dns], domain: n.domain, isolated: n.isolate, internet: n.internet }
+    : undefined)
 </script>
 
 <Section title="Networks" desc="Each network is a subnet with its own DHCP, optionally on its own VLAN." ros="/ip/address/print; /ip/dhcp-server/print; /ip/dhcp-server/network/print; /interface/vlan/print">
@@ -94,7 +98,7 @@
         <pre class="cmds">{cmds.join('\n')}</pre>
       </div>
     </div>
-    {#snippet footer()}<button class="btn" onclick={() => (open = false)}>Cancel</button><button class="btn primary" onclick={() => { review(`Create network ${n.name}`, cmds.filter((c) => !c.startsWith('#'))); open = false }}>Review & apply</button>{/snippet}
+    {#snippet footer()}<button class="btn" onclick={() => (open = false)}>Cancel</button><button class="btn primary" onclick={() => { review(`Create network ${n.name}`, cmds.filter((c) => !c.startsWith('#')), intent); open = false }}>Review & apply</button>{/snippet}
   </Modal>
 {/if}
 

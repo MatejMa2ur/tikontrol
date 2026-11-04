@@ -43,13 +43,13 @@
     <input type="text" bind:value={rule.dst} placeholder="Destination" />
     <select bind:value={rule.proto}><option>tcp</option><option>udp</option><option>icmp</option></select>
     <input type="text" bind:value={rule.port} placeholder="Port" style="width:80px" />
-    <button class="btn primary" disabled={!rule.name} onclick={() => review(`Firewall rule ${rule.name}`, [`/ip/firewall/filter/add chain=forward action=${rule.action} protocol=${rule.proto}${rule.src ? ` src-address=${rule.src}` : ''}${rule.dst ? ` dst-address=${rule.dst}` : ''}${rule.port ? ` dst-port=${rule.port}` : ''} comment="tik:${rule.name}" place-before=[find comment~"drop all from WAN"]`])}><Icon name="plus" size={14} /> Add</button>
+    <button class="btn primary" disabled={!rule.name} onclick={() => review(`Firewall rule ${rule.name}`, [`/ip/firewall/filter/add chain=forward action=${rule.action} protocol=${rule.proto}${rule.src ? ` src-address=${rule.src}` : ''}${rule.dst ? ` dst-address=${rule.dst}` : ''}${rule.port ? ` dst-port=${rule.port}` : ''} comment="tik:fw:${rule.name}"`], { kind: 'firewall-rule', name: rule.name, action: rule.action, protocol: rule.proto, src: rule.src, dst: rule.dst, dst_port: rule.proto === 'icmp' ? '' : rule.port })}><Icon name="plus" size={14} /> Add</button>
   </div>
 </Section>
 
 <Section title="Block apps" desc="Domain-based blocking (DNS + TLS SNI). True per-app detection needs CMR.">
   <div class="apps">{#each Object.keys(apps) as a}<label class="row"><Toggle bind:checked={apps[a]} label={a} /> {a}</label>{/each}</div>
-  <div class="r"><button class="btn primary" onclick={() => review('App blocking', Object.entries(apps).filter(([, v]) => v).flatMap(([a]) => [`/ip/dns/static/add name=${APPDOM[a]} type=NXDOMAIN match-subdomain=yes comment="tik:app ${a}"`, `/ip/firewall/filter/add chain=forward tls-host=*${APPDOM[a]} action=reject comment="tik:app ${a}"`]))}>Review & apply</button></div>
+  <div class="r"><button class="btn primary" onclick={() => { const on = Object.entries(apps).filter(([, v]) => v).map(([a]) => APPDOM[a]); review('App blocking', on.flatMap((d) => [`/ip/dns/static/add name=${d} type=NXDOMAIN match-subdomain=yes comment=tik:app:${d}`, `/ip/firewall/filter/add chain=forward protocol=tcp dst-port=443 tls-host=*.${d} action=reject reject-with=tcp-reset comment=tik:app:${d}`]), on.length === 1 ? { kind: 'block-domain', domain: on[0], tls: true } : undefined) }}>Review & apply</button></div>
 </Section>
 
 <Section title="Ad blocking" desc="RouterOS DNS adlist." ros="/ip/dns/adlist/print">
@@ -65,7 +65,7 @@
   {#if !lists.length}<div class="muted small">No address lists yet.</div>{/if}
   {#each lists as l}<div class="mono small">{l.list}: {l.address}</div>{/each}
   <div class="add"><input type="text" bind:value={group.name} placeholder="Group name" /><input type="text" bind:value={group.items} placeholder="IPs, comma separated" style="flex:1" />
-    <button class="btn primary" disabled={!group.name} onclick={() => review(`Group ${group.name}`, group.items.split(',').map((ip) => `/ip/firewall/address-list/add list=${group.name} address=${ip.trim()}`))}><Icon name="plus" size={14} /> Add</button></div>
+    <button class="btn primary" disabled={!group.name} onclick={() => review(`Group ${group.name}`, group.items.split(',').map((ip) => `/ip/firewall/address-list/add list=${group.name} address=${ip.trim()} comment=tik:group:${group.name}`), { kind: 'address-group', name: group.name, addresses: group.items.split(',').map((ip) => ip.trim()).filter(Boolean) })}><Icon name="plus" size={14} /> Add</button></div>
 </Section>
 
 <Section title="Threat management">
