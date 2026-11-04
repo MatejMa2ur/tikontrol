@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { tick as settled } from 'svelte'
   import { router, isSample, simulated, isBackend, load } from './lib/data'
   import { api, logout, session } from './lib/backend'
   import { apply } from './lib/apply.svelte'
@@ -52,8 +53,13 @@
         const s = await api('/snapshot')
         const json = JSON.stringify(s)
         stale = ''
-        const busy = apply.open || apply.armed || document.activeElement?.matches('input, textarea, select')
-        if (json !== last && last && !busy) { load(s); version++ }
+        // don't rebuild the page under someone typing, reviewing a change or using a dialog
+        const busy = apply.open || apply.armed || !!document.querySelector('[role="dialog"], details[open]') || document.activeElement?.matches('input, textarea, select')
+        if (json !== last && last && !busy) {
+          const y = scrollY
+          load(s); version++
+          await settled(); scrollTo(0, y)
+        }
         if (!busy) last = json
       } catch (e) { stale = (e as Error).message }
       me = await api('/me').catch(() => me)

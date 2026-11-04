@@ -106,15 +106,22 @@ impl History {
         };
         let end = now() / step * step;
         let src: Vec<Point> = if step == 3600 { self.hours.iter().chain(self.minutes.iter().filter(|m| m.t >= end)).copied().collect() } else { self.minutes.iter().copied().collect() };
-        let (mut t, mut cl, mut rx, mut tx) = (vec![], vec![], vec![], vec![]);
+        let (mut t, mut cl, mut rx, mut tx): (Vec<u64>, Vec<Option<f64>>, Vec<Option<f64>>, Vec<Option<f64>>) = (vec![], vec![], vec![], vec![]);
         for i in 0..n {
             let start = end - (n - 1 - i) * step;
             let pts: Vec<Point> = src.iter().filter(|p| p.t >= start && p.t < start + step).copied().collect();
-            let a = avg(&pts, start);
             t.push(start);
-            cl.push(a.clients.round());
-            rx.push(a.rx.round());
-            tx.push(a.tx.round());
+            // no samples (before tikontrol ran, or it was down): null, so the chart shows a gap, not a zero
+            if pts.is_empty() {
+                cl.push(None);
+                rx.push(None);
+                tx.push(None);
+                continue;
+            }
+            let a = avg(&pts, start);
+            cl.push(Some(a.clients.round()));
+            rx.push(Some(a.rx.round()));
+            tx.push(Some(a.tx.round()));
         }
         json!({ "t": t, "clients": cl, "rx": rx, "tx": tx, "samples": src.len() })
     }
@@ -403,6 +410,7 @@ mod tests {
         let h = History::default();
         let s = h.series("1D");
         assert_eq!(s["t"].as_array().unwrap().len(), 96);
+        assert!(s["rx"].as_array().unwrap().iter().all(Value::is_null), "no data is a gap, not a zero");
         assert_eq!(h.health().len(), 48);
         assert!(h.health().iter().all(|x| *x == "none"));
     }

@@ -26,9 +26,13 @@
   const techActivity = $derived(wifiTech.map((g) => g.clients.reduce((s, c) => s + (live.rate[c.mac]?.rx ?? 0), 0)))
   const techMax = $derived(Math.max(...techActivity, 1))
 
-  let range = $state<Range>('1D')
-  let mode = $state<'all' | 'down' | 'up'>('all')
+  // kept in sessionStorage: the page is rebuilt when new router data arrives, and the choice must survive that
+  let range = $state<Range>((sessionStorage.getItem('tik:range') as Range) || '1H')
+  let mode = $state<'all' | 'down' | 'up'>((sessionStorage.getItem('tik:mode') as 'all') || 'all')
+  $effect(() => { sessionStorage.setItem('tik:range', range); sessionStorage.setItem('tik:mode', mode) })
   const hist = $derived(activity(range))
+  // index of the first slot with data: before it tikontrol wasn't running yet
+  const since = $derived((hist.rx as (number | null)[]).findIndex((v) => v != null))
 
   let band = $state(radios.find((r) => r.band === '5 GHz')?.name ?? radios[0]?.name)
   const radio = $derived(radios.find((r) => r.name === band))
@@ -187,6 +191,7 @@
         </div>
       </header>
       {#key prefs.theme + prefs.palette}<ActivityChart data={hist} {mode} />{/key}
+      {#if since > 0}<p class="muted small">History starts {new Date(hist.t[since] * 1000).toLocaleString([], { weekday: 'short', hour: '2-digit', minute: '2-digit' })}, when tikontrol started collecting.</p>{:else if since < 0}<p class="muted small">No history yet: tikontrol collects a sample every poll.</p>{/if}
       <Ros cmd="/interface/monitor-traffic {internet.wanIf}; /interface/print stats where name={internet.wanIf}" />
     </section>
 
