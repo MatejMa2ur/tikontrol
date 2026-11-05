@@ -98,6 +98,7 @@ fn reason(s: u16) -> &'static str {
         201 => "Created",
         202 => "Accepted",
         204 => "No Content",
+        301 => "Moved Permanently",
         304 => "Not Modified",
         400 => "Bad Request",
         401 => "Unauthorized",
@@ -228,10 +229,27 @@ pub fn write(w: &mut dyn Write, resp: Resp, tls: bool) -> std::io::Result<()> {
 
 pub type Handler = Arc<dyn Fn(Req) -> Resp + Send + Sync>;
 
+/// Same host and port, https scheme. The Host header is the browser's own; anything but a plain
+/// host[:port] is refused, so this can't be turned into a redirect to some other place.
+fn https_redirect(r: &Req) -> Option<Resp> {
+    let host = r.header("host")?;
+    let ok = !host.is_empty() && host.len() <= 255 && host.bytes().all(|b| b.is_ascii_alphanumeric() || b".-:[]".contains(&b));
+    let path = if r.path.starts_with('/') && !r.path.starts_with("//") { r.path.as_str() } else { "/" };
+    ok.then(|| Resp::new(301, "text/plain", b"moved to https".to_vec()).with("location", format!("https://{host}{path}")))
+}
+
 fn handle(tcp: TcpStream, tls: Option<Arc<rustls::ServerConfig>>, h: Handler) {
     let peer = tcp.peer_addr().ok().map(|a| a.ip());
     tcp.set_read_timeout(Some(Duration::from_secs(10))).ok();
     tcp.set_write_timeout(Some(Duration::from_secs(30))).ok();
+    // plain HTTP sent to the HTTPS port (RouterOS app links are http://): answer with a redirect to https
+    let mut first = [0u8; 1];
+    if tls.is_some() && matches!(tcp.peek(&mut first), Ok(1) if first[0] != 0x16) {
+        let mut tcp = tcp;
+        let resp = parse(&mut BufReader::new(&mut tcp)).ok().and_then(|r| https_redirect(&r)).unwrap_or_else(|| Resp::error(400, "use https"));
+        let _ = write(&mut tcp, resp, false);
+        return;
+    }
     let mut io: Box<dyn ReadWrite> = match tls {
         Some(cfg) => match rustls::ServerConnection::new(cfg) {
             Ok(c) => Box::new(rustls::StreamOwned::new(c, tcp)),
@@ -303,6 +321,14 @@ mod tests {
         assert_eq!(r.param("x").as_deref(), Some("a b"));
         assert_eq!(r.cookie("tik_s"), Some("abc"));
         assert_eq!(r.body, b"{}");
+    }
+
+    #[test]
+    fn plain_http_redirects_to_https_on_the_same_host_only() {
+        let loc = |raw: &str| https_redirect(&p(raw).unwrap()).map(|r| r.headers.iter().find(|h| h.0 == "location").map(|h| h.1.clone()).unwrap());
+        assert_eq!(loc("GET /x HTTP/1.1\r\nHost: 192.168.1.5:8443\r\n\r\n").as_deref(), Some("https://192.168.1.5:8443/x"));
+        assert_eq!(loc("GET / HTTP/1.1\r\nHost: evil.example/x@y\r\n\r\n"), None);
+        assert_eq!(loc("GET / HTTP/1.1\r\n\r\n"), None);
     }
 
     #[test]
