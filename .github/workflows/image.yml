@@ -14,7 +14,7 @@ permissions:
 
 concurrency:
   group: image
-  cancel-in-progress: true
+  cancel-in-progress: false # let a running build finish; GitHub keeps only the newest waiting one
 
 jobs:
   image:
