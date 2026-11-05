@@ -2,6 +2,7 @@
 //! otherwise generates a self-signed one on first start and keeps it in the data directory.
 
 use crate::store::write_private;
+use rustls::pki_types::pem::PemObject;
 use rustls::pki_types::{CertificateDer, PrivateKeyDer};
 use std::path::Path;
 use std::sync::Arc;
@@ -20,12 +21,10 @@ pub fn server_config(data: &Path, cert: Option<&str>, key: Option<&str>) -> Resu
         }
         _ => return Err("set both TIK_TLS_CERT and TIK_TLS_KEY, or neither".into()),
     };
-    let certs: Vec<CertificateDer> = rustls_pemfile::certs(&mut std::io::BufReader::new(std::fs::File::open(&cert_path).map_err(|e| format!("{}: {e}", cert_path.display()))?))
-        .collect::<Result<_, _>>()
-        .map_err(|e| e.to_string())?;
-    let key: PrivateKeyDer = rustls_pemfile::private_key(&mut std::io::BufReader::new(std::fs::File::open(&key_path).map_err(|e| format!("{}: {e}", key_path.display()))?))
-        .map_err(|e| e.to_string())?
-        .ok_or("no private key in key file")?;
+    let certs: Vec<CertificateDer> = CertificateDer::pem_file_iter(&cert_path)
+        .and_then(|i| i.collect::<Result<_, _>>())
+        .map_err(|e| format!("{}: {e}", cert_path.display()))?;
+    let key = PrivateKeyDer::from_pem_file(&key_path).map_err(|e| format!("{}: {e}", key_path.display()))?;
     let fp = certs.first().map(|c| crate::ros::conn::fingerprint(c)).ok_or("no certificate in cert file")?;
     let cfg = rustls::ServerConfig::builder_with_provider(Arc::new(rustls::crypto::ring::default_provider()))
         .with_safe_default_protocol_versions()

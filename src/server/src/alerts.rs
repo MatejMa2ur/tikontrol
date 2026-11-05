@@ -16,7 +16,7 @@ use crate::store::{Role, Sealer};
 use serde::{Deserialize, Deserializer, Serialize};
 use serde_json::{json, Value};
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -697,7 +697,8 @@ fn view(app: &App, admin: bool) -> Value {
     })
 }
 
-static LAST_TEST: AtomicU64 = AtomicU64::new(0);
+// Seconds since the epoch; 32-bit because armv5te has no 64-bit atomics (fits until 2106).
+static LAST_TEST: AtomicU32 = AtomicU32::new(0);
 
 pub fn route(app: &Arc<App>, req: &Req, s: &Session) -> Option<Resp> {
     if !req.path.starts_with("/api/v1/alerts") {
@@ -758,7 +759,7 @@ pub fn route(app: &Arc<App>, req: &Req, s: &Session) -> Option<Resp> {
                 return Some(Resp::error(400, "channel must be ntfy, webhook or telegram"));
             }
             let t = now();
-            if LAST_TEST.swap(t, Ordering::SeqCst) + 3 > t {
+            if u64::from(LAST_TEST.swap(t as u32, Ordering::SeqCst)) + 3 > t {
                 return Some(Resp::error(429, "wait a few seconds between tests"));
             }
             let (outs, chans) = {
