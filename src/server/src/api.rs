@@ -131,7 +131,7 @@ fn setup_admin(app: &App, req: &Req) -> Resp {
     if let Err(wait) = lock(&app.limiter).check(ip) {
         return Resp::error(429, "too many attempts").with("retry-after", wait.to_string());
     }
-    let mut tok = lock(&app.setup_token);
+    let tok = lock(&app.setup_token);
     let Some(want) = tok.as_ref() else { return Resp::error(409, "setup is already done") };
     if !ct_eq(want.as_bytes(), b.token.trim().as_bytes()) {
         lock(&app.limiter).fail(ip);
@@ -380,10 +380,9 @@ fn set_router(app: &App, req: &Req) -> Resp {
         }
     }
     let write = b.mode == Mode::ReadWrite;
-    match (&b.writer, write) {
-        (Some(_), false) => return Resp::error(400, "read-only mode stores no write credential"),
-        // read-write without a stored writer: changes run as the admin logged in with their MikroTik account
-        _ => {}
+    // read-write without a stored writer is fine: changes run as the admin logged in with their MikroTik account
+    if b.writer.is_some() && !write {
+        return Resp::error(400, "read-only mode stores no write credential");
     }
     if write && b.writer.as_ref().is_some_and(|w| w.user == b.reader.user) {
         return Resp::error(400, "use separate reader and writer users");

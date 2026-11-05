@@ -16,6 +16,9 @@ use std::path::{Path, PathBuf};
 use std::sync::{Arc, Condvar, Mutex};
 use std::time::Duration;
 
+/// One chart line; `None` is a gap where tikontrol has no sample.
+type Series = Vec<Option<f64>>;
+
 pub const MINUTES: usize = 7 * 24 * 60;
 pub const HOURS: usize = 90 * 24;
 pub const CLIENT_HOURS: usize = 7 * 24;
@@ -130,8 +133,9 @@ impl History {
         };
         let end = now() / step * step;
         let src: Vec<Point> = if step == 3600 { self.hours.iter().chain(self.minutes.iter().filter(|m| m.t >= end)).copied().collect() } else { self.minutes.iter().copied().collect() };
-        let (mut t, mut cl, mut rx, mut tx): (Vec<u64>, Vec<Option<f64>>, Vec<Option<f64>>, Vec<Option<f64>>) = (vec![], vec![], vec![], vec![]);
-        let (mut cpu, mut mem, mut temp): (Vec<Option<f64>>, Vec<Option<f64>>, Vec<Option<f64>>) = (vec![], vec![], vec![]);
+        let mut t: Vec<u64> = vec![];
+        let (mut cl, mut rx, mut tx): (Series, Series, Series) = (vec![], vec![], vec![]);
+        let (mut cpu, mut mem, mut temp): (Series, Series, Series) = (vec![], vec![], vec![]);
         for i in 0..n {
             let start = end - (n - 1 - i) * step;
             let pts: Vec<Point> = src.iter().filter(|p| p.t >= start && p.t < start + step).copied().collect();

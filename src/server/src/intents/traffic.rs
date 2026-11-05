@@ -16,6 +16,7 @@ const QUEUE_FIELDS: &[&str] = &["name", "target", "max-limit", "time"];
 
 #[derive(Debug, Deserialize)]
 #[serde(tag = "kind", rename_all = "kebab-case", deny_unknown_fields)]
+#[allow(clippy::large_enum_variant)] // parsed once per request, never stored
 enum T {
     TrafficRule {
         name: String,
