@@ -56,7 +56,16 @@ export const designs: Record<string, Design> = {
   default: { label: 'Standard', radius: '8px', radiusSm: '7px', pad: '16px', gap: '14px', cell: '9px', cardBorder: '1px', cardShadow: 'none', font: SANS, iconStroke: '1.8' },
   compact: { label: 'Compact', radius: '6px', radiusSm: '5px', pad: '12px', gap: '10px', cell: '5px', cardBorder: '1px', cardShadow: 'none', font: SANS, iconStroke: '1.8' },
   soft: { label: 'Soft', radius: '14px', radiusSm: '10px', pad: '18px', gap: '16px', cell: '10px', cardBorder: '0px', cardShadow: 'var(--shadow-sm)', font: "ui-rounded, system-ui, -apple-system, 'Segoe UI', sans-serif", iconStroke: '1.5' },
+  // dense tables, small corners and a classic UI font, like a router's own web admin
+  classic: { label: 'Classic admin', radius: '3px', radiusSm: '2px', pad: '10px', gap: '8px', cell: '4px', cardBorder: '1px', cardShadow: 'none', font: "Verdana, Tahoma, 'DejaVu Sans', sans-serif", iconStroke: '2' },
   sharp: { label: 'Sharp', radius: '2px', radiusSm: '2px', pad: '14px', gap: '12px', cell: '7px', cardBorder: '1px', cardShadow: 'none', font: "'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif", iconStroke: '2.2' },
+}
+
+/** One-click looks: a mode, palette and design together. Our own styles, no vendor branding. */
+export const looks: Record<string, { label: string; desc: string; mode: Mode; palette: string; design: string }> = {
+  controller: { label: 'Controller', desc: 'Dark, roomy cards: the cloud-controller style (UniFi-like)', mode: 'dark', palette: 'blue', design: 'default' },
+  router: { label: 'Router admin', desc: 'Light, dense, navy chrome: the router web-admin style (MikroTik-like)', mode: 'light', palette: 'router', design: 'classic' },
+  minimal: { label: 'Minimal', desc: 'Graphite, soft corners, no borders', mode: 'dark', palette: 'graphite', design: 'soft' },
 }
 
 export const DEFAULT_PALETTE = 'blue'

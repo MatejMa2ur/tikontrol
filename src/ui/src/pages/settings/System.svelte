@@ -7,7 +7,7 @@
   import Toggle from '../../lib/ui/Toggle.svelte'
   import Icon from '../../lib/Icon.svelte'
   import { prefs } from '../../lib/live.svelte'
-  import { designs, palettes } from '../../lib/themes'
+  import { designs, looks, palettes } from '../../lib/themes'
 
   const clock: any = raw.clock ?? {}
   const ntp: any = raw.ntp ?? {}
@@ -133,6 +133,12 @@
 </Section>
 
 <Section title="Appearance" desc="Changes show right away and are saved in this browser, not on the router.">
+  <Field label="Look" help="Sets mode, colours and design in one go; fine-tune them below"><div class="opts" role="radiogroup" aria-label="Look">
+    {#each Object.entries(looks) as [id, l]}{@const c = palettes[l.palette][l.mode]}
+      <label class="opt" class:on={!prefs.auto && prefs.theme === l.mode && prefs.palette === l.palette && prefs.design === l.design} title={l.desc}><input type="radio" name="look" value={id} onchange={() => Object.assign(prefs, { auto: false, theme: l.mode, palette: l.palette, design: l.design })} />
+        <span class="sw" style:background={c.bg} style:border-color={c.line} style:border-radius={designs[l.design].radiusSm} aria-hidden="true"><i style:background={c.panel}></i><i style:background={c.accentBg}></i><i style:background={c.text}></i></span>{l.label}</label>
+    {/each}
+  </div></Field>
   <Field label="Mode"><div class="opts" role="radiogroup" aria-label="Mode">
     {#each [['auto', 'Auto (system)'], ['dark', 'Dark'], ['light', 'Light']] as const as [v, l]}{@const on = v === 'auto' ? prefs.auto : !prefs.auto && prefs.theme === v}
       <label class="opt" class:on><input type="radio" name="mode" value={v} checked={on} onchange={() => { prefs.auto = v === 'auto'; if (v !== 'auto') prefs.theme = v }} />{l}</label>{/each}

@@ -11,7 +11,7 @@ Clean-room: we copy the behaviour, never the assets.
 **Backing:** `ROS` = RouterOS API on the router · `CMR` = MikroTik CMR server · `tik` = our own logic/DB · `✗` = nothing can back it
 
 <!-- progress:start -->
-**Progress:** 6 ✅ · 190 🟨 · 17 🎨 · 7 ⬜ · 8 ➖ (228 items, 3% done)
+**Progress:** 7 ✅ · 190 🟨 · 17 🎨 · 7 ⬜ · 8 ➖ (229 items, 3% done)
 <!-- progress:end -->
 
 ---
@@ -308,6 +308,7 @@ Not a UniFi feature: this is our own addition. Light or dark, the colour theme a
 | Design themes: corner rounding, spacing and density, borders and shadows, fonts, icon style | tik | 2 | 🟨 |
 | MikroTik-style colour theme: own palette based on MikroTik's current look, no logos or implied endorsement | tik | 2 | ✅ |
 | Theme picker with live preview, saved per user | tik | 2 | ✅ |
+| One-click looks: Controller (UniFi-like), Router admin (MikroTik-like), Minimal — mode, colours and design together | tik | 2 | ✅ |
 | Every theme meets WCAG 2.2 AA contrast | tik | 2 | ✅ |
 
 ## Opening tikontrol from RouterOS
