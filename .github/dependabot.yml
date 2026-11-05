@@ -1,0 +1,24 @@
+# Weekly update PRs for pinned actions, Rust crates and npm packages. Grouped to keep the PR count low.
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      actions:
+        patterns: ["*"]
+  - package-ecosystem: cargo
+    directory: /src/server
+    schedule:
+      interval: weekly
+    groups:
+      crates:
+        patterns: ["*"]
+  - package-ecosystem: npm
+    directory: /src/ui
+    schedule:
+      interval: weekly
+    groups:
+      npm:
+        patterns: ["*"]
