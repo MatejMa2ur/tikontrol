@@ -253,8 +253,24 @@ fn me(app: &App, s: &Session) -> Resp {
             "mikrotik": s.ros.is_some(),
             "policies": snap.policies,
             "error": snap.error,
+            "routerHint": r.is_none().then(router_hint).flatten(),
         }),
     )
+}
+
+/// Router address to pre-fill on first setup: `TIK_ROUTER`, else this host's default gateway (which is
+/// the router itself when tikontrol runs as a RouterOS container).
+fn router_hint() -> Option<String> {
+    std::env::var("TIK_ROUTER").ok().filter(|h| !h.is_empty()).or_else(|| default_gateway(&std::fs::read_to_string("/proc/net/route").ok()?))
+}
+
+/// Default gateway from Linux's /proc/net/route (addresses are little-endian hex).
+fn default_gateway(route: &str) -> Option<String> {
+    route.lines().skip(1).find_map(|l| {
+        let f: Vec<&str> = l.split_whitespace().collect();
+        let gw = u32::from_str_radix(f.get(2)?, 16).ok()?;
+        (f.get(1) == Some(&"00000000") && gw != 0).then(|| std::net::Ipv4Addr::from(gw.swap_bytes()).to_string())
+    })
 }
 
 fn snapshot(app: &App) -> Resp {
@@ -462,6 +478,13 @@ pub fn json_ok(v: Value) -> Resp {
 
 #[cfg(test)]
 pub mod tests {
+    #[test]
+    fn default_gateway_from_proc_net_route() {
+        let r = "Iface\tDestination\tGateway \tFlags\nveth0\t0058A8C0\t00000000\t0001\nveth0\t00000000\t0158A8C0\t0003\n";
+        assert_eq!(super::default_gateway(r).as_deref(), Some("192.168.88.1"));
+        assert_eq!(super::default_gateway("Iface\tDestination\tGateway\n"), None);
+    }
+
     use super::*;
     use crate::app::tests::fake_connector;
     use crate::store::{tests::tmpdir, Store};

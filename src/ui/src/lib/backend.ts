@@ -11,6 +11,8 @@ export type Me = {
   error: string | null
   /** the temporary session opened with the setup token */
   setup?: boolean
+  /** router address to pre-fill on first setup (TIK_ROUTER or the default gateway) */
+  routerHint?: string | null
   /** signed in with a MikroTik account */
   mikrotik?: boolean
 }
