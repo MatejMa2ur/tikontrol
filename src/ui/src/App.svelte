@@ -92,7 +92,12 @@
     <button class="btn ghost" onclick={() => { prefs.auto = false; prefs.theme = prefs.theme === 'dark' ? 'light' : 'dark' }} aria-label="Toggle theme"><Icon name={prefs.theme === 'dark' ? 'sun' : 'moon'} size={15} /></button>
     <span class="site hide-sm"><span class="dot ok"></span><span class="led"></span>{router.board?.startsWith(router.identity) ? router.board : `${router.identity} ${router.board}`}<Icon name="down" size={11} /></span>
     {#if isBackend}
-      <button class="avatar" title="Signed in as {me?.user} ({me?.role}). Click to sign out." aria-label="Sign out {me?.user}" onclick={logout}>{(me?.user ?? 'a').slice(0, 1).toUpperCase()}</button>
+      <button class="avatar" popovertarget="me-menu" title="Signed in as {me?.user}" aria-label="Account menu for {me?.user}">{(me?.user ?? 'a').slice(0, 1).toUpperCase()}</button>
+      <div id="me-menu" class="me-menu" popover>
+        <b>{me?.user}</b>
+        <span class="muted small">{me?.role === 'admin' ? 'Admin' : 'Viewer'}{me?.mikrotik ? ' · MikroTik account' : ''}{me?.readOnly ? ' · read-only' : ''}</span>
+        <button class="btn" onclick={logout}><Icon name="lock" size={14} />Sign out</button>
+      </div>
     {:else}<span class="avatar" title="admin">A</span>{/if}
   </div>
 </header>
@@ -133,6 +138,9 @@
   .site { display: inline-flex; align-items: center; gap: 8px; padding: 5px 12px; border-radius: 99px; background: var(--bg); border: 1px solid var(--line); font-size: 12px; font-weight: 550; }
   .led { width: 16px; height: 4px; border-radius: 2px; background: var(--muted); }
   button.avatar { border: 0; cursor: pointer; }
+  .me-menu { position: fixed; inset: 52px 12px auto auto; margin: 0; min-width: 200px; padding: 12px; display: none; flex-direction: column; gap: 6px; background: var(--panel); color: var(--text); border: 1px solid var(--line); border-radius: var(--radius); box-shadow: 0 8px 24px #0004; }
+  .me-menu:popover-open { display: flex; }
+  .me-menu .btn { margin-top: 6px; justify-content: center; }
   .avatar { width: 28px; height: 28px; border-radius: 50%; display: grid; place-items: center; background: linear-gradient(135deg, var(--accent), var(--accent2)); color: #fff; font-weight: 700; font-size: 12px; }
   .shell { display: grid; grid-template-columns: 46px minmax(0, 1fr); min-height: calc(100vh - 46px); }
   .rail { position: sticky; top: 46px; height: calc(100vh - 46px); display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 10px 0; border-right: 1px solid var(--line); background: var(--panel); }

@@ -56,11 +56,17 @@
     location.reload()
   }) }
   const pretty = (p: string) => p.match(/.{1,2}/g)?.join(':') ?? p
-  // configured but no snapshot yet: check again shortly (first poll, or the router refused us)
+  // configured but no snapshot yet (first poll, or the router refused us): ask quietly in the background and
+  // reload once, when the dashboard can open or the router's answer changed. A slow router takes several polls.
   $effect(() => {
     if (step !== 'router' || !me?.router || (me.setup && !me.error)) return
-    const t = setTimeout(() => location.reload(), me.error ? 30_000 : 4_000)
-    return () => clearTimeout(t)
+    const was = me.error
+    const t = setInterval(async () => {
+      const ready = await api('/snapshot').then(() => true, () => false)
+      const m = ready ? null : await api<Me>('/me').catch(() => null)
+      if (ready || (m && m.error !== was)) location.reload()
+    }, 2_000)
+    return () => clearInterval(t)
   })
 </script>
 
@@ -102,7 +108,7 @@
       {#if me?.router}
         <div class="status" role="status">
           <b>{me.router.host}</b> · {me.router.mode}
-          {#if me.error}<p class="err">{me.error}</p><p class="muted small">Fix it on the router, or connect again below. Checking again in 30 s.</p>
+          {#if me.error}<p class="err">{me.error}</p><p class="muted small">Fix it on the router, or connect again below. This page updates by itself.</p>
           {:else if me.setup}<p class="small">Connected. Last step: sign in with your <b>MikroTik username and password</b>. That finishes setup and the setup token stops working.</p>
             <button type="button" class="btn primary" onclick={logout}>Sign in with MikroTik account</button>
           {:else}<p class="muted small">Connected. Reading the router for the first time…</p>{/if}
