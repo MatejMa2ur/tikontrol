@@ -173,6 +173,14 @@ impl App {
         }
     }
 
+    /// Poll less while the router is busy, so monitoring never adds load to a struggling router:
+    /// x1 normally, x2 at 70% CPU or more, x4 at 90% or more (from the last snapshot).
+    pub fn backoff(&self) -> u32 {
+        let s = self.snap.read().unwrap_or_else(|e| e.into_inner());
+        let cpu = s.data.as_deref().and_then(|d| d["resource"]["cpu-load"].as_str().and_then(|c| c.parse::<u32>().ok()).or_else(|| d["resource"]["cpu-load"].as_u64().map(|c| c as u32)));
+        backoff_for(cpu)
+    }
+
     pub fn spawn_poller(self: &Arc<Self>, every: Duration) {
         let app = self.clone();
         std::thread::spawn(move || {
@@ -180,9 +188,17 @@ impl App {
             loop {
                 app.poll(n.is_multiple_of(4)); // latency every 4th poll: pings cost router CPU and take seconds
                 n += 1;
-                std::thread::sleep(every);
+                std::thread::sleep(every * app.backoff());
             }
         });
+    }
+}
+
+pub fn backoff_for(cpu: Option<u32>) -> u32 {
+    match cpu {
+        Some(c) if c >= 90 => 4,
+        Some(c) if c >= 70 => 2,
+        _ => 1,
     }
 }
 
@@ -211,6 +227,11 @@ pub mod tests {
         let pw = store.sealer.seal("router-password:reader", "router-pass");
         store.state.router = Some(RouterCfg { host: "192.0.2.1".into(), port: 8729, pin: "00".into(), mode, reader: Cred { user: "tik-read".into(), password: pw }, writer: None });
         App::new(store, fake_connector(policy), true)
+    }
+
+    #[test]
+    fn polling_backs_off_when_the_router_is_busy() {
+        assert_eq!([None, Some(10), Some(70), Some(95)].map(backoff_for), [1, 1, 2, 4]);
     }
 
     #[test]

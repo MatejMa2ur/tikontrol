@@ -48,16 +48,20 @@
   $effect(() => {
     if (!isBackend) return
     let last = ''
+    let rebuilt = Date.now()
     const tick = async () => {
       try {
         const s = await api('/snapshot')
-        const json = JSON.stringify(s)
+        // Rebuilding the page is the expensive part. Counters change on every poll and live numbers stream
+        // separately, so rebuild at once only when something besides numbers changed, else every 5 minutes.
+        const json = JSON.stringify(s).replace(/\d+/g, '0')
+        const due = Date.now() - rebuilt > 300_000
         stale = ''
         // don't rebuild the page under someone typing, reviewing a change or using a dialog
         const busy = apply.open || apply.armed || !!document.querySelector('[role="dialog"], details[open]') || document.activeElement?.matches('input, textarea, select')
-        if (json !== last && last && !busy) {
+        if ((json !== last || due) && last && !busy) {
           const y = scrollY
-          load(s); version++
+          load(s); version++; rebuilt = Date.now()
           await settled(); scrollTo(0, y)
         }
         if (!busy) last = json

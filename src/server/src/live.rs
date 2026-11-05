@@ -419,7 +419,7 @@ pub fn spawn(app: Arc<App>, path: PathBuf) {
                 app.live.save(&path);
                 last_save = now();
             }
-            std::thread::sleep(Duration::from_secs(if watching { 2 } else { 15 }));
+            std::thread::sleep(Duration::from_secs(if watching { 2 } else { 15 }) * app.backoff());
         }
     });
 }
