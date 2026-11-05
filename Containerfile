@@ -13,8 +13,16 @@ COPY src/ui/ ./
 RUN rm -f src/lib/snapshot.json && npm run build
 
 FROM --platform=$BUILDPLATFORM rust:1-alpine AS server
+# prebuilt, checksum-pinned cargo-zigbuild on x86_64 build hosts (CI); compile it elsewhere
+ARG ZIGBUILD=0.24.1 ZIGBUILD_SHA256=f09b180a517af0e4dd4bffc921bb88e5ab705452a9dd948c61e489b3020c68c2
+RUN apk add --no-cache musl-dev zig xz && if [ "$(uname -m)" = x86_64 ]; then \
+      f=cargo-zigbuild-x86_64-unknown-linux-musl.tar.xz \
+      && wget -q "https://github.com/rust-cross/cargo-zigbuild/releases/download/v$ZIGBUILD/$f" \
+      && echo "$ZIGBUILD_SHA256  $f" | sha256sum -c - \
+      && tar -xJf "$f" -C /usr/local/bin --strip-components=1 "${f%.tar.xz}/cargo-zigbuild" && rm "$f"; \
+    else cargo install --locked cargo-zigbuild; fi
+# declared after the tool install so that layer is shared by every target platform
 ARG TARGETPLATFORM
-RUN apk add --no-cache musl-dev zig && cargo install --locked cargo-zigbuild
 WORKDIR /src
 COPY src/server/ ./
 COPY --from=ui /ui/dist /ui/dist
