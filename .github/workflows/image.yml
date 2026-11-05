@@ -38,3 +38,22 @@ jobs:
           docker buildx build --platform linux/arm/v7,linux/arm64,linux/amd64 -f Containerfile \
             --label org.opencontainers.image.source="https://github.com/$GITHUB_REPOSITORY" \
             -t "$img:latest" -t "$img:${SHA::12}" --push .
+      # Keep the newest 10 builds. Each build is one tagged multi-arch index plus untagged per-arch manifests,
+      # so only delete untagged versions no kept index still points to.
+      - name: Prune old versions
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          OWNER: ${{ github.repository_owner }}
+        run: |
+          set -eu
+          owner=$(echo "$OWNER" | tr '[:upper:]' '[:lower:]')
+          kind=$(gh api "/users/$OWNER" --jq '.type | ascii_downcase')s
+          base="/$kind/$OWNER/packages/container/tikontrol/versions"
+          gh api --paginate "$base?per_page=100" > versions.json
+          jq -s 'add | map(select(.metadata.container.tags | length > 0)) | sort_by(.created_at) | reverse' versions.json > tagged.json
+          keep=$(jq -r '.[:10][] | .name' tagged.json)
+          refs=$(for d in $keep; do docker buildx imagetools inspect --raw "ghcr.io/$owner/tikontrol@$d" | jq -r '.manifests[]?.digest'; done)
+          jq -r '.[10:][] | .id' tagged.json > drop.txt
+          jq -rs 'add | map(select(.metadata.container.tags | length == 0)) | .[] | "\(.id) \(.name)"' versions.json |
+            while read -r id name; do echo "$refs" | grep -qx "$name" || echo "$id"; done >> drop.txt
+          while read -r id; do gh api -X DELETE "$base/$id" && echo "deleted $id"; done < drop.txt

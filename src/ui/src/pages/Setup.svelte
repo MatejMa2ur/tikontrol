@@ -1,6 +1,7 @@
 <script lang="ts">
   // First run: create the admin (needs the setup token from the log), then connect the router.
   // Read-only is the default and is enforced by the router user's group, not by this page.
+  import { onMount, untrack } from 'svelte'
   import { api, logout, type Me } from '../lib/backend'
   let { step, me }: { step: 'admin' | 'router'; me?: Me } = $props()
 
@@ -20,7 +21,7 @@
   let password2 = $state('')
 
   // router
-  let host = $state(me?.routerHint ?? '')
+  let host = $state(untrack(() => me?.routerHint ?? '')) // initial value only
   let port = $state(8729)
   let pin = $state('')
   let pinOk = $state(false)
@@ -49,7 +50,7 @@
   }) }
   const probe = () => run(async () => { pinOk = false; pin = (await api<{ pin: string }>('/router/probe', { method: 'POST', body: { host, port } })).pin })
   // address known (TIK_ROUTER or the default gateway): read its certificate right away
-  if (step === 'router' && !me?.router && host) probe()
+  onMount(() => { if (step === 'router' && !me?.router && host) probe() })
   const save = (e: SubmitEvent) => { e.preventDefault(); run(async () => {
     await api('/router', { method: 'POST', body: { host, port, pin, mode: write ? 'read-write' : 'read-only', reader, writer: stored ? writer : null, confirm_write: confirmWrite } })
     location.reload()
