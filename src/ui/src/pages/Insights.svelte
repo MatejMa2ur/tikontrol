@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { keep, kept } from '../lib/keep'
   import { clients, raw, bytes, bps, hw, router, isBackend } from '../lib/data'
   import { api } from '../lib/backend'
   import { live, displayName, iconOf, activity } from '../lib/live.svelte'
@@ -21,7 +22,7 @@
   const base = (n: string) => n.split('.').slice(-2).join('.')
   const domains = Object.entries(cache.reduce((acc: Record<string, string[]>, d) => ((acc[base(d.name)] ??= []).push(d.name), acc), {}))
     .map(([d, names]) => ({ d, names: names as string[] })).sort((a, b) => b.names.length - a.names.length)
-  let dq = $state('')
+  let dq = $state(kept('insights.q', ''))
 
   // NetFlow v5 aggregates from the server's collector (TIK_FLOWS)
   type Dest = { ip: string; bytes: number; name: string | null }
@@ -39,6 +40,7 @@
   const nameOfIp = (ip: string) => { const c = clients.find((x) => x.ip === ip); return c ? displayName(c) : ip }
 
   const CATS = ['Streaming', 'Social', 'Gaming', 'Web', 'Cloud & storage', 'Messaging', 'Updates', 'Other']
+  $effect(() => { keep('insights.q', dq) })
 </script>
 
 <div class="grid">

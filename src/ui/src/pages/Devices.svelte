@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { keep, kept } from '../lib/keep'
   import { router, internet, clients, radios, raw, bytes, dur, hw, isBackend } from '../lib/data'
   import { api } from '../lib/backend'
   import { live } from '../lib/live.svelte'
@@ -34,7 +35,7 @@
   const last = (v?: (number | null)[]) => v?.filter((x) => x != null).at(-1)
 
   let drawer = $state(false)
-  let dtab = $state<'overview' | 'ports' | 'settings'>('overview')
+  let dtab = $state<'overview' | 'ports' | 'settings'>(kept('devices.tab', 'overview'))
   let identity = $state(router.identity)
   let led = $state(true)
   let ssh = $state(true)
@@ -45,6 +46,7 @@
 
   // fleet upgrade rule (CMR /cmr/upgrade)
   let rule = $state({ channel: 'stable', time: '03:00', strategy: 'sequential', fail: 'stop', auto: false })
+  $effect(() => { keep('devices.tab', dtab) })
 </script>
 
 <div class="grid">

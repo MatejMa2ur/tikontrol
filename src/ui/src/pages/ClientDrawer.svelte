@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { keep, kept } from '../lib/keep'
   import { untrack } from 'svelte'
   import { subtitle, signalQuality, bps, bytes, dur, events, isBackend, whyBand, type Client } from '../lib/data'
   import type { Intent } from '../lib/apply.svelte'
@@ -12,7 +13,7 @@
   import Toggle from '../lib/ui/Toggle.svelte'
 
   let { client: c }: { client: Client } = $props()
-  let tab = $state<'overview' | 'insights' | 'settings'>('overview')
+  let tab = $state<'overview' | 'insights' | 'settings'>(kept('client.tab', 'overview'))
   let editing = $state(false)
   let draft = $state('')
 
@@ -70,6 +71,7 @@
     return out
   })
   const area = $derived(`0,60 ${pts.map((v, i) => `${(i / 47) * 300},${60 - (v / max) * 56}`).join(' ')} 300,60`)
+  $effect(() => { keep('client.tab', tab) })
 </script>
 
 <svelte:window onkeydown={(e) => e.key === 'Escape' && close()} />

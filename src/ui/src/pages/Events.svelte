@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { keep, kept } from '../lib/keep'
   import { events, clients, insights, isBackend, raw, type Event } from '../lib/data'
   import { review, apply } from '../lib/apply.svelte'
   import Ros from '../lib/Ros.svelte'
@@ -15,8 +16,8 @@
   const ownEvents: Event[] = clients.filter((c) => c.online && c.uptimeS != null && c.uptimeS < 3600).map((c) => ({ time: new Date(Date.now() - c.uptimeS! * 1000).toISOString().replace('T', ' ').slice(0, 19), cat: 'Clients', level: 'info', text: `${c.name} came online (${c.wired ? 'wired' : c.band})` }))
   const all = $derived([...apply.done.map((d) => ({ time: new Date().toISOString().slice(0, 11) + d.at, cat: 'Admin' as const, level: 'info' as const, text: `Configuration changed: ${d.title}` })), ...ownEvents, ...events].sort((a, b) => b.time.localeCompare(a.time)))
   const cats = ['All', 'Clients', 'WiFi', 'System', 'Security', 'Admin'] as const
-  let cat = $state<(typeof cats)[number]>('All')
-  let q = $state('')
+  let cat = $state<(typeof cats)[number]>(kept('events.cat', 'All'))
+  let q = $state(kept('events.q', ''))
   const rows = $derived(all.filter((e) => (cat === 'All' || e.cat === cat) && (!q || e.text.toLowerCase().includes(q.toLowerCase()))))
   const count = (c: string) => (c === 'All' ? all.length : all.filter((e) => e.cat === c).length)
   const lvl = (e: Event) => (e.level === 'error' ? 'bad' : e.level === 'warning' ? 'warn' : '')
@@ -51,6 +52,7 @@
   let quiet = $state({ on: false, from: '23:00', to: '07:00' })
   let unacked = $state(0) // from the server when isBackend
   let history = $state(insights.filter((i) => i.level !== 'ok').map((i, n) => ({ id: n, title: i.title, sev: i.level === 'bad' ? 'critical' : 'warning', at: 'Today', ack: false })))
+  $effect(() => { keep('events.cat', cat); keep('events.q', q) })
 </script>
 
 <div class="grid">

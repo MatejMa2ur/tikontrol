@@ -55,7 +55,8 @@
   // index of the first slot with data: before it tikontrol wasn't running yet
   const since = $derived((hist.rx as (number | null)[]).findIndex((v) => v != null))
 
-  let band = $state(radios.find((r) => r.band === '5 GHz')?.name ?? radios[0]?.name)
+  let band = $state(radios.find((r) => r.name === sessionStorage.getItem('tik:band'))?.name ?? radios.find((r) => r.band === '5 GHz')?.name ?? radios[0]?.name)
+  $effect(() => { if (band) sessionStorage.setItem('tik:band', band) })
   const radio = $derived(radios.find((r) => r.name === band))
   const bandClients = $derived(wifiClients.filter((c) => c.port === band))
   // link-quality buckets (CCQ %), shown like UniFi's TX-retries strip: worse → better

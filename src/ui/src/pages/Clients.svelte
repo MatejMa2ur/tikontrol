@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { keep, kept } from '../lib/keep'
   import { clients, offline, isBackend, subtitle, signalQuality, bps, dur, type Client } from '../lib/data'
   import { live, prefs, displayName, iconOf } from '../lib/live.svelte'
   import { review } from '../lib/apply.svelte'
@@ -12,9 +13,9 @@
   let { selected }: { selected?: string } = $props()
   const tab = $derived(selected === 'offline' || selected === 'groups' ? selected : 'online')
   let newGroup = $state('')
-  let filter = $state<'all' | 'wifi' | 'wired'>('all')
-  let q = $state('')
-  let sort = $state<{ key: string; dir: 1 | -1 }>({ key: 'name', dir: 1 })
+  let filter = $state<'all' | 'wifi' | 'wired'>(kept('clients.filter', 'all'))
+  let q = $state(kept('clients.q', ''))
+  let sort = $state<{ key: string; dir: 1 | -1 }>(kept('clients.sort', { key: 'name', dir: 1 }))
 
   const keyOf: Record<string, (c: Client) => string | number> = {
     name: (c) => displayName(c).toLowerCase(),
@@ -55,6 +56,7 @@
     review(`Limit ${g.name}`, [`/queue/type/add name=tik-${s}-down kind=pcq pcq-rate=${down} pcq-classifier=dst-address`, `/queue/type/add name=tik-${s}-up kind=pcq pcq-rate=${up} pcq-classifier=src-address`, `# + mangle marks on list tik-${s} and /queue/tree entries, comment=tik:profile:${s}`], { kind: 'group-limit', group: s, down: down ?? '', up: up ?? down ?? '' })
   }
   const counts = { all: clients.length, wifi: clients.filter((c) => !c.wired).length, wired: clients.filter((c) => c.wired).length }
+  $effect(() => { keep('clients.filter', filter); keep('clients.sort', sort); keep('clients.q', q) })
 </script>
 
 <div class="grid">
