@@ -22,7 +22,7 @@ Q = {
     "ethernet": "[/interface/ethernet/print as-value proplist=name,running,disabled]",
     "wifi": "[/interface/wireless/print as-value proplist=name,ssid,band,frequency,channel-width,running,disabled,mode,master-interface,security-profile,hide-ssid,default-forwarding,default-ap-tx-limit,default-client-tx-limit,comment]",
     "stations": "[/interface/wireless/registration-table/print as-value proplist=interface,mac-address,signal-strength,tx-rate,rx-rate,uptime,bytes,last-ip]",
-    "leases": "[/ip/dhcp-server/lease/print as-value proplist=address,mac-address,host-name,comment,status,dynamic,last-seen]",
+    "leases": "[/ip/dhcp-server/lease/print as-value proplist=address,mac-address,host-name,comment,status,dynamic,last-seen,class-id]",
     "arp": "[/ip/arp/print as-value proplist=address,mac-address,interface,status]",
     "bridgeHosts": "[/interface/bridge/host/print as-value proplist=mac-address,interface,on-interface,local]",
     "dns": '({"cache-size"=[/ip/dns/get cache-size];"cache-used"=[/ip/dns/get cache-used]})',

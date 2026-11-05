@@ -5,19 +5,23 @@
 import { simulateBe3 } from './be3'
 import { bandLabel, detectHardware, normalizeWifi, parseChannel, standardOf } from './hardware'
 import { preload } from './backend'
+import { guessDevice, isPrivateMac, makerOf, type Kind } from './identify'
+export type { Kind }
 
 const files = import.meta.glob('./*.json', { eager: true, import: 'default' }) as Record<string, any>
 export const simulated = new URLSearchParams(location.search).get('device') === 'be3'
 export const isBackend = !!preload.snapshot
 export const isSample = !isBackend && !files['./snapshot.json']
 
-export type Kind = 'phone' | 'computer' | 'server' | 'vm' | 'speaker' | 'iot' | 'unknown'
 export type Client = {
   mac: string
   ip: string
   name: string
   hostname?: string
-  vendor?: string
+  vendor?: string // maker from the MAC prefix
+  classId?: string // DHCP vendor class (option 60), untrusted
+  type?: string // best guess, e.g. 'Phone'
+  os?: string // best guess, e.g. 'Android 14'
   kind: Kind
   wired: boolean
   port?: string // ether2… or wlan1/wlan2
@@ -69,13 +73,8 @@ export const bps = (n: number) => {
   while (n >= 1000 && i < u.length - 1) { n /= 1000; i++ }
   return `${n < 10 && i ? n.toFixed(1) : Math.round(n)} ${u[i]}`
 }
-// Locally administered bit: phones/laptops with "private Wi-Fi address"
-const isPrivateMac = (mac: string) => (parseInt(mac.slice(0, 2), 16) & 2) === 2
-// ponytail: tiny OUI table; ship the full IEEE OUI list (~1 MB, gzipped ~300 KB) in Phase 1
-const OUI: Record<string, string> = { '38:42:0B': 'Sonos', '52:54:00': 'QEMU / KVM' }
-
 export const subtitle = (c: Client, shown: string) =>
-  c.vendor ?? (c.privateMac ? 'Private Wi-Fi address' : c.hostname && c.hostname !== shown ? c.hostname : 'Unknown vendor')
+  [c.vendor ?? (c.privateMac ? 'Private Wi-Fi address' : c.hostname && c.hostname !== shown ? c.hostname : 'Unknown maker'), c.type].filter(Boolean).join(' · ')
 
 export function signalQuality(dbm?: number) {
   if (dbm == null) return { label: 'Wired', level: 'ok' as const }
@@ -83,17 +82,6 @@ export function signalQuality(dbm?: number) {
   if (dbm >= -67) return { label: 'Good', level: 'ok' as const }
   if (dbm >= -75) return { label: 'Fair', level: 'warn' as const }
   return { label: 'Poor', level: 'bad' as const }
-}
-
-function guessKind(host = '', vendor = '', priv: boolean, wired: boolean): Kind {
-  const h = `${host} ${vendor}`.toLowerCase()
-  if (/sonos|speaker|homepod|echo/.test(h)) return 'speaker'
-  if (/qemu|kvm|vm\b|arch|ubuntu|debian/.test(h)) return 'vm'
-  if (/zima|nas|server|truenas|unraid|synology/.test(h)) return 'server'
-  if (/pc|desktop|laptop|macbook|imac|win/.test(h)) return 'computer'
-  if (/gw|hub|bridge|hue|ikea|tasmota|esp|shelly/.test(h)) return 'iot'
-  if (priv && !wired) return 'phone'
-  return 'unknown'
 }
 
 // ---------- normalise ----------
@@ -106,6 +94,7 @@ const arp: any[] = raw.arp ?? []
 const wifi: any[] = raw.wifi ?? []
 const log: any[] = Array.isArray(raw.log) ? raw.log : []
 const lq: any[] = raw.linkQuality ?? []
+const neighbors: any[] = Array.isArray(raw.neighbors) ? raw.neighbors : []
 
 const bandOf = (ifname?: string) => {
   const w = wifi.find((x) => x.name === ifname)
@@ -127,10 +116,12 @@ const clients: Client[] = [...macs].filter(Boolean).map((mac) => {
   const st = stations.find((s) => s['mac-address'] === mac)
   const host = hosts.find((h) => h['mac-address'] === mac)
   const a = arp.find((x) => x['mac-address'] === mac)
-  const vendor = OUI[mac.slice(0, 8)]
+  const vendor = makerOf(mac)
   const priv = isPrivateMac(mac)
   const wired = !st
   const hostname = lease?.['host-name']
+  const classId = lease?.['class-id'] || undefined
+  const guess = guessDevice({ hostname: hostname || lease?.comment, classId, maker: vendor, neighbor: neighbors.find((n) => n['mac-address'] === mac), priv, wired })
   // reg-table `bytes` is "rx,tx" from the AP's side: rx = client upload, tx = client download
   // (sanity check: a Sonos streaming music shows the big number second)
   const [up, down] = String(st?.bytes ?? '0,0').split(',').map(Number)
@@ -139,8 +130,11 @@ const clients: Client[] = [...macs].filter(Boolean).map((mac) => {
     ip: lease?.address ?? st?.['last-ip'] ?? a?.address ?? '—',
     hostname,
     vendor,
+    classId,
+    type: guess?.type || undefined,
+    os: guess?.os,
     name: lease?.comment || hostname || (vendor ? `${vendor} ${mac.slice(-5)}` : priv ? `Private device ${mac.slice(-5)}` : `Device ${mac.slice(-5)}`),
-    kind: guessKind(hostname || lease?.comment, vendor, priv, wired),
+    kind: guess?.kind ?? 'unknown',
     wired,
     port: st?.interface ?? host?.['on-interface'],
     band: bandOf(st?.interface),

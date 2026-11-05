@@ -28,7 +28,7 @@
   const rows = $derived(
     clients
       .filter((c) => filter === 'all' || (filter === 'wifi') === !c.wired)
-      .filter((c) => !q || `${displayName(c)} ${c.ip} ${c.mac} ${c.vendor ?? ''} ${c.hostname ?? ''}`.toLowerCase().includes(q.toLowerCase()))
+      .filter((c) => !q || `${displayName(c)} ${c.ip} ${c.mac} ${c.vendor ?? ''} ${c.type ?? ''} ${c.os ?? ''} ${c.hostname ?? ''}`.toLowerCase().includes(q.toLowerCase()))
       .sort((a, b) => (keyOf[sort.key](a) > keyOf[sort.key](b) ? 1 : -1) * sort.dir),
   )
   const sortBy = (key: string) => (sort = { key, dir: sort.key === key ? (-sort.dir as 1 | -1) : 1 })

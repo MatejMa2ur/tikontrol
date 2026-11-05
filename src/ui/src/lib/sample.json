@@ -289,6 +289,7 @@
   },
   {
    ".id": "*1B",
+   "class-id": "udhcp 1.36.1",
    "address": "10.12.0.104",
    "dynamic": true,
    "last-seen": "17m49s",
@@ -316,6 +317,7 @@
   },
   {
    ".id": "*1E",
+   "class-id": "android-dhcp-14",
    "address": "10.12.0.116",
    "dynamic": true,
    "last-seen": "2m53s",
@@ -340,6 +342,7 @@
   },
   {
    ".id": "*21",
+   "class-id": "MSFT 5.0",
    "address": "10.12.0.107",
    "dynamic": true,
    "last-seen": "4m28s",

@@ -24,7 +24,7 @@
 
   // settings form (seeded from the client)
   let s = $state({ fixedIp: untrack(() => c.ip), dns: '', vlan: '', limit: '', pause: false, days: 'Mon-Sun', from: '22:00', to: '07:00' })
-  const KINDS = ['phone', 'computer', 'server', 'vm', 'speaker', 'iot', 'unknown']
+  const KINDS = ['phone', 'computer', 'server', 'vm', 'speaker', 'iot', 'devices', 'unknown']
 
   // 24h per-client traffic (synthetic, seeded by MAC) until history is stored
   const pts = $derived.by(() => {
@@ -39,7 +39,10 @@
   let hours = $state<[number, number, number][]>([])
   // roaming history: joins from the router log, plus "roamed from X to Y" the server saw in the registration table
   let stored = $state<{ t: number; text: string }[]>([])
-  if (isBackend) api<{ hours: [number, number, number][]; events?: { t: number; cat: string; text: string }[] }>(`/history/client?mac=${encodeURIComponent(untrack(() => c.mac))}`).then((h) => { hours = (h?.hours ?? []).slice(-24); stored = (h?.events ?? []).filter((e) => e.cat === 'WiFi') }).catch(() => {})
+  // first/last time the server saw this MAC
+  let seen = $state<{ first: number; last: number } | null>(null)
+  if (isBackend) api<{ hours: [number, number, number][]; seen?: { first: number; last: number } | null; events?: { t: number; cat: string; text: string }[] }>(`/history/client?mac=${encodeURIComponent(untrack(() => c.mac))}`).then((h) => { hours = (h?.hours ?? []).slice(-24); seen = h?.seen ?? null; stored = (h?.events ?? []).filter((e) => e.cat === 'WiFi') }).catch(() => {})
+  const when = (t: number) => new Date(t * 1000).toLocaleString()
   const hhmm = (t: number) => new Date(t * 1000).toTimeString().slice(0, 5)
   const roams = $derived([
     ...c.bandLog.filter((l) => l.joined).map((l) => ({ time: l.time.slice(11, 16) || l.time, text: `Joined ${l.iface} (${l.band ?? '?'}, ${l.signal} dBm)` })),
@@ -119,7 +122,12 @@
       {#if c.txRate}<dt>Link rate</dt><dd class="mono">{c.txRate}</dd>{/if}
       {#if c.ccq != null}<dt>Link quality</dt><dd>{c.ccq}% CCQ</dd>{/if}
       <dt>IP address</dt><dd class="mono">{c.ip} {c.fixedIp ? '(fixed)' : '(DHCP)'}</dd>
-      <dt>MAC address</dt><dd class="mono">{c.mac}{c.privateMac ? ' · randomised' : ''}</dd>
+      <dt>MAC address</dt><dd class="mono">{c.mac}</dd>
+      <dt>Maker</dt><dd>{c.vendor ?? (c.privateMac ? 'Private Wi-Fi address' : 'Unknown')}{#if c.privateMac && !c.vendor}<div class="tiny muted">The device made up this address for privacy, so it can't name its maker.</div>{/if}</dd>
+      {#if c.type || c.os}<dt>Type</dt><dd>{[c.type, c.os].filter(Boolean).join(' · ')} <span class="pill tiny" title="Guessed from the name, DHCP vendor class and MAC maker">guess</span></dd>{/if}
+      {#if c.hostname && c.hostname !== displayName(c)}<dt>Hostname</dt><dd class="mono">{c.hostname}</dd>{/if}
+      {#if c.classId}<dt>DHCP vendor class</dt><dd class="mono">{c.classId}</dd>{/if}
+      {#if seen}<dt>First seen</dt><dd>{when(seen.first)}</dd><dt>Last seen</dt><dd>{when(seen.last)}</dd>{/if}
       <dt>Connected for</dt><dd>{dur(c.uptimeS)}</dd>
       {#if c.bytesDown || c.bytesUp}<dt>Total traffic</dt><dd>{bytes(c.bytesDown)} down · {bytes(c.bytesUp)} up</dd>{/if}
       {#if prefs.notes[c.mac]}<dt>Notes</dt><dd>{prefs.notes[c.mac]}</dd>{/if}

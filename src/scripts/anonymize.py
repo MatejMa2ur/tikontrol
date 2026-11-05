@@ -104,6 +104,11 @@ for l in d.get("leases") or []:
     l.pop("host-name", None)
     if name:
         l["host-name"] = name
+    # DHCP vendor class: keep the family, drop the real version
+    cls = str(l.pop("class-id", "") or "")
+    for pat, fake in ((r"android-dhcp", "android-dhcp-14"), (r"MSFT", "MSFT 5.0"), (r"udhcp", "udhcp 1.36.1"), (r"dhcpcd", "dhcpcd-9.4.1:Linux")):
+        if re.match(pat, cls, re.I):
+            l["class-id"] = fake
 for w in d.get("wireguard") or []:
     w["listen-port"] = 51820
 for a in d.get("adlist") or []:

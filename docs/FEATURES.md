@@ -11,7 +11,7 @@ Clean-room: we copy the behaviour, never the assets.
 **Backing:** `ROS` = RouterOS API on the router · `CMR` = MikroTik CMR server · `tik` = our own logic/DB · `✗` = nothing can back it
 
 <!-- progress:start -->
-**Progress:** 7 ✅ · 191 🟨 · 17 🎨 · 7 ⬜ · 8 ➖ (230 items, 3% done)
+**Progress:** 8 ✅ · 190 🟨 · 17 🎨 · 7 ⬜ · 8 ➖ (230 items, 4% done)
 <!-- progress:end -->
 
 ---
@@ -93,7 +93,7 @@ Clean-room: we copy the behaviour, never the assets.
 | Feature | Backing | Phase | Status |
 |---|---|---|---|
 | Client list: name, IP, MAC, vendor, connection, uptime | ROS leases + ARP + reg-table + bridge host | 1 | 🟨 |
-| Device fingerprint / auto icon (phone, TV, PC…) | tik (OUI + hostname + DHCP heuristics) | 1 | 🟨 |
+| Device fingerprint / auto icon (phone, TV, PC…): maker from the MAC (embedded IEEE table, private-address note), type + OS guess from hostname, DHCP vendor class and MNDP/LLDP neighbours, first/last seen | tik (OUI + hostname + DHCP class-id) · ROS `/ip/neighbor` | 1 | ✅ |
 | Wired: switch port · Wireless: SSID, band, signal, rate | ROS bridge host + reg-table | 1 | 🟨 |
 | Live per-client throughput | ROS kid-control / reg-table bytes | 1 | 🟨 |
 | Per-client traffic history | tik SQLite | 2 | 🟨 |
