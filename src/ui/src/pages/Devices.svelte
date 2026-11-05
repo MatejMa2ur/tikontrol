@@ -4,6 +4,7 @@
   import { live } from '../lib/live.svelte'
   import { review } from '../lib/apply.svelte'
   import Icon from '../lib/Icon.svelte'
+  import DeviceFace from '../lib/DeviceFace.svelte'
   import Tabs from '../lib/ui/Tabs.svelte'
   import Section from '../lib/ui/Section.svelte'
   import Field from '../lib/ui/Field.svelte'
@@ -124,6 +125,7 @@
       <button class:on={dtab === 'settings'} onclick={() => (dtab = 'settings')}>Settings</button>
     </div>
     {#if dtab === 'overview'}
+      <div class="face"><DeviceFace /></div>
       <dl>
         <dt>Model</dt><dd>{router.board} <span class="muted mono">{router.model}</span></dd>
         <dt>Hardware</dt><dd>{hw.specs}</dd>
@@ -190,6 +192,7 @@
   .lg { width: 44px; height: 44px; }
   .title { font-size: 17px; }
   .dt { margin: 16px 0; }
+  .face { margin: 0 0 16px; }
   dl { display: grid; grid-template-columns: 110px 1fr; gap: 8px 12px; }
   dt { color: var(--muted); } dd { margin: 0; }
   h3 { margin: 18px 0 6px; }

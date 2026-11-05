@@ -3,6 +3,7 @@
   import { displayName } from '../lib/live.svelte'
   import { review, type Intent } from '../lib/apply.svelte'
   import Icon from '../lib/Icon.svelte'
+  import DeviceFace from '../lib/DeviceFace.svelte'
   import Ros from '../lib/Ros.svelte'
   import Modal from '../lib/ui/Modal.svelte'
   import Field from '../lib/ui/Field.svelte'
@@ -61,15 +62,7 @@
 
 <div class="grid">
   {#if !compact}
-    <section class="card face">
-      {#each ports as p, i}
-        <button class="port" class:up={p.up} title="{p.name}: {p.up ? m(p.name).rate : 'no link'}" onclick={() => open(p.name)}>
-          <span class="jack"><span></span></span>
-          <span class="small">{i + 1}{p.wan ? ' · WAN' : ''}</span>
-          <span class="tiny muted">{p.up ? m(p.name).rate : ''}</span>
-        </button>
-      {/each}
-    </section>
+    <section class="card face"><DeviceFace onselect={open} /></section>
   {/if}
 
   <section class="card flush">
@@ -164,13 +157,8 @@
 {/if}
 
 <style>
-  .face { display: flex; gap: 10px; justify-content: center; padding: 22px; background: linear-gradient(var(--panel2), var(--panel)); }
-  .port { display: grid; justify-items: center; gap: 4px; color: var(--muted); background: none; border: 0; cursor: pointer; }
-  .jack { width: 46px; height: 38px; border-radius: 5px; background: var(--code-bg); border: 2px solid var(--line); display: grid; place-items: end center; padding-bottom: 5px; }
-  .jack span { width: 22px; height: 8px; border-radius: 2px; background: var(--line); }
-  .port.up .jack { border-color: var(--ok); }
-  .port.up .jack span { background: var(--ok); box-shadow: 0 0 8px var(--ok); }
-  .port:first-child .jack { border-style: dashed; }
+  .face { display: grid; justify-items: center; padding: 22px; background: linear-gradient(var(--panel2), var(--panel)); }
+  .face > :global(svg) { max-width: 640px; }
   .tiny { font-size: 10.5px; }
   .flush { padding: 4px 6px; overflow-x: auto; }
   .r { text-align: right; }

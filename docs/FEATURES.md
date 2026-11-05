@@ -11,7 +11,7 @@ Clean-room: we copy the behaviour, never the assets.
 **Backing:** `ROS` = RouterOS API on the router · `CMR` = MikroTik CMR server · `tik` = our own logic/DB · `✗` = nothing can back it
 
 <!-- progress:start -->
-**Progress:** 7 ✅ · 190 🟨 · 17 🎨 · 7 ⬜ · 8 ➖ (229 items, 3% done)
+**Progress:** 7 ✅ · 191 🟨 · 17 🎨 · 7 ⬜ · 8 ➖ (230 items, 3% done)
 <!-- progress:end -->
 
 ---
@@ -76,6 +76,7 @@ Clean-room: we copy the behaviour, never the assets.
 | Device list (name, model, IP, version, uptime, state; other devices' stats need the CMR server) | ROS this router + `/ip/neighbor` · CMR `/cmr/device` | 3 | 🟨 |
 | Device adoption (one-click; needs CMR server) | CMR pairing | 3 |🎨 |
 | Auto-detect make, model, CPU, memory and WiFi capabilities | ROS `/system/resource`, `/system/routerboard` | 1 | 🟨 |
+| Device drawing: our own SVG of the port side per detected model (case colour, ports, USB, live link LEDs; generic box for unknown models) | tik (`hardware.ts` faceOf) | 2 | 🟨 |
 | Device detail: CPU/RAM/temperature history (this router; temperature only where `/system/health` has a sensor) | tik history · CMR dashboard for others | 3 | 🟨 |
 | Device restart / locate (blink LED) | CMR reboot · ROS `/system/routerboard` LED | 3 | 🟨 |
 | Firmware update per device | CMR / ROS | 3 | 🟨 |

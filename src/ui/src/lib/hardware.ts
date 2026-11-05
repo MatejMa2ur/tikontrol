@@ -89,3 +89,15 @@ export function detectHardware(raw: any) {
     ].filter(Boolean).join(' · '),
   }
 }
+
+// What the port side of the box looks like, for our own drawing (DeviceFace.svelte). Known models from MikroTik's
+// spec pages (docs/research/device_look.md); anything else is a neutral grey box with the ports the router reports.
+// ponytail: matched on the model code; add a row per model once someone has the spec sheet for it
+const FACES = [
+  { model: /^RBD52G/, body: '#f2f2ef', usb: ['A'], sd: false, poeIn: true, speed: '1G' }, // hAP ac²
+  { model: /^MA53UG/, body: '#f2f2ef', usb: ['C', 'A', 'A'], sd: true, poeIn: true, speed: '2.5G' }, // hAP be³ Media
+]
+export function faceOf(hw: { model?: string; ports: number }) {
+  const k = FACES.find((f) => f.model.test(hw.model ?? ''))
+  return { known: !!k, body: k?.body ?? '#c9ccd1', usb: k?.usb ?? [], sd: k?.sd ?? false, poeIn: k?.poeIn ?? false, speed: k?.speed, ports: hw.ports }
+}

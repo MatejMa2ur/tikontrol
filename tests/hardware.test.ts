@@ -3,7 +3,7 @@ import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import { test } from 'node:test'
 import { simulateBe3 } from '../src/ui/src/lib/be3.ts'
-import { bandLabel, detectHardware, normalizeWifi, parseChannel, standardOf } from '../src/ui/src/lib/hardware.ts'
+import { bandLabel, detectHardware, faceOf, normalizeWifi, parseChannel, standardOf } from '../src/ui/src/lib/hardware.ts'
 
 const sample = JSON.parse(readFileSync(new URL('../src/ui/src/lib/sample.json', import.meta.url), 'utf8'))
 
@@ -65,4 +65,13 @@ test('parses monitor channel strings', () => {
   assert.deepEqual(parseChannel('2437/20/gn(17dBm)'), { freq: 2437, channel: 6, width: 20, dfs: false, txPower: 17 })
   assert.deepEqual(parseChannel('5500/ax/eC'), { freq: 5500, channel: 100, width: 40, dfs: true, txPower: undefined })
   assert.equal(parseChannel(undefined).freq, undefined)
+})
+
+test('draws each known model with its own ports, and a generic box otherwise', () => {
+  const ac2 = faceOf(detectHardware(normalizeWifi(sample)))
+  assert.deepEqual([ac2.known, ac2.ports, ac2.usb, ac2.sd, ac2.poeIn, ac2.speed], [true, 5, ['A'], false, true, '1G'])
+  const be3 = faceOf(detectHardware(normalizeWifi(simulateBe3(sample))))
+  assert.deepEqual([be3.known, be3.ports, be3.usb, be3.sd, be3.speed], [true, 5, ['C', 'A', 'A'], true, '2.5G'])
+  const other = faceOf({ model: 'CCR2004-16G-2S+', ports: 16 })
+  assert.deepEqual([other.known, other.ports, other.usb, other.poeIn], [false, 16, [], false])
 })

@@ -1,8 +1,9 @@
 <script lang="ts">
-  import { clients, internet, router, insights, radios, wifiTech, connectivity, adblock, signalQuality, bytes, bps, dur, hw, ports } from '../lib/data'
+  import { clients, internet, router, insights, radios, wifiTech, connectivity, adblock, signalQuality, bytes, bps, dur, hw } from '../lib/data'
   import { live, displayName, activity, health, type Range } from '../lib/live.svelte'
   import ActivityChart from '../lib/ActivityChart.svelte'
   import Donut from '../lib/Donut.svelte'
+  import DeviceFace from '../lib/DeviceFace.svelte'
   import Icon from '../lib/Icon.svelte'
   import Ros from '../lib/Ros.svelte'
   import { prefs } from '../lib/live.svelte'
@@ -66,7 +67,6 @@
     return vals.slice(-60).map((v, i) => `${(i / 59) * 100},${28 - (v / max) * 26}`).join(' ')
   }
   const problems = insights.filter((i) => i.level !== 'ok')
-  const step = Math.min(23, 118 / (ports.length || 1)) // the drawing fits any port count
   // layout: ids the UI doesn't know are dropped, new cards are appended, so old prefs keep working
   const CARDS = {
     traffic: { title: 'Traffic Identification', body: trafficCard },
@@ -96,15 +96,7 @@
   <!-- ===== left: gateway column ===== -->
   <aside class="side">
     <div class="clock muted">{now.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit', timeZoneName: 'short' })}</div>
-    <!-- our own drawing of a small desktop router (not a vendor image) -->
-    <svg class="hw" viewBox="0 0 220 64" aria-hidden="true">
-      <defs><linearGradient id="g" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fbfbfc" /><stop offset="1" stop-color="#d9dbde" /></linearGradient></defs>
-      <rect x="6" y="14" width="208" height="40" rx="7" fill="url(#g)" stroke="#b9bcc1" />
-      <rect x="6" y="46" width="208" height="8" rx="3" fill="#c7c9cd" />
-      {#each ports as p, i}<rect x={92 + i * step} y="24" width={step - 5} height="15" rx="2" fill="#2b2d31" /><rect x={92 + i * step + 4} y="27" width={step - 13} height="3" fill={p.up ? '#3ccf7a' : '#55585e'} />{/each}
-      <circle cx="26" cy="31" r="3" fill="#3ccf7a" /><circle cx="38" cy="31" r="3" fill="#2fb4f2" />
-      <text x="47" y="34" font-size="8" font-family="system-ui" fill="#6b6f76" font-weight="700">{hw.board?.split(' ').slice(0, 2).join(' ').slice(0, 8)}</text>
-    </svg>
+    <div class="hw"><DeviceFace /></div>
     <b class="dev">{router.identity} <span class="muted">· {router.board}</span></b>
     <div class="muted tiny">{hw.specs}</div>
     <div class="muted tiny">RouterOS {router.version} ({router.channel})</div>
@@ -337,7 +329,7 @@
   /* left column */
   .side { border-right: 1px solid var(--line); padding: 14px 14px 30px; display: flex; flex-direction: column; gap: 6px; font-size: 12.5px; }
   .clock { text-align: center; padding-bottom: 8px; border-bottom: 1px solid var(--line); margin: 0 -14px 6px; }
-  .hw { width: 100%; height: auto; margin: 10px 0 14px; }
+  .hw { margin: 10px 0 14px; }
   .dev { font-size: 13px; }
   .tiny { font-size: 11px; }
   .links { margin-bottom: 8px; }
