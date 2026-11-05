@@ -89,7 +89,7 @@
   <div class="right row">
     <Palette {pages} />
     <button class="btn ghost" class:on={prefs.showRos} onclick={() => (prefs.showRos = !prefs.showRos)} title="Show the RouterOS commands behind every card"><Icon name="code" size={15} /></button>
-    <button class="btn ghost" onclick={() => (prefs.theme = prefs.theme === 'dark' ? 'light' : 'dark')} aria-label="Toggle theme"><Icon name={prefs.theme === 'dark' ? 'sun' : 'moon'} size={15} /></button>
+    <button class="btn ghost" onclick={() => { prefs.auto = false; prefs.theme = prefs.theme === 'dark' ? 'light' : 'dark' }} aria-label="Toggle theme"><Icon name={prefs.theme === 'dark' ? 'sun' : 'moon'} size={15} /></button>
     <span class="site hide-sm"><span class="dot ok"></span><span class="led"></span>{router.board?.startsWith(router.identity) ? router.board : `${router.identity} ${router.board}`}<Icon name="down" size={11} /></span>
     {#if isBackend}
       <button class="avatar" title="Signed in as {me?.user} ({me?.role}). Click to sign out." aria-label="Sign out {me?.user}" onclick={logout}>{(me?.user ?? 'a').slice(0, 1).toUpperCase()}</button>

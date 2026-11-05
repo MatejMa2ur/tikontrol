@@ -65,6 +65,8 @@ export const prefs = $state({
   // Colour and design theme (lib/themes.ts). Unknown names from storage fall back to the defaults.
   palette: ((p: string) => (Object.hasOwn(palettes, p) ? p : DEFAULT_PALETTE))(q.get('palette') ?? load<string>('tik.palette', DEFAULT_PALETTE)),
   design: ((d: string) => (Object.hasOwn(designs, d) ? d : DEFAULT_DESIGN))(q.get('design') ?? load<string>('tik.design', DEFAULT_DESIGN)),
+  // follow the OS light/dark setting; on by default for browsers that never picked a mode
+  auto: q.has('theme') ? false : load<boolean>('tik.themeAuto', localStorage.getItem('tik.theme') === null),
   showRos: load<boolean>('tik.showRos', false),
   icons: load<Record<string, string>>('tik.icons', {}),
   notes: load<Record<string, string>>('tik.notes', {}),
@@ -80,10 +82,15 @@ export const prefs = $state({
 const SHARED = ['aliases', 'icons', 'notes', 'groups', 'hidden', 'cardOrder', 'hiddenCards'] as const
 let loaded = !isBackend
 if (isBackend) api('/prefs').then((p) => { for (const k of SHARED) if (p?.[k]) (prefs as any)[k] = p[k]; loaded = true }).catch(() => (loaded = true))
+const dark = matchMedia('(prefers-color-scheme: dark)')
+const follow = () => { if (prefs.auto) prefs.theme = dark.matches ? 'dark' : 'light' }
+dark.addEventListener('change', follow)
+$effect.root(() => { $effect(follow) })
 let saveTimer: ReturnType<typeof setTimeout> | undefined
 $effect.root(() => {
   $effect(() => {
     localStorage.setItem('tik.theme', JSON.stringify(prefs.theme))
+    localStorage.setItem('tik.themeAuto', JSON.stringify(prefs.auto))
     localStorage.setItem('tik.palette', JSON.stringify(prefs.palette))
     localStorage.setItem('tik.design', JSON.stringify(prefs.design))
     localStorage.setItem('tik.showRos', JSON.stringify(prefs.showRos))

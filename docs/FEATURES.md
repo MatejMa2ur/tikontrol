@@ -11,7 +11,7 @@ Clean-room: we copy the behaviour, never the assets.
 **Backing:** `ROS` = RouterOS API on the router · `CMR` = MikroTik CMR server · `tik` = our own logic/DB · `✗` = nothing can back it
 
 <!-- progress:start -->
-**Progress:** 6 ✅ · 188 🟨 · 19 🎨 · 7 ⬜ · 8 ➖ (228 items, 3% done)
+**Progress:** 6 ✅ · 190 🟨 · 17 🎨 · 7 ⬜ · 8 ➖ (228 items, 3% done)
 <!-- progress:end -->
 
 ---
@@ -294,7 +294,7 @@ Clean-room: we copy the behaviour, never the assets.
 | Multi-site / multi-router | tik + CMR | 4 | ⬜ |
 | Mobile app | ✗ → responsive PWA instead | – | ➖ |
 | Responsive layout / PWA install | tik | 1 | 🟨 |
-| Dark / light theme | tik | 1 | ✅ |
+| Dark / light theme, or Auto following the OS setting | tik | 1 | ✅ |
 | Runs as RouterOS container (arm/v7, arm64) | tik build | 1 | 🟨 |
 | Runs on Docker (home server) | tik build | 0 | 🟨 |
 | CHR dev/test router | – | 0 | ⬜ |

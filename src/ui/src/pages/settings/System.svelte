@@ -134,7 +134,8 @@
 
 <Section title="Appearance" desc="Changes show right away and are saved in this browser, not on the router.">
   <Field label="Mode"><div class="opts" role="radiogroup" aria-label="Mode">
-    {#each [['dark', 'Dark'], ['light', 'Light']] as const as [v, l]}<label class="opt" class:on={prefs.theme === v}><input type="radio" name="mode" value={v} bind:group={prefs.theme} />{l}</label>{/each}
+    {#each [['auto', 'Auto (system)'], ['dark', 'Dark'], ['light', 'Light']] as const as [v, l]}{@const on = v === 'auto' ? prefs.auto : !prefs.auto && prefs.theme === v}
+      <label class="opt" class:on><input type="radio" name="mode" value={v} checked={on} onchange={() => { prefs.auto = v === 'auto'; if (v !== 'auto') prefs.theme = v }} />{l}</label>{/each}
   </div></Field>
   <Field label="Colours" help="Every palette meets WCAG AA contrast in light and dark"><div class="opts" role="radiogroup" aria-label="Colours">
     {#each Object.entries(palettes) as [id, p]}{@const c = p[prefs.theme]}

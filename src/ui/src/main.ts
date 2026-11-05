@@ -7,7 +7,8 @@ import { applyTheme } from './lib/themes'
 const target = document.getElementById('app')!
 const stored = (k: string, d: string) => { try { return String(JSON.parse(localStorage.getItem(k) ?? '') ?? d) } catch { return d } }
 const q = new URLSearchParams(location.search)
-const mode = q.get('theme') ?? stored('tik.theme', 'dark')
+const auto = !q.has('theme') && stored('tik.themeAuto', String(localStorage.getItem('tik.theme') === null)) === 'true'
+const mode = auto ? (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : q.get('theme') ?? stored('tik.theme', 'dark')
 applyTheme(document.documentElement, mode === 'light' ? 'light' : 'dark', q.get('palette') ?? stored('tik.palette', ''), q.get('design') ?? stored('tik.design', ''))
 
 const b = await boot().catch((e) => ({ mode: 'error' as const, error: String(e) }))
