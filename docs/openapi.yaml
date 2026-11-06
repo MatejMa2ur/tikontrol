@@ -102,6 +102,20 @@ paths:
       security: [{ session: [], csrf: [] }]
       summary: Run a speed test now (admin, opt-in; contacts the endpoint, Cloudflare by default). Measures tikontrol's host connection. One at a time, at most one per 3 minutes; about 25 MB down, 10 MB up, 10 s per direction
       responses: { '200': { description: the new result }, '403': { description: not admin }, '429': { description: too soon or already running (retry-after) }, '502': { description: the endpoint failed } }
+  /api/v1/discovery:
+    get:
+      summary: What LAN devices said about themselves over mDNS/DNS-SD and SSDP/UPnP (newest first, max 512). Values are untrusted device text (control characters stripped, 40 keys/device, 256 chars/value); wait = seconds until the next run is allowed
+      responses: { '200': { description: '{ auto, running, last, wait, minGap, devices[{ ip, mac (from ARP/leases, may be null), t, kv[[source (mdns|ssdp), key, value]] }] }' } }
+    put:
+      security: [{ session: [], csrf: [] }]
+      summary: 'Turn the 10-minute schedule on or off (admin). Off by default: "Ask devices on the LAN for details (mDNS/SSDP, stays on your network)"'
+      requestBody: { content: { application/json: { schema: { type: object, required: [auto], properties: { auto: { type: boolean } }, additionalProperties: false } } } }
+      responses: { '200': { description: ok }, '400': { description: invalid body }, '403': { description: not admin } }
+  /api/v1/discovery/run:
+    post:
+      security: [{ session: [], csrf: [] }]
+      summary: Ask the LAN now (admin, at most once a minute). Multicast to 224.0.0.251:5353 and 239.255.255.250:1900 for 2.5 s, answers only from private/link-local IPv4; UPnP descriptions are fetched only from the responder's own private address (http, no redirects, 64 KB, 2 s). Nothing leaves the LAN
+      responses: { '200': { description: '{ found: number of devices that answered }' }, '403': { description: not admin }, '429': { description: too soon or already running (retry-after) } }
   /api/v1/health/internet:
     get: { summary: 'Last 12 h in 48 slots: ok | warn | bad | none', responses: { '200': { description: ok } } }
   /api/v1/history/client:

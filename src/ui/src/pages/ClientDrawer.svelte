@@ -7,6 +7,7 @@
   import { live, prefs, displayName, iconOf } from '../lib/live.svelte'
   import { review } from '../lib/apply.svelte'
   import { trafficDraft } from './settings/Security.svelte'
+  import { identity, saidBy } from '../lib/discovery.svelte'
   import Icon from '../lib/Icon.svelte'
   import Ros from '../lib/Ros.svelte'
   import Field from '../lib/ui/Field.svelte'
@@ -18,6 +19,9 @@
   let draft = $state('')
 
   const sq = $derived(signalQuality(c.signal))
+  // maker/model/type improved by what the device itself said over mDNS/SSDP (untrusted, text only)
+  const me = $derived(identity(c))
+  const said = $derived(saidBy(c))
   const history = $derived(events.filter((e) => e.text.includes(displayName(c)) || e.text.includes(c.name)).slice(0, 12))
   const close = () => (location.hash = '#/clients')
   const save = () => { prefs.aliases[c.mac] = draft.trim(); if (!draft.trim()) delete prefs.aliases[c.mac]; editing = false }
@@ -82,7 +86,7 @@
 <aside class="drawer" aria-label="Client details">
   <header class="row between">
     <div class="row">
-      <div class="icon-box lg"><Icon name={iconOf(c)} size={22} /></div>
+      <div class="icon-box lg"><Icon name={iconOf(me)} size={22} /></div>
       <div>
         {#if editing}
           <!-- svelte-ignore a11y_autofocus -->
@@ -90,7 +94,7 @@
         {:else}
           <button class="title" onclick={() => { draft = displayName(c); editing = true }} title="Rename">{displayName(c)} <Icon name="edit" size={13} /></button>
         {/if}
-        <div class="muted small">{subtitle(c, displayName(c))}</div>
+        <div class="muted small">{subtitle(me, displayName(c))}</div>
       </div>
     </div>
     <button class="btn ghost" onclick={close} aria-label="Close"><Icon name="close" /></button>
@@ -123,8 +127,9 @@
       {#if c.ccq != null}<dt>Link quality</dt><dd>{c.ccq}% CCQ</dd>{/if}
       <dt>IP address</dt><dd class="mono">{c.ip} {c.fixedIp ? '(fixed)' : '(DHCP)'}</dd>
       <dt>MAC address</dt><dd class="mono">{c.mac}</dd>
-      <dt>Maker</dt><dd>{c.vendor ?? (c.privateMac ? 'Private Wi-Fi address' : 'Unknown')}{#if c.privateMac && !c.vendor}<div class="tiny muted">The device made up this address for privacy, so it can't name its maker.</div>{/if}</dd>
-      {#if c.type || c.os}<dt>Type</dt><dd>{[c.type, c.os].filter(Boolean).join(' · ')} <span class="pill tiny" title="Guessed from the name, DHCP vendor class and MAC maker">guess</span></dd>{/if}
+      <dt>Maker</dt><dd>{me.vendor ?? (c.privateMac ? 'Private Wi-Fi address' : 'Unknown')}{#if c.privateMac && !me.vendor}<div class="tiny muted">The device made up this address for privacy, so it can't name its maker.</div>{/if}</dd>
+      {#if me.model}<dt>Model</dt><dd>{me.model}</dd>{/if}
+      {#if me.type || me.os}<dt>Type</dt><dd>{[me.type, me.os].filter(Boolean).join(' · ')} <span class="pill tiny" title="Guessed from the name, DHCP vendor class and MAC maker">guess</span></dd>{/if}
       {#if c.hostname && c.hostname !== displayName(c)}<dt>Hostname</dt><dd class="mono">{c.hostname}</dd>{/if}
       {#if c.classId}<dt>DHCP vendor class</dt><dd class="mono">{c.classId}</dd>{/if}
       {#if seen}<dt>First seen</dt><dd>{when(seen.first)}</dd><dt>Last seen</dt><dd>{when(seen.last)}</dd>{/if}
@@ -132,6 +137,13 @@
       {#if c.bytesDown || c.bytesUp}<dt>Total traffic</dt><dd>{bytes(c.bytesDown)} down · {bytes(c.bytesUp)} up</dd>{/if}
       {#if prefs.notes[c.mac]}<dt>Notes</dt><dd>{prefs.notes[c.mac]}</dd>{/if}
     </dl>
+    {#if said}
+      <section>
+        <h3>What the device says</h3>
+        {#each said.kv as [src, k, v]}<div class="row small ev"><span class="pill tiny">{src === 'mdns' ? 'mDNS' : 'SSDP'}</span> <span class="muted">{k}:</span> <span class="said">{v}</span></div>{/each}
+        <p class="tiny muted">Asked {new Date(said.t * 1000).toLocaleString()} at {said.ip}. Devices describe themselves; treat it as a hint.</p>
+      </section>
+    {/if}
     {#if why}
       <section class="why" id="why-band">
         <h3>{why.switching ? 'Why does it keep switching bands?' : 'Why is it on 2.4 GHz?'}</h3>
@@ -218,6 +230,7 @@
   .fix p { margin: 6px 0; }
   .fix input { width: 64px; }
   .tiny { font-size: 11px; }
+  .said { overflow-wrap: anywhere; }
   .icons { display: flex; gap: 4px; flex-wrap: wrap; }
   .ico { width: 30px; height: 30px; border-radius: 7px; border: 1px solid var(--line); background: var(--panel2); display: grid; place-items: center; cursor: pointer; color: var(--muted); }
   .ico.on { border-color: var(--accent); color: var(--accent); }

@@ -7,7 +7,8 @@
   import Section from '../lib/ui/Section.svelte'
   import Icon from '../lib/Icon.svelte'
   import Ros from '../lib/Ros.svelte'
-  import { api } from '../lib/backend'
+  import { api, session } from '../lib/backend'
+  import { disc, identity, loadDiscovery } from '../lib/discovery.svelte'
   import ClientDrawer from './ClientDrawer.svelte'
 
   let { selected }: { selected?: string } = $props()
@@ -55,6 +56,19 @@
     const s = slug(g.name), [down, up] = g.limit.split('/').map((x) => x.trim())
     review(`Limit ${g.name}`, [`/queue/type/add name=tik-${s}-down kind=pcq pcq-rate=${down} pcq-classifier=dst-address`, `/queue/type/add name=tik-${s}-up kind=pcq pcq-rate=${up} pcq-classifier=src-address`, `# + mangle marks on list tik-${s} and /queue/tree entries, comment=tik:profile:${s}`], { kind: 'group-limit', group: s, down: down ?? '', up: up ?? down ?? '' })
   }
+  // LAN discovery (server side, opt-in): run now, or every 10 min when the setting is on
+  const isAdmin = isBackend && session.me?.role === 'admin'
+  let discErr = $state('')
+  async function discover() {
+    discErr = ''; disc.running = true
+    try { await api('/discovery/run', { method: 'POST' }) } catch (e) { discErr = (e as Error).message }
+    await loadDiscovery()
+  }
+  async function setAuto(auto: boolean) {
+    discErr = ''
+    try { await api('/discovery', { method: 'PUT', body: { auto } }) } catch (e) { discErr = (e as Error).message }
+    await loadDiscovery()
+  }
   const counts = { all: clients.length, wifi: clients.filter((c) => !c.wired).length, wired: clients.filter((c) => c.wired).length }
   $effect(() => { keep('clients.filter', filter); keep('clients.sort', sort); keep('clients.q', q) })
 </script>
@@ -71,6 +85,7 @@
         {/each}
       </div>
       <input type="search" placeholder="Search name, IP, MAC…" bind:value={q} />
+      {#if isAdmin}<button class="btn" disabled={disc.running || disc.wait > 0} onclick={discover} title="Asks devices on your LAN over mDNS and SSDP; nothing leaves your network">{disc.running ? 'Asking…' : 'Discover devices'}</button>{/if}
     </div>
   </div>
 
@@ -89,13 +104,14 @@
       <tbody>
         {#each rows as c (c.mac)}
           {@const sq = signalQuality(c.signal)}
+          {@const id = identity(c)}
           <tr onclick={() => (location.hash = `#/clients/${c.mac}`)} class:sel={c.mac === selected}>
             <td>
               <div class="row">
-                <div class="icon-box"><Icon name={iconOf(c)} /></div>
+                <div class="icon-box"><Icon name={iconOf(id)} /></div>
                 <div>
                   <div class="name">{displayName(c)}</div>
-                  <div class="muted small">{subtitle(c, displayName(c))}</div>
+                  <div class="muted small">{subtitle(id, displayName(c))}</div>
                 </div>
               </div>
             </td>
@@ -117,6 +133,10 @@
       </tbody>
     </table>
   </section>
+  {#if isAdmin}
+    <label class="row small muted"><input type="checkbox" checked={disc.auto} onchange={(e) => setAuto((e.target as HTMLInputElement).checked)} /> Ask devices on the LAN for details (mDNS/SSDP, stays on your network) every 10 minutes</label>
+    {#if discErr}<p class="small bad" role="alert">{discErr}</p>{/if}
+  {/if}
   <Ros cmd="/ip/dhcp-server/lease/print; /interface/wireless/registration-table/print; /interface/bridge/host/print; /ip/arp/print" />
   {:else if tab === 'offline'}
     <Section title="Recently seen" desc="Devices the router still remembers (ARP / DHCP) that aren't connected right now." ros="/ip/arp/print where status!=reachable; /ip/dhcp-server/lease/print where status!=bound">
