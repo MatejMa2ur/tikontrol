@@ -171,6 +171,19 @@ pub struct State {
     pub api_keys: Vec<crate::apikeys::ApiKey>,
     /// days of tikontrol's own history to keep (0 = default, see live::retention_days)
     pub history_days: u64,
+    /// "keep me signed in" browsers (api.rs): survive restarts and updates
+    pub remembered: Vec<Remembered>,
+}
+
+/// One browser that chose "keep me signed in". Only the token's SHA-256 is stored; a MikroTik password,
+/// when the account can write, is sealed with label "remember" (encrypted at rest like router credentials).
+#[derive(Serialize, Deserialize, Clone, Debug)]
+pub struct Remembered {
+    pub hash: String,
+    pub user: String,
+    pub role: Role,
+    pub ros: Option<String>,
+    pub expires: u64,
 }
 
 pub struct Store {

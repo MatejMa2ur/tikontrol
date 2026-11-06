@@ -2,6 +2,7 @@
   import { api } from '../lib/backend'
   let name = $state('')
   let password = $state('')
+  let remember = $state(localStorage.getItem('tik.remember') !== 'false')
   let error = $state('')
   let busy = $state(false)
   async function submit(e: SubmitEvent) {
@@ -9,7 +10,8 @@
     busy = true
     error = ''
     try {
-      await api('/login', { method: 'POST', body: { name, password } })
+      await api('/login', { method: 'POST', body: { name, password, remember } })
+      localStorage.setItem('tik.remember', String(remember))
       location.reload()
     } catch (err) {
       error = (err as Error).message
@@ -28,6 +30,7 @@
     <label>Username<input type="text" autocomplete="username" bind:value={name} required maxlength="64" /></label>
     <label>Password<input type="password" autocomplete="current-password" bind:value={password} required maxlength="256" /></label>
     {#if error}<p class="err" role="alert">{error}</p>{/if}
+    <label class="keep"><input type="checkbox" bind:checked={remember} /> Keep me signed in on this browser for 30 days <span class="muted small">(also across updates; Sign out ends it)</span></label>
     <button class="btn primary" disabled={busy}>{busy ? 'Signing in…' : 'Sign in'}</button>
   </form>
 </main>
@@ -41,4 +44,5 @@
   label input { width: 100%; box-sizing: border-box; }
   .err { color: var(--bad); margin: 0; }
   button { justify-content: center; }
+  .keep { display: flex; gap: 8px; align-items: baseline; font-weight: 500; }
 </style>

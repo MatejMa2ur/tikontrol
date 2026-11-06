@@ -74,6 +74,14 @@ pub fn sha256_hex(s: &str) -> String {
 pub const IDLE: Duration = Duration::from_secs(30 * 60);
 pub const ABSOLUTE: Duration = Duration::from_secs(12 * 3600);
 pub const COOKIE: &str = "tik_s";
+/// "keep me signed in": a separate long-lived cookie that recreates the session after it expires or tikontrol restarts
+pub const REMEMBER_COOKIE: &str = "tik_r";
+pub const REMEMBER: Duration = Duration::from_secs(30 * 86400);
+pub const MAX_REMEMBERED: usize = 50;
+
+pub fn remember_cookie(token: &str, tls: bool) -> String {
+    format!("{REMEMBER_COOKIE}={token}; Path=/api/; HttpOnly; SameSite=Strict; Max-Age={}{}", if token.is_empty() { 0 } else { REMEMBER.as_secs() }, if tls { "; Secure" } else { "" })
+}
 
 /// A RouterOS password kept only in memory for one session; never printed, logged or stored.
 #[derive(Clone)]

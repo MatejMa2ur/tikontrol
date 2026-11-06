@@ -26,7 +26,23 @@ pub fn handle(app: &Arc<App>, req: Req) -> Resp {
         return crate::mcp::handle(app, &req);
     }
     let public = PUBLIC.iter().any(|(m, p)| *m == req.method && *p == req.path);
-    let session = req.cookie(COOKIE).and_then(|t| lock(&app.sessions).get(t));
+    let mut session = req.cookie(COOKIE).and_then(|t| lock(&app.sessions).get(t));
+    // session gone (expired, or tikontrol restarted): a "keep me signed in" cookie opens a new one
+    let mut renewed = None;
+    if session.is_none() {
+        if let Some((t, s)) = req.cookie(auth::REMEMBER_COOKIE).and_then(|t| restore(app, t)) {
+            renewed = Some(auth::session_cookie(&t, app.tls));
+            session = Some(s);
+        }
+    }
+    let resp = handle_with(app, &req, public, session);
+    match renewed {
+        Some(c) => resp.with("set-cookie", c),
+        None => resp,
+    }
+}
+
+fn handle_with(app: &Arc<App>, req: &Req, public: bool, session: Option<Session>) -> Resp {
     if req.method != "GET" {
         // CSRF: same-origin plus a per-session token header; public POSTs still need same-origin
         if !auth::same_origin(req.header("origin"), req.header("host"), req.header("sec-fetch-site")) {
@@ -42,18 +58,18 @@ pub fn handle(app: &Arc<App>, req: Req) -> Resp {
     if public {
         return match (req.method.as_str(), req.path.as_str()) {
             ("GET", "/api/v1/health") => health(app),
-            ("POST", "/api/v1/setup/admin") => setup_admin(app, &req),
-            ("POST", "/api/v1/setup/start") => setup_start(app, &req),
-            _ => login(app, &req),
+            ("POST", "/api/v1/setup/admin") => setup_admin(app, req),
+            ("POST", "/api/v1/setup/start") => setup_start(app, req),
+            _ => login(app, req),
         };
     }
     if session.is_none() {
-        if let Some(r) = crate::apikeys::authenticate(app, &req) {
-            return r.map_or_else(|e| e, |s| route(app, &req, &s));
+        if let Some(r) = crate::apikeys::authenticate(app, req) {
+            return r.map_or_else(|e| e, |s| route(app, req, &s));
         }
     }
     let Some(s) = session else { return Resp::error(401, "login required") };
-    route(app, &req, &s)
+    route(app, req, &s)
 }
 
 fn route(app: &Arc<App>, req: &Req, s: &Session) -> Resp {
@@ -64,7 +80,13 @@ fn route(app: &Arc<App>, req: &Req, s: &Session) -> Resp {
             if let Some(t) = req.cookie(COOKIE) {
                 lock(&app.sessions).remove(t);
             }
-            Resp::json(200, &json!({ "ok": true })).with("set-cookie", auth::clear_cookie(app.tls))
+            if let Some(t) = req.cookie(auth::REMEMBER_COOKIE) {
+                let h = sha256_hex(t);
+                let mut st = lock(&app.store);
+                st.state.remembered.retain(|r| r.hash != h);
+                let _ = st.save();
+            }
+            Resp::json(200, &json!({ "ok": true })).with("set-cookie", auth::clear_cookie(app.tls)).with("set-cookie", auth::remember_cookie("", app.tls))
         }
         ("GET", "/api/v1/me") => me(app, s),
         ("GET", "/api/v1/snapshot") => snapshot(app),
@@ -186,6 +208,9 @@ fn setup_start(app: &App, req: &Req) -> Resp {
 struct Login {
     name: String,
     password: String,
+    /// keep this browser signed in for 30 days, across restarts
+    #[serde(default)]
+    remember: bool,
 }
 
 fn login(app: &App, req: &Req) -> Resp {
@@ -203,7 +228,8 @@ fn login(app: &App, req: &Req) -> Resp {
         if a.role == Role::Admin && app.claim().is_err() {
             return Resp::error(500, "could not save state");
         }
-        return start_session(app, &a.name, a.role.clone());
+        let resp = start_session(app, &a.name, a.role.clone());
+        return if b.remember { remember(app, resp, &a.name, a.role.clone(), None) } else { resp };
     }
     // not a local account: try it as a MikroTik account (local names always win, so they can't be shadowed)
     if !admins.iter().any(|a| a.name == b.name) {
@@ -212,8 +238,9 @@ fn login(app: &App, req: &Req) -> Resp {
             if role == Role::Admin && app.claim().is_err() {
                 return Resp::error(500, "could not save state");
             }
-            let (token, s) = lock(&app.sessions).create_with(&b.name, role, ros);
-            return Resp::json(200, &json!({ "user": s.user, "role": s.role, "csrf": s.csrf, "mikrotik": true })).with("set-cookie", auth::session_cookie(&token, app.tls));
+            let (token, s) = lock(&app.sessions).create_with(&b.name, role.clone(), ros.clone());
+            let resp = Resp::json(200, &json!({ "user": s.user, "role": s.role, "csrf": s.csrf, "mikrotik": true })).with("set-cookie", auth::session_cookie(&token, app.tls));
+            return if b.remember { remember(app, resp, &b.name, role, ros) } else { resp };
         }
     }
     lock(&app.limiter).fail(ip);
@@ -233,6 +260,35 @@ fn router_login(app: &App, user: &str, pw: &str) -> Option<(Role, Option<auth::S
         return None;
     }
     if p.has("write") { Some((Role::Admin, Some(auth::Secret(pw.into())))) } else { Some((Role::Viewer, None)) }
+}
+
+/// Adds a "keep me signed in" cookie to a successful login. The stored entry holds only the token's hash.
+fn remember(app: &App, resp: Resp, user: &str, role: Role, ros: Option<auth::Secret>) -> Resp {
+    let token = crate::store::hex(&crate::store::random_bytes::<32>());
+    let mut st = lock(&app.store);
+    let now = crate::app::now();
+    let ros = ros.map(|r| st.sealer.seal("remember", &r.0));
+    let list = &mut st.state.remembered;
+    list.retain(|r| r.expires > now);
+    if list.len() >= auth::MAX_REMEMBERED {
+        list.remove(0); // oldest first
+    }
+    list.push(crate::store::Remembered { hash: sha256_hex(&token), user: user.into(), role, ros, expires: now + auth::REMEMBER.as_secs() });
+    if st.save().is_err() {
+        return resp; // still signed in, just not remembered
+    }
+    resp.with("set-cookie", auth::remember_cookie(&token, app.tls))
+}
+
+/// Opens a session from a "keep me signed in" token, if it is known and not expired.
+/// ponytail: the token isn't rotated on use; rotate it if cookie theft becomes a concern.
+fn restore(app: &App, token: &str) -> Option<(String, Session)> {
+    let h = sha256_hex(token);
+    let st = lock(&app.store);
+    let r = st.state.remembered.iter().find(|r| ct_eq(r.hash.as_bytes(), h.as_bytes()) && r.expires > crate::app::now())?.clone();
+    let ros = r.ros.as_deref().and_then(|s| st.sealer.open_str("remember", s)).map(auth::Secret);
+    drop(st);
+    Some(lock(&app.sessions).create_with(&r.user, r.role, ros))
 }
 
 fn start_session(app: &App, user: &str, role: Role) -> Resp {
@@ -549,6 +605,26 @@ pub mod tests {
         let again = handle(&app, req("POST", "/api/v1/setup/admin", r#"{"token":"x","name":"evil","password":"a long admin password"}"#));
         assert_eq!(again.status, 409);
         assert_eq!(json_of(&handle(&app, req("GET", "/api/v1/health", "")))["needsSetup"], false);
+    }
+
+    #[test]
+    fn keep_me_signed_in_survives_a_restart_until_logout() {
+        let app = new_app();
+        admin_session(&app);
+        let ok = handle(&app, req("POST", "/api/v1/login", r#"{"name":"admin","password":"a long admin password","remember":true}"#));
+        let r = ok.headers.iter().find(|(k, v)| *k == "set-cookie" && v.starts_with("tik_r=")).unwrap().1.split(';').next().unwrap().to_string();
+        assert!(!lock(&app.store).state.remembered[0].hash.contains(&r[6..]), "only the hash is stored");
+        lock(&app.sessions).clear(); // restart
+        let with_r = |path: &str, method: &str| { let mut q = req(method, path, "{}"); q.headers.push(("cookie".into(), r.clone())); q };
+        let me = handle(&app, with_r("/api/v1/me", "GET"));
+        assert_eq!(me.status, 200);
+        let (c, csrf) = (cookie_of(&me), json_of(&me)["csrf"].as_str().unwrap().to_string());
+        let mut out = req("POST", "/api/v1/logout", "{}");
+        out.headers.push(("cookie".into(), format!("{COOKIE}={c}; {r}")));
+        out.headers.push(("x-csrf-token".into(), csrf));
+        assert_eq!(handle(&app, out).status, 200);
+        lock(&app.sessions).clear();
+        assert_eq!(handle(&app, with_r("/api/v1/me", "GET")).status, 401, "logout forgets the browser");
     }
 
     #[test]

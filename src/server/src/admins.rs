@@ -80,6 +80,7 @@ pub fn route(app: &Arc<App>, req: &Req, s: &Session) -> Option<Resp> {
                 return Some(Resp::error(409, "can't remove the last admin"));
             }
             let gone = st.state.admins.remove(pos);
+            st.state.remembered.retain(|r| r.user != name);
             let r = st.save();
             if r.is_err() {
                 st.state.admins.insert(pos, gone);
