@@ -296,7 +296,7 @@ struct SetupRouter {
 /// One-step setup: a full router admin proves ownership (instead of the setup token). As that admin,
 /// tikontrol creates its read-only group and user, stores the reader encrypted, claims itself and signs
 /// the admin in. The admin's password lives only in this request and the session (MikroTik-login rules).
-fn setup_router(app: &App, req: &Req) -> Resp {
+fn setup_router(app: &Arc<App>, req: &Req) -> Resp {
     let b: SetupRouter = match body(req) {
         Ok(b) => b,
         Err(r) => return r,
@@ -362,6 +362,9 @@ fn setup_router(app: &App, req: &Req) -> Resp {
     *app.snap.write().unwrap_or_else(|e| e.into_inner()) = Default::default();
     lock(&app.limiter).success(ip);
     eprintln!("tikontrol: set up by router admin {:?}; created or reset {} on the router", b.user, policy::READER_NAME);
+    // first read right away instead of at the next poll (up to TIK_POLL seconds), so the dashboard opens quickly
+    let a = app.clone();
+    std::thread::spawn(move || a.poll(false));
     let ros = Some(auth::Secret(b.password));
     let (token, s) = lock(&app.sessions).create_with(&b.user, Role::Admin, ros.clone());
     let resp = Resp::json(200, &json!({ "user": s.user, "role": s.role, "csrf": s.csrf, "mikrotik": true })).with("set-cookie", auth::session_cookie(&token, app.tls));
@@ -604,7 +607,7 @@ struct SetRouter {
     confirm_write: bool,
 }
 
-fn set_router(app: &App, req: &Req) -> Resp {
+fn set_router(app: &Arc<App>, req: &Req) -> Resp {
     let b: SetRouter = match body(req) {
         Ok(b) => b,
         Err(r) => return r,
@@ -671,6 +674,10 @@ fn set_router(app: &App, req: &Req) -> Resp {
     drop(st);
     app.drop_reader();
     *app.snap.write().unwrap_or_else(|e| e.into_inner()) = crate::app::Snap { policies: Some(rp), ..Default::default() };
+    if r.is_ok() {
+        let a = app.clone();
+        std::thread::spawn(move || a.poll(false)); // first read now, not at the next poll
+    }
     saved(r)
 }
 
