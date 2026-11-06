@@ -169,10 +169,10 @@
 :if ([:len $fp] = 0) do={ :error "tikontrol: signing tikontrol-api did not finish. Check /certificate/print and run again." }
 
 # api-ssl: keep a certificate or address limit someone already set; otherwise use ours and the LAN.
-:local svc [/ip/service/find where name="api-ssl"]
+:local svc [/ip/service/find where name="api-ssl" && dynamic=no]
 :local curCert [:tostr [/ip/service/get $svc certificate]]
 :if (($curCert = "") || ($curCert = "none")) do={
-  :local f [:parse "/ip/service/set [find where name=\"api-ssl\"] certificate=tikontrol-api tls-version=only-1.2"]
+  :local f [:parse "/ip/service/set [find where name=\"api-ssl\" && dynamic=no] certificate=tikontrol-api tls-version=only-1.2"]
   $f
   :put "  [ok] api-ssl uses certificate tikontrol-api"
 } else={ :put "  [ok] api-ssl keeps its certificate $curCert" }
@@ -185,8 +185,8 @@
 }
 :if (($from = "") || ($from = "0.0.0.0/0")) do={
   :local f
-  :if ($newName) do={ :set f [:parse "/ip/service/set [find where name=\"api-ssl\"] available-from=\$net"] } else={
-    :set f [:parse "/ip/service/set [find where name=\"api-ssl\"] address=\$net"]
+  :if ($newName) do={ :set f [:parse "/ip/service/set [find where name=\"api-ssl\" && dynamic=no] available-from=\$net"] } else={
+    :set f [:parse "/ip/service/set [find where name=\"api-ssl\" && dynamic=no] address=\$net"]
   }
   $f net=$tikInstLan
   :put "  [ok] api-ssl limited to $tikInstLan"
@@ -300,7 +300,7 @@
   :put "  [warn] the router's DNS does not answer the LAN (allow-remote-requests=no), so use the IP address"
 }
 
-:local certName [/ip/service/get [find where name="api-ssl"] certificate]
+:local certName [/ip/service/get [find where name="api-ssl" && dynamic=no] certificate]
 :local fp ""
 :do { :set fp [/certificate/get [find where name=$certName] fingerprint] } on-error={}
 :put ""
@@ -315,3 +315,5 @@
 
 # Clean up the installer's own variables (not tikDisk, which the user may have set).
 /system/script/environment/remove [find where name~"^tikInst"]
+# Remove the downloaded installer: internal flash is tiny on many routers.
+:do { /file/remove [find where name="tikontrol-install.rsc"] } on-error={}
