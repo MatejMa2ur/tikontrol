@@ -6,6 +6,7 @@
   import Field from '../../lib/ui/Field.svelte'
   import Toggle from '../../lib/ui/Toggle.svelte'
   import Icon from '../../lib/Icon.svelte'
+  import TrustCa from '../../lib/ui/TrustCa.svelte'
   import { prefs } from '../../lib/live.svelte'
   import { designs, looks, palettes } from '../../lib/themes'
 
@@ -106,6 +107,12 @@
   <Field label="NetFlow / IPFIX" help={flow.enabled ? 'Traffic-flow is on' : 'Collector address, optional :port'}><input type="text" bind:value={mon.flow} placeholder="192.0.2.60:2055" aria-label="Flow collector" /><select bind:value={mon.flowVersion} aria-label="Flow version"><option value="9">v9</option><option value="ipfix">IPFIX</option><option value="5">v5</option></select></Field>
   <div class="r">{#if flow.enabled}<button class="btn" onclick={() => review('Disable traffic-flow', ['/ip/traffic-flow/set enabled=no'], { kind: 'set-traffic-flow', enabled: false })}>Turn off</button> {/if}<button class="btn primary" onclick={flowReview}>Review & apply</button></div>
 </Section>
+
+{#if isBackend}
+<Section title="Trust this tikontrol" desc="Stop the certificate warning on your devices.">
+  <TrustCa />
+</Section>
+{/if}
 
 <Section title="Data retention" desc="How long tikontrol keeps its own history: traffic charts, events and per-client usage. Stored on the tikontrol server, not the router. Minute detail is kept for at most 7 days.">
   <Field label="Keep history for" help={isBackend ? (isAdmin ? 'Shortening it deletes older history right away' : 'Only an admin can change this') : 'Available with the tikontrol server'}>

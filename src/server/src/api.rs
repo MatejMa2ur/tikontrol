@@ -16,7 +16,8 @@ mod assets {
     include!(concat!(env!("OUT_DIR"), "/assets.rs"));
 }
 
-const PUBLIC: &[(&str, &str)] = &[("GET", "/api/v1/health"), ("POST", "/api/v1/setup/admin"), ("POST", "/api/v1/setup/start"), ("POST", "/api/v1/login")];
+// ca.crt is the local CA's public certificate (never its key), needed before a device can trust the login page
+const PUBLIC: &[(&str, &str)] = &[("GET", "/api/v1/health"), ("GET", "/api/v1/ca.crt"), ("POST", "/api/v1/setup/admin"), ("POST", "/api/v1/setup/start"), ("POST", "/api/v1/login")];
 
 pub fn handle(app: &Arc<App>, req: Req) -> Resp {
     if !req.path.starts_with("/api/") && req.path != "/mcp" {
@@ -58,6 +59,7 @@ fn handle_with(app: &Arc<App>, req: &Req, public: bool, session: Option<Session>
     if public {
         return match (req.method.as_str(), req.path.as_str()) {
             ("GET", "/api/v1/health") => health(app),
+            ("GET", "/api/v1/ca.crt") => ca_cert(app),
             ("POST", "/api/v1/setup/admin") => setup_admin(app, req),
             ("POST", "/api/v1/setup/start") => setup_start(app, req),
             _ => login(app, req),
@@ -134,6 +136,14 @@ fn health(app: &App) -> Resp {
     // after the router is connected, the next step is signing in (with a MikroTik account), not the token
     let needs = lock(&app.setup_token).is_some() && lock(&app.store).state.router.is_none() && app.demo.is_none();
     Resp::json(200, &json!({ "ok": true, "version": env!("CARGO_PKG_VERSION"), "needsSetup": needs }))
+}
+
+fn ca_cert(app: &App) -> Resp {
+    let dir = lock(&app.store).dir();
+    match std::fs::read(dir.join("ca-cert.pem")) {
+        Ok(b) => Resp::new(200, "application/x-x509-ca-cert", b).with("content-disposition", "attachment; filename=\"tikontrol-ca.crt\"".into()).with("cache-control", "no-store".into()),
+        Err(_) => Resp::error(404, "no local CA: tikontrol uses the operator's certificate"),
+    }
 }
 
 #[derive(Deserialize)]
@@ -594,6 +604,7 @@ pub mod tests {
             assert_eq!(handle(&app, req("GET", p, "")).status, 401, "{p}");
         }
         assert_eq!(handle(&app, req("GET", "/api/v1/health", "")).status, 200);
+        assert_eq!(handle(&app, req("GET", "/api/v1/ca.crt", "")).status, 404, "public, but only the CA certificate");
     }
 
     #[test]

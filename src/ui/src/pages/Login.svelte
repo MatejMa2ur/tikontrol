@@ -1,5 +1,6 @@
 <script lang="ts">
   import { api } from '../lib/backend'
+  import TrustCa from '../lib/ui/TrustCa.svelte'
   let name = $state('')
   let password = $state('')
   let remember = $state(localStorage.getItem('tik.remember') !== 'false')
@@ -32,6 +33,10 @@
     {#if error}<p class="err" role="alert">{error}</p>{/if}
     <label class="keep"><input type="checkbox" bind:checked={remember} /> Keep me signed in on this browser for 30 days <span class="muted small">(also across updates; Sign out ends it)</span></label>
     <button class="btn primary" disabled={busy}>{busy ? 'Signing in…' : 'Sign in'}</button>
+    <details class="small">
+      <summary>Certificate warning? Trust this tikontrol</summary>
+      <TrustCa />
+    </details>
   </form>
 </main>
 
@@ -45,4 +50,5 @@
   .err { color: var(--bad); margin: 0; }
   button { justify-content: center; }
   .keep { display: flex; gap: 8px; align-items: baseline; font-weight: 500; }
+  summary { cursor: pointer; margin-bottom: 8px; }
 </style>

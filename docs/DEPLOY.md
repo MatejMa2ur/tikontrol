@@ -12,7 +12,8 @@ All settings are environment variables.
 |---|---|---|
 | `TIK_DATA` | `./data` (`/data` in the image) | State, encryption key, TLS certificate and history. Back it up: without the `key` file the stored router passwords cannot be decrypted. |
 | `TIK_LISTEN` | `0.0.0.0:8443` | HTTPS address. `off` disables HTTPS. |
-| `TIK_TLS_CERT`, `TIK_TLS_KEY` | – | Your own certificate and key (PEM). Without them a self-signed certificate is created on first start and its SHA-256 is printed in the log. |
+| `TIK_TLS_CERT`, `TIK_TLS_KEY` | – | Your own certificate and key (PEM), used as they are. Without them tikontrol makes its own local CA and server certificate, see [Trusted HTTPS](#trusted-https). |
+| `TIK_TLS_NAMES` | – | Extra names for the generated certificate, comma-separated: private IPv4 addresses or names under `tikontrol`, `localhost`, `.lan`, `.home.arpa`, `.internal`, `.local`. Behind a dst-nat, add the address you open in the browser (for example `192.168.1.1`). |
 | `TIK_HTTP` | – | Plain HTTP, loopback addresses only (a local reverse proxy, development). |
 | `TIK_POLL` | `30` | Seconds between router snapshots (5–3600). Lower costs router CPU. |
 | `TIK_DEBUG_API` | – | Log each RouterOS API command path and the reply types it got (no values). For diagnosing a router that behaves differently. |
@@ -32,6 +33,24 @@ Read and write has two options, both needing an explicit confirmation:
 
 - **The admin who is logged in (recommended).** Changes run as the MikroTik account you signed in with. Its password stays in memory for your session only (30 minutes idle, 12 hours at most), so tikontrol stores no write password at all. Local tikontrol accounts can then only view.
 - **A stored writer user.** A second, separate `tikontrol-write` user, stored encrypted, which lets local accounts make changes. Treat that password like the admin password.
+
+## Trusted HTTPS
+
+Without `TIK_TLS_CERT`/`TIK_TLS_KEY`, tikontrol works like mkcert:
+
+- On first start it creates a **local CA** in `TIK_DATA` (`ca-cert.pem`, `ca-key.pem`, named `tikontrol local CA (xxxx)`, valid 10 years) and prints its SHA-256 in the log. The CA has name constraints: it can only vouch for `tikontrol`, `localhost`, `*.lan`, `*.home.arpa`, `*.internal`, `*.local` and private IPv4 addresses (10/8, 172.16/12, 192.168/16, 127/8).
+- The CA signs the **server certificate** (`tls-cert.pem`): EKU serverAuth, valid 397 days (Apple rejects longer ones), for `tikontrol`, `tikontrol.lan`, `localhost`, `127.0.0.1`, the host's private IPv4 addresses (Linux) and `TIK_TLS_NAMES`. A daily check renews it, with the same CA, when fewer than 30 days are left or a name is missing (for example a new IP). The running server picks it up without a restart.
+- An older self-signed `tls-cert.pem` from before is replaced on start.
+
+**Once per device**, download the CA from Settings → System → *Trust this tikontrol* (or the link on the sign-in page, or `https://<host>:8443/api/v1/ca.crt`), check that its SHA-256 matches the log, and trust it:
+
+- **macOS:** open the file, add it to the System keychain, then set *Always Trust* in Keychain Access, or `sudo security add-trusted-cert -d -r trustRoot -k /Library/Keychains/System.keychain tikontrol-ca.crt`.
+- **iOS/iPadOS:** install the downloaded profile in Settings, then enable it in Settings → General → About → Certificate Trust Settings.
+- **Windows:** Install Certificate → Local Machine → Trusted Root Certification Authorities.
+- **Android:** Settings → Security → Install a certificate → CA certificate.
+- **Firefox** keeps its own store: Settings → Certificates → Authorities → Import.
+
+The risk: anyone with `ca-key.pem` could impersonate sites to devices that trust the CA. The name constraints keep that to local names and private IPs, but keep `TIK_DATA` private and remove the CA from your devices when you stop using tikontrol. To start over, delete `ca-*.pem` and `tls-*.pem` and restart (devices then need the new CA).
 
 ## Docker (home server)
 

@@ -11,7 +11,7 @@ Clean-room: we copy the behaviour, never the assets.
 **Backing:** `ROS` = RouterOS API on the router · `CMR` = MikroTik CMR server · `tik` = our own logic/DB · `✗` = nothing can back it
 
 <!-- progress:start -->
-**Progress:** 8 ✅ · 191 🟨 · 17 🎨 · 7 ⬜ · 8 ➖ (231 items, 4% done)
+**Progress:** 9 ✅ · 191 🟨 · 17 🎨 · 7 ⬜ · 8 ➖ (232 items, 4% done)
 <!-- progress:end -->
 
 ---
@@ -285,6 +285,7 @@ Clean-room: we copy the behaviour, never the assets.
 | SNMP | ROS `/snmp` | 3 | 🟨 |
 | Remote logging / NetFlow export settings | ROS | 3 | 🟨 |
 | Data retention settings | tik | 2 | 🟨 |
+| Trusted HTTPS: local CA (name-constrained) signs a 397-day server cert, auto-renewed; CA download + per-device trust steps | tik `/api/v1/ca.crt` | 2 | ✅ |
 | Device auth / SSH settings, service hardening | ROS `/ip/service` | 2 | 🟨 |
 | Debug tools: ping, traceroute, packet capture | ROS `/ping`, `/tool/traceroute`, sniffer | 3 | 🟨 |
 | Safe apply (auto-revert) | tik + ROS scheduler | 3 | 🟨 |

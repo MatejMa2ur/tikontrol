@@ -56,6 +56,11 @@ paths:
       security: []
       summary: Liveness and whether first-run setup is needed (public)
       responses: { '200': { description: ok, content: { application/json: { schema: { type: object, properties: { ok: { type: boolean }, version: { type: string }, needsSetup: { type: boolean } } } } } } }
+  /api/v1/ca.crt:
+    get:
+      security: []
+      summary: "tikontrol's local CA certificate (PEM, public; never the key), to install on devices so they trust tikontrol's HTTPS. 404 when TIK_TLS_CERT/KEY are used"
+      responses: { '200': { description: 'attachment tikontrol-ca.crt', content: { application/x-x509-ca-cert: { schema: { type: string } } } }, '404': { description: no local CA } }
   /api/v1/setup/admin:
     post:
       security: []
