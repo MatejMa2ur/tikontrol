@@ -138,6 +138,12 @@
       <button class="btn primary" disabled={busy}>Continue</button>
       <button type="button" class="btn ghost" onclick={() => { useToken = false; error = '' }}>Back</button>
     </form>
+  {:else if me?.router && !me.error && !me.setup}
+    <!-- set up and connected, first read still running: nothing to do but wait (the effect above reloads once) -->
+    <div class="card" role="status" aria-live="polite">
+      <h1>Reading your router…</h1>
+      <p class="muted">Connected to <b>{me.router.host}</b>. The first read takes a few seconds on a small router; the dashboard opens by itself.</p>
+    </div>
   {:else}
     <form class="card wide" onsubmit={save}>
       <div class="row between"><h1>Connect your router</h1><button type="button" class="btn ghost" onclick={logout}>Sign out</button></div>
