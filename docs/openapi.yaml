@@ -55,7 +55,7 @@ paths:
     get:
       security: []
       summary: Liveness and whether first-run setup is needed (public)
-      responses: { '200': { description: ok, content: { application/json: { schema: { type: object, properties: { ok: { type: boolean }, version: { type: string }, needsSetup: { type: boolean } } } } } } }
+      responses: { '200': { description: ok, content: { application/json: { schema: { type: object, properties: { ok: { type: boolean }, version: { type: string }, needsSetup: { type: boolean }, routerHint: { type: string, nullable: true, description: 'only while setup is needed: TIK_ROUTER or the default gateway' } } } } } } }
   /api/v1/ca.crt:
     get:
       security: []
@@ -73,6 +73,18 @@ paths:
       summary: 'First run: trade the setup token from the log for a temporary admin session (user "(setup)") that connects the router. Ends, with the token, when the first admin signs in. Rate limited'
       requestBody: { content: { application/json: { schema: { type: object, required: [token], properties: { token: { type: string } } } } } }
       responses: { '200': { description: sets the session cookie; body has user, role, csrf }, '403': { description: wrong or used token }, '429': { description: rate limited } }
+  /api/v1/setup/probe:
+    post:
+      security: []
+      summary: 'One-step setup, while unclaimed and no router is connected: read the router certificate fingerprint. With a router hint only that host is accepted. Failures count toward the login rate limit'
+      requestBody: { content: { application/json: { schema: { type: object, required: [host], properties: { host: { type: string }, port: { type: integer, default: 8729 } } } } } }
+      responses: { '200': { description: '{ pin }' }, '403': { description: not the router tikontrol found }, '409': { description: setup already done }, '429': { description: rate limited }, '502': { description: '{ error, commands }: API-SSL unreachable; commands give it a certificate' } }
+  /api/v1/setup/router:
+    post:
+      security: []
+      summary: 'One-step setup: a full MikroTik admin (read, write, policy, api, test) proves ownership instead of the setup token. Pins the certificate, creates or resets the tikontrol-read group (read,api,test) and user (random password, address = tikontrol /32), all commented "tik: tikontrol", stores the reader encrypted, read-only mode, claims tikontrol and signs the admin in (MikroTik session). Only while unclaimed; rate limited like login'
+      requestBody: { content: { application/json: { schema: { type: object, required: [host, pin, user, password], properties: { host: { type: string }, port: { type: integer, default: 8729 }, pin: { type: string, description: 64 hex characters from /setup/probe }, user: { type: string }, password: { type: string }, remember: { type: boolean, default: true } } } } } }
+      responses: { '200': { description: 'sets the session cookie; body has user, role, csrf, mikrotik: true' }, '401': { description: router rejected the login }, '403': { description: not a full admin (nothing written), or not the router tikontrol found }, '409': { description: setup already done }, '429': { description: rate limited }, '502': { description: router unreachable or refused a command } }
   /api/v1/login:
     post:
       security: []

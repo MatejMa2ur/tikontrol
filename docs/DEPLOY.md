@@ -23,11 +23,23 @@ All settings are environment variables.
 
 ## First start
 
-1. Start tikontrol and read its log. It prints the HTTPS certificate fingerprint and a one-time **setup token**.
-2. Open `https://<host>:8443`, check the certificate fingerprint, and enter the setup token. It proves you run tikontrol and opens a temporary setup session that can only connect the router. A local backup account is optional; add one only if you want to get in while the router is unreachable.
-3. The setup page shows the RouterOS commands that create a certificate for API-SSL, disable the plain API, and create a `tikontrol-read` group with only `read,api,test`. Run them in a RouterOS terminal and choose the passwords yourself.
-4. Enter the router address, read its certificate, compare the fingerprint with `:put [/certificate/get tikontrol-api fingerprint]`, and connect. tikontrol logs in, reads the user's real group policies, and refuses read-only mode if the user has `write`, `sensitive`, `password`, `policy` or `reboot`.
-5. Sign in with your MikroTik account. The first admin sign-in finishes setup: the setup token and the setup session stop working for good, also after a restart.
+When tikontrol knows the router (`TIK_ROUTER`, or the default gateway, which is the router when tikontrol runs as a RouterOS container) and API-SSL answers there, setup is one form:
+
+1. Open `https://<host>:8443`. tikontrol shows the router address and its certificate SHA-256.
+2. Sign in with a **full MikroTik admin** account (`read`, `write`, `policy`, `api`, `test`). Anything less is refused and nothing is written.
+3. Before you click Connect, the page lists what tikontrol will create on the router, all with the comment `tik: tikontrol`: a group `tikontrol-read` with only `read,api,test`, and a user `tikontrol-read` in it with a random 32-character password, allowed only from tikontrol's own address (the router's LAN if that can't be told). An existing `tikontrol-read` user gets a new password. The reader password is stored encrypted; you never see it.
+4. tikontrol stores the reader, runs read-only, finishes setup and signs you in. The dashboard opens.
+
+How this proves ownership: instead of the setup token, you prove you own the router by its admin credentials, checked by the router itself. Only the address tikontrol found is accepted, so someone on the LAN can't claim tikontrol with their own router, and the form works only until setup is done. The accepted risk is **trust on first use** of the router certificate: tikontrol pins the certificate it sees on the first connection over the LAN (the container's bridge). The page shows the fingerprint so you can compare it with `:put [/certificate/get [find where name=[/ip/service/get api-ssl certificate]] fingerprint]` in the router terminal; someone already able to impersonate the router on your LAN at that moment could otherwise capture the admin password. Without a known router address you type it in, and that check is the only protection. The admin password is used for this request and kept in your session like any MikroTik sign-in; it is never stored or logged. Sign-in attempts are rate limited like the login.
+
+Fresh router without API-SSL: the page shows the commands that create a certificate and turn on API-SSL (and turn off the plain API). Paste them in a RouterOS terminal and try again.
+
+No admin account, or another router: use **the setup token** (fallback).
+
+1. Read tikontrol's log. It prints the HTTPS certificate fingerprint and a one-time **setup token**.
+2. Click "Use the setup token from the log" and enter it. It opens a temporary setup session that can only connect the router. A local backup account is optional.
+3. Run the RouterOS commands the page shows (certificate, API-SSL, the `tikontrol-read` group and user; you choose the password), compare the certificate fingerprint and connect. tikontrol reads the user's real group policies and refuses read-only mode if the user has `write`, `sensitive`, `password`, `policy` or `reboot`.
+4. Sign in with your MikroTik account. The first admin sign-in finishes setup: the setup token stops working for good, also after a restart.
 
 Once the router is connected, anyone with a MikroTik account on it can sign in to tikontrol with that account. tikontrol checks the password by logging in to the router and never stores it. A user whose group has `write` becomes an admin, everyone else a viewer. Local tikontrol accounts always win over a router account with the same name, and keep working when the router is unreachable.
 
@@ -116,7 +128,7 @@ Upload the tarball to the router's USB disk (Files, drag and drop, or `scp`), th
 - The container runs as UID 65532, unprivileged, from a `scratch` image (no shell).
 - Point tikontrol at the router through the veth gateway (`172.17.0.1`) and allow API-SSL only from `172.17.0.2/32`, as the setup commands do with tikontrol's IP.
 - Reach the UI from the LAN with a dst-nat to `172.17.0.2:8443`, limited to the LAN interface list.
-- The setup token appears in the container log, which RouterOS writes to its own log. It is useless once the admin exists.
+- The default gateway is the router, so the first page is the one-step admin sign-in. The setup token still appears in the container log (which RouterOS writes to its own log) as a fallback; it is useless once setup is done.
 
 ## Updating and backups
 

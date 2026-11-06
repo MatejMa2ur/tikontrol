@@ -17,7 +17,7 @@ mod assets {
 }
 
 // ca.crt is the local CA's public certificate (never its key), needed before a device can trust the login page
-const PUBLIC: &[(&str, &str)] = &[("GET", "/api/v1/health"), ("GET", "/api/v1/ca.crt"), ("POST", "/api/v1/setup/admin"), ("POST", "/api/v1/setup/start"), ("POST", "/api/v1/login")];
+const PUBLIC: &[(&str, &str)] = &[("GET", "/api/v1/health"), ("GET", "/api/v1/ca.crt"), ("POST", "/api/v1/setup/admin"), ("POST", "/api/v1/setup/start"), ("POST", "/api/v1/setup/probe"), ("POST", "/api/v1/setup/router"), ("POST", "/api/v1/login")];
 
 pub fn handle(app: &Arc<App>, req: Req) -> Resp {
     if !req.path.starts_with("/api/") && req.path != "/mcp" {
@@ -62,6 +62,8 @@ fn handle_with(app: &Arc<App>, req: &Req, public: bool, session: Option<Session>
             ("GET", "/api/v1/ca.crt") => ca_cert(app),
             ("POST", "/api/v1/setup/admin") => setup_admin(app, req),
             ("POST", "/api/v1/setup/start") => setup_start(app, req),
+            ("POST", "/api/v1/setup/probe") => setup_probe(app, req),
+            ("POST", "/api/v1/setup/router") => setup_router(app, req),
             _ => login(app, req),
         };
     }
@@ -135,7 +137,7 @@ pub fn body<T: for<'de> Deserialize<'de>>(req: &Req) -> Result<T, Resp> {
 fn health(app: &App) -> Resp {
     // after the router is connected, the next step is signing in (with a MikroTik account), not the token
     let needs = lock(&app.setup_token).is_some() && lock(&app.store).state.router.is_none() && app.demo.is_none();
-    Resp::json(200, &json!({ "ok": true, "version": env!("CARGO_PKG_VERSION"), "needsSetup": needs }))
+    Resp::json(200, &json!({ "ok": true, "version": env!("CARGO_PKG_VERSION"), "needsSetup": needs, "routerHint": needs.then(router_hint).flatten() }))
 }
 
 fn ca_cert(app: &App) -> Resp {
@@ -211,6 +213,159 @@ fn setup_start(app: &App, req: &Req) -> Resp {
     }
     lock(&app.limiter).success(ip);
     start_session(app, auth::SETUP_USER, Role::Admin)
+}
+
+/// One-step setup is open only while nobody has claimed tikontrol and no router is connected. With a known
+/// router address (TIK_ROUTER or the default gateway) only that address is accepted, so a stranger on the
+/// LAN can't claim tikontrol with their own router.
+fn setup_open(app: &App, host: &str, port: u16) -> Result<(), Resp> {
+    let done = { let st = lock(&app.store); st.state.router.is_some() || st.state.claimed };
+    if app.demo.is_some() || done {
+        return Err(Resp::error(409, "setup is already done"));
+    }
+    if !valid_host(host) || port == 8728 {
+        return Err(Resp::error(400, "invalid router address (API-SSL only)"));
+    }
+    if router_hint().is_some_and(|h| h != host) {
+        return Err(Resp::error(403, "only the router tikontrol found can be used here; use the setup token for another one"));
+    }
+    Ok(())
+}
+
+/// Public while unclaimed: reads the router's certificate fingerprint. On failure it also returns the
+/// commands that give API-SSL a certificate (fresh router).
+fn setup_probe(app: &App, req: &Req) -> Resp {
+    let b: Probe = match body(req) {
+        Ok(b) => b,
+        Err(r) => return r,
+    };
+    let ip = req.peer.unwrap_or(std::net::IpAddr::from([0, 0, 0, 0]));
+    if let Err(wait) = lock(&app.limiter).check(ip) {
+        return Resp::error(429, "too many attempts").with("retry-after", wait.to_string());
+    }
+    if let Err(r) = setup_open(app, &b.host, b.port) {
+        return r;
+    }
+    match conn::probe(&b.host, b.port) {
+        Ok(fp) => Resp::json(200, &json!({ "pin": fp })),
+        Err(e) => {
+            lock(&app.limiter).fail(ip); // failures only: keeps this from becoming a port scanner
+            let me = own_ip_toward(&b.host, b.port).map(|i| i.to_string()).unwrap_or_default();
+            Resp::json(502, &json!({ "error": e, "commands": policy::api_ssl_commands(&me) }))
+        }
+    }
+}
+
+/// This host's address as the router sees it: the source address the OS picks for that route
+/// (a UDP connect sends nothing).
+fn own_ip_toward(host: &str, port: u16) -> Option<std::net::IpAddr> {
+    let s = std::net::UdpSocket::bind(if host.contains(':') { "[::]:0" } else { "0.0.0.0:0" }).ok()?;
+    s.connect((host, port)).ok()?;
+    Some(s.local_addr().ok()?.ip()).filter(|i| !i.is_unspecified())
+}
+
+/// Where the reader may log in from: tikontrol's own address, else the router's LAN.
+fn reader_address(r: &mut dyn conn::Router, host: &str, port: u16) -> Option<String> {
+    if let Some(ip) = own_ip_toward(host, port) {
+        return Some(format!("{ip}/{}", if ip.is_ipv4() { 32 } else { 128 }));
+    }
+    let rows = r.run(&crate::ros::cmd::Cmd::new("/ip/address/print").proplist(&["address", "network"])).ok()?;
+    rows.iter().find_map(|a| {
+        let (ip, len) = a.get("address")?.split_once('/')?;
+        (ip == host).then(|| Some(format!("{}/{len}", a.get("network")?))).flatten()
+    })
+}
+
+fn yes() -> bool {
+    true
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct SetupRouter {
+    host: String,
+    #[serde(default = "api_ssl")]
+    port: u16,
+    pin: String,
+    user: String,
+    password: String,
+    #[serde(default = "yes")]
+    remember: bool,
+}
+
+/// One-step setup: a full router admin proves ownership (instead of the setup token). As that admin,
+/// tikontrol creates its read-only group and user, stores the reader encrypted, claims itself and signs
+/// the admin in. The admin's password lives only in this request and the session (MikroTik-login rules).
+fn setup_router(app: &App, req: &Req) -> Resp {
+    let b: SetupRouter = match body(req) {
+        Ok(b) => b,
+        Err(r) => return r,
+    };
+    let ip = req.peer.unwrap_or(std::net::IpAddr::from([0, 0, 0, 0]));
+    if let Err(wait) = lock(&app.limiter).check(ip) {
+        return Resp::error(429, "too many failed sign-ins, try again later").with("retry-after", wait.to_string());
+    }
+    // held until the router is stored: one setup at a time, and never after the claim
+    let tok = lock(&app.setup_token);
+    if tok.is_none() {
+        return Resp::error(409, "setup is already done");
+    }
+    if let Err(r) = setup_open(app, &b.host, b.port) {
+        return r;
+    }
+    if !valid_pin(&b.pin) {
+        return Resp::error(400, "pin must be the 64-character certificate fingerprint");
+    }
+    if b.user.is_empty() || b.user.len() > 64 || b.user.chars().any(char::is_control) || b.password.is_empty() || b.password.len() > auth::MAX_PASSWORD {
+        return Resp::error(400, "invalid router user or password");
+    }
+    let cfg = RouterCfg {
+        host: b.host.clone(),
+        port: b.port,
+        pin: b.pin.to_ascii_lowercase(),
+        mode: Mode::ReadOnly,
+        reader: Cred { user: policy::READER_NAME.into(), password: String::new() },
+        writer: None,
+    };
+    let mut r = match (app.connector)(&cfg, &b.user, &b.password) {
+        Ok(r) => r,
+        Err(e) => {
+            lock(&app.limiter).fail(ip);
+            return Resp::error(if e.contains("rejected") { 401 } else { 502 }, &e);
+        }
+    };
+    let p = match policy::detect(r.as_mut(), &b.user) {
+        Ok(p) => p,
+        Err(e) => return Resp::error(502, &e),
+    };
+    let missing: Vec<&str> = policy::ADMIN.iter().copied().filter(|x| !p.has(x)).collect();
+    if !missing.is_empty() {
+        lock(&app.limiter).fail(ip);
+        return Resp::error(403, &format!("'{}' is not a full admin (missing {}). Use an admin account, or the setup token", b.user, missing.join(", ")));
+    }
+    let Some(addr) = reader_address(r.as_mut(), &b.host, b.port) else { return Resp::error(502, "cannot tell tikontrol's own address") };
+    let pw = crate::store::hex(&crate::store::random_bytes::<16>()); // 32 characters, never shown or logged
+    if let Err(e) = policy::ensure_reader(r.as_mut(), &addr, &pw) {
+        return Resp::error(502, &format!("creating {} on the router failed: {e}", policy::READER_NAME));
+    }
+    drop(r);
+    let mut st = lock(&app.store);
+    let reader = Cred { user: policy::READER_NAME.into(), password: st.sealer.seal("router-password:reader", &pw) };
+    st.state.router = Some(RouterCfg { reader, ..cfg });
+    let saved = st.save();
+    drop(st);
+    drop(tok);
+    if saved.is_err() || app.claim().is_err() {
+        return Resp::error(500, "could not save state");
+    }
+    app.drop_reader();
+    *app.snap.write().unwrap_or_else(|e| e.into_inner()) = Default::default();
+    lock(&app.limiter).success(ip);
+    eprintln!("tikontrol: set up by router admin {:?}; created or reset {} on the router", b.user, policy::READER_NAME);
+    let ros = Some(auth::Secret(b.password));
+    let (token, s) = lock(&app.sessions).create_with(&b.user, Role::Admin, ros.clone());
+    let resp = Resp::json(200, &json!({ "user": s.user, "role": s.role, "csrf": s.csrf, "mikrotik": true })).with("set-cookie", auth::session_cookie(&token, app.tls));
+    if b.remember { remember(app, resp, &b.user, Role::Admin, ros) } else { resp }
 }
 
 #[derive(Deserialize)]
@@ -390,6 +545,10 @@ fn router_info(app: &App) -> Resp {
     }
 }
 
+fn valid_pin(p: &str) -> bool {
+    p.len() == 64 && p.bytes().all(|c| c.is_ascii_hexdigit())
+}
+
 fn valid_host(h: &str) -> bool {
     !h.is_empty() && h.len() <= 253 && h.bytes().all(|b| b.is_ascii_alphanumeric() || b".-:".contains(&b))
 }
@@ -453,7 +612,7 @@ fn set_router(app: &App, req: &Req) -> Resp {
     if !valid_host(&b.host) || b.port == 8728 {
         return Resp::error(400, "invalid router address (API-SSL only)");
     }
-    if b.pin.len() != 64 || !b.pin.bytes().all(|c| c.is_ascii_hexdigit()) {
+    if !valid_pin(&b.pin) {
         return Resp::error(400, "pin must be the 64-character certificate fingerprint");
     }
     for c in std::iter::once(&b.reader).chain(b.writer.as_ref()) {
@@ -714,6 +873,81 @@ pub mod tests {
         let (c, csrf) = (cookie_of(&r), json_of(&r)["csrf"].as_str().unwrap().to_string());
         assert_eq!(handle(&app, with_session(req("POST", "/api/v1/router/probe", r#"{"host":"192.0.2.1"}"#), &c, &csrf)).status, 403);
         assert_eq!(json_of(&handle(&app, with_session(req("GET", "/api/v1/me", ""), &c, &csrf)))["readOnly"], true);
+    }
+
+    /// A fake router that keeps every command it saw, across connections.
+    fn recording_app(policy: &'static str) -> (Arc<App>, Arc<std::sync::Mutex<Vec<Vec<String>>>>) {
+        use crate::ros::queries::tests::Fake;
+        struct Rec(Fake, Arc<std::sync::Mutex<Vec<Vec<String>>>>);
+        impl conn::Router for Rec {
+            fn run(&mut self, c: &crate::ros::cmd::Cmd) -> Result<Vec<crate::ros::conn::Row>, String> {
+                self.1.lock().unwrap().push(c.words()?.to_vec());
+                self.0.run(c)
+            }
+        }
+        let log = Arc::new(std::sync::Mutex::new(vec![]));
+        let l = log.clone();
+        let conn: crate::app::Connector = Box::new(move |_, u, p| {
+            if p != "router-pass" {
+                return Err("router rejected the login".into());
+            }
+            Ok(Box::new(Rec(crate::app::tests::fake_router(u, policy), l.clone())) as Box<dyn conn::Router + Send>)
+        });
+        (Arc::new(App::new(Store::open(&tmpdir("onestep")).unwrap(), conn, true)), log)
+    }
+
+    fn one_step(app: &Arc<App>, user: &str, pw: &str) -> (Resp, String) {
+        let host = router_hint().unwrap_or("127.0.0.1".into());
+        let pin = "a".repeat(64);
+        (handle(app, req("POST", "/api/v1/setup/router", &format!(r#"{{"host":"{host}","pin":"{pin}","user":"{user}","password":"{pw}"}}"#))), host)
+    }
+
+    #[test]
+    fn one_step_setup_creates_the_reader_and_claims() {
+        let (app, log) = recording_app("read,write,policy,api,test,ssh");
+        let (r, host) = one_step(&app, "admin", "router-pass");
+        assert_eq!(r.status, 200, "{:?}", json_of(&r));
+        assert_eq!(json_of(&r)["mikrotik"], true);
+        let addr = format!("{}/32", own_ip_toward(&host, 8729).unwrap());
+        let st = lock(&app.store).state.clone();
+        assert!(st.claimed && lock(&app.setup_token).is_none());
+        let cfg = st.router.unwrap();
+        assert_eq!((cfg.mode, cfg.reader.user.as_str(), cfg.writer.is_none()), (Mode::ReadOnly, "tikontrol-read", true));
+        let pw = lock(&app.store).sealer.open_str("router-password:reader", &cfg.reader.password).unwrap();
+        assert_eq!(pw.len(), 32);
+        let writes: Vec<Vec<String>> = log.lock().unwrap().iter().filter(|c| !c[0].ends_with("/print")).cloned().collect();
+        let w = |v: &[&str]| v.iter().map(|s| s.to_string()).collect::<Vec<_>>();
+        assert_eq!(writes, [
+            w(&["/user/group/add", "=name=tikontrol-read", "=policy=read,api,test", "=comment=tik: tikontrol"]),
+            w(&["/user/add", "=name=tikontrol-read", "=group=tikontrol-read", &format!("=address={addr}"), &format!("=password={pw}"), "=comment=tik: tikontrol"]),
+        ]);
+        let body = String::from_utf8_lossy(match &r.body { Body::Bytes(b) => b, _ => &[] }).to_string();
+        assert!(!body.contains(&pw) && !body.contains("router-pass"), "no password in the answer");
+        assert!(!std::fs::read_to_string(lock(&app.store).dir().join("state.json")).unwrap().contains(&pw), "stored encrypted");
+        assert_eq!(one_step(&app, "admin", "router-pass").0.status, 409, "only once");
+        assert_eq!(handle(&app, req("POST", "/api/v1/setup/probe", r#"{"host":"127.0.0.1"}"#)).status, 409);
+    }
+
+    #[test]
+    fn one_step_setup_refuses_non_admins_and_is_rate_limited() {
+        let (app, log) = recording_app("read,api,test");
+        let r = one_step(&app, "viewer", "router-pass").0;
+        assert_eq!(r.status, 403);
+        assert!(json_of(&r)["error"].as_str().unwrap().contains("write, policy"));
+        assert!(log.lock().unwrap().iter().all(|c| c[0].ends_with("/print")), "nothing written");
+        assert!(lock(&app.store).state.router.is_none() && !lock(&app.store).state.claimed);
+        for _ in 0..4 {
+            assert_eq!(one_step(&app, "admin", "wrong").0.status, 401);
+        }
+        assert_eq!(one_step(&app, "admin", "router-pass").0.status, 429);
+    }
+
+    #[test]
+    fn one_step_setup_needs_an_unclaimed_tikontrol() {
+        let (app, log) = recording_app("read,write,policy,api,test");
+        admin_session(&app);
+        assert_eq!(one_step(&app, "admin", "router-pass").0.status, 409);
+        assert!(log.lock().unwrap().is_empty(), "never even connects");
     }
 
     #[test]

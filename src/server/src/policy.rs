@@ -12,6 +12,11 @@ pub const FORBIDDEN_READ_ONLY: &[&str] = &["write", "sensitive", "password", "po
 pub const NEVER: &[&str] = &["ftp", "telnet", "ssh", "winbox", "web", "sniff", "romon", "local", "rest-api"];
 pub const READER: &[&str] = &["read", "api", "test"];
 pub const WRITER: &[&str] = &["read", "write", "api", "test"];
+/// One-step setup needs a full router admin: creating a group and user takes `write` and `policy`.
+pub const ADMIN: &[&str] = &["read", "write", "policy", "api", "test"];
+pub const READER_NAME: &str = "tikontrol-read";
+/// Marks what tikontrol created on the router, so ownership is visible there.
+pub const OWNED: &str = "tik: tikontrol";
 
 #[derive(Serialize, Debug, Clone, PartialEq, Eq)]
 pub struct Policies {
@@ -54,23 +59,51 @@ pub fn detect(r: &mut dyn Router, user: &str) -> Result<Policies, String> {
     Ok(Policies { user: user.into(), group, policy })
 }
 
+/// Creates the `tikontrol-read` group and user as the signed-in router admin, or resets them if they
+/// exist (same name, so it is ours: the user agreed by clicking Connect). Every value is a typed word.
+pub fn ensure_reader(r: &mut dyn Router, address: &str, password: &str) -> Result<(), String> {
+    let id = |r: &mut dyn Router, path: &str| -> Result<Option<String>, String> {
+        let rows = r.run(&Cmd::new(path).proplist(&[".id", "name"]).query("name", READER_NAME))?;
+        Ok(rows.iter().find(|x| x.get("name").map(String::as_str) == Some(READER_NAME)).and_then(|x| x.get(".id").cloned()))
+    };
+    let group = match id(r, "/user/group/print")? {
+        Some(i) => Cmd::new("/user/group/set").arg(".id", &i),
+        None => Cmd::new("/user/group/add").arg("name", READER_NAME),
+    };
+    r.run(&group.arg("policy", &READER.join(",")).arg("comment", OWNED))?;
+    let user = match id(r, "/user/print")? {
+        Some(i) => Cmd::new("/user/set").arg(".id", &i),
+        None => Cmd::new("/user/add").arg("name", READER_NAME),
+    };
+    r.run(&user.arg("group", READER_NAME).arg("address", address).arg("password", password).arg("comment", OWNED))?;
+    Ok(())
+}
+
+/// API-SSL with its own certificate, reachable only from tikontrol; plain API off.
+pub fn api_ssl_commands(tik_ip: &str) -> Vec<String> {
+    let addr = if tik_ip.is_empty() { "<tikontrol-ip>/32".to_string() } else { format!("{tik_ip}/32") };
+    vec![
+        "# 1. A certificate for API-SSL (skip if api-ssl already has one)".into(),
+        // self-signed: RouterOS 7.26 refuses to sign without key-cert-sign ("CA not found")
+        "/certificate/add name=tikontrol-api common-name=router key-usage=tls-server,key-cert-sign days-valid=3650".into(),
+        "/certificate/sign tikontrol-api".into(),
+        format!("/ip/service/set api-ssl certificate=tikontrol-api tls-version=only-1.2 address={} disabled=no", cli_quote(&addr)),
+        "# 2. Turn off the plain-text API".into(),
+        "/ip/service/set api disabled=yes".into(),
+    ]
+}
+
 /// RouterOS commands the user runs once (WinBox terminal or SSH) to create least-privilege users.
 /// Passwords are left for the user to type; tikontrol never puts a secret in a command.
 pub fn setup_commands(tik_ip: &str, write: bool) -> Vec<String> {
     let addr = if tik_ip.is_empty() { "<tikontrol-ip>/32".to_string() } else { format!("{tik_ip}/32") };
     let addr = cli_quote(&addr);
-    let mut v = vec![
-        "# 1. A certificate for API-SSL (skip if api-ssl already has one)".into(),
-        // self-signed: RouterOS 7.26 refuses to sign without key-cert-sign ("CA not found")
-        "/certificate/add name=tikontrol-api common-name=router key-usage=tls-server,key-cert-sign days-valid=3650".into(),
-        "/certificate/sign tikontrol-api".into(),
-        format!("/ip/service/set api-ssl certificate=tikontrol-api tls-version=only-1.2 address={addr} disabled=no"),
-        "# 2. Turn off the plain-text API".into(),
-        "/ip/service/set api disabled=yes".into(),
+    let mut v = api_ssl_commands(tik_ip);
+    v.extend([
         "# 3. A read-only group and user: no write, sensitive, password, policy or reboot".into(),
         format!("/user/group/add name=tikontrol-read policy={}", READER.join(",")),
         format!("/user/add name=tikontrol-read group=tikontrol-read address={addr} password=<choose-a-long-password>"),
-    ];
+    ]);
     if write {
         v.push("# 4. Read-and-write only: a separate writer. It can change the whole config, treat it like admin".into());
         v.push(format!("/user/group/add name=tikontrol-write policy={}", WRITER.join(",")));
@@ -113,6 +146,15 @@ mod tests {
     fn missing_user_is_an_error() {
         let mut f = Fake::default();
         assert!(detect(&mut f, "x").is_err());
+    }
+
+    #[test]
+    fn ensure_reader_resets_an_existing_reader() {
+        let mut f = Fake::default();
+        f.answers.insert("/user/print".into(), Ok(vec![row(&[(".id", "*5"), ("name", "tikontrol-read")])]));
+        ensure_reader(&mut f, "192.0.2.5/32", "pw").unwrap();
+        assert_eq!(f.seen[1], ["/user/group/add", "=name=tikontrol-read", "=policy=read,api,test", "=comment=tik: tikontrol"]);
+        assert_eq!(f.seen[3], ["/user/set", "=.id=*5", "=group=tikontrol-read", "=address=192.0.2.5/32", "=password=pw", "=comment=tik: tikontrol"]);
     }
 
     #[test]

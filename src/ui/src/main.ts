@@ -13,7 +13,7 @@ applyTheme(document.documentElement, mode === 'light' ? 'light' : 'dark', q.get(
 
 const b = await boot().catch((e) => ({ mode: 'error' as const, error: String(e) }))
 if (b.mode === 'login') mount((await import('./pages/Login.svelte')).default, { target })
-else if (b.mode === 'setup') mount((await import('./pages/Setup.svelte')).default, { target, props: { step: 'admin' } })
+else if (b.mode === 'setup') mount((await import('./pages/Setup.svelte')).default, { target, props: { step: 'admin', hint: b.hint } })
 else if (b.mode === 'router') mount((await import('./pages/Setup.svelte')).default, { target, props: { step: 'router', me: b.me } })
 else if (b.mode === 'error') target.textContent = `tikontrol: ${b.error}`
 else {

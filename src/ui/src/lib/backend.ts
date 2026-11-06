@@ -19,7 +19,7 @@ export type Me = {
 
 export type Boot =
   | { mode: 'mock' }
-  | { mode: 'setup' }
+  | { mode: 'setup'; hint: string | null }
   | { mode: 'login' }
   | { mode: 'router'; me: Me }
   | { mode: 'app'; me: Me; snapshot: any }
@@ -29,7 +29,7 @@ export const session = { csrf: '', me: null as Me | null }
 export const preload = { snapshot: null as any }
 
 export class ApiError extends Error {
-  constructor(public status: number, message: string) { super(message) }
+  constructor(public status: number, message: string, public data: any = null) { super(message) }
 }
 
 export async function api<T = any>(path: string, opts: { method?: string; body?: unknown } = {}): Promise<T> {
@@ -41,12 +41,12 @@ export async function api<T = any>(path: string, opts: { method?: string; body?:
   const text = await r.text()
   let data: any = null
   try { data = text ? JSON.parse(text) : null } catch { data = text }
-  if (!r.ok) throw new ApiError(r.status, (data && data.error) || r.statusText)
+  if (!r.ok) throw new ApiError(r.status, (data && data.error) || r.statusText, data)
   return data as T
 }
 
 export async function boot(): Promise<Boot> {
-  let health: { needsSetup: boolean } | null = null
+  let health: { needsSetup: boolean; routerHint?: string | null } | null = null
   try {
     const r = await fetch('/api/v1/health')
     if (r.ok && r.headers.get('content-type')?.includes('json')) health = await r.json()
@@ -62,7 +62,7 @@ export async function boot(): Promise<Boot> {
     if (!snapshot) return { mode: 'router', me }
     return { mode: 'app', me, snapshot }
   } catch (e) {
-    if (e instanceof ApiError && e.status === 401) return health.needsSetup ? { mode: 'setup' } : { mode: 'login' }
+    if (e instanceof ApiError && e.status === 401) return health.needsSetup ? { mode: 'setup', hint: health.routerHint ?? null } : { mode: 'login' }
     throw e
   }
 }

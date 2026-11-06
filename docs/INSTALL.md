@@ -24,9 +24,9 @@ Run the same line again after fixing anything it reports; it skips what is alrea
 
 - the address: `https://tikontrol.lan:8443`, or `https://<app-ip>:8443` (WebFig also lists it under **App → tikontrol**);
 - the API-SSL certificate fingerprint, to compare on tikontrol's setup page;
-- how to read the setup token: `/container/log/print where message~"setup token"`.
+- how to read the setup token (only needed without an admin account): `/container/log/print where message~"setup token"`.
 
-Then continue on tikontrol's setup page: it shows the commands for the read-only RouterOS user (see [DEPLOY.md](DEPLOY.md#first-start)). Your browser warns about the certificate the first time; [Trusted HTTPS](DEPLOY.md#trusted-https) explains how to trust it.
+Then open tikontrol and sign in with your MikroTik admin account: it creates its own read-only user on the router (see [DEPLOY.md](DEPLOY.md#first-start)). Your browser warns about the certificate the first time; [Trusted HTTPS](DEPLOY.md#trusted-https) explains how to trust it.
 
 If you have several ext4 disks, choose one first with `:global tikDisk "usb1"`.
 
@@ -61,7 +61,7 @@ App data (settings, encryption key, history) lives in `<disk>/apps/tikontrol/` a
 /tool/fetch url="https://raw.githubusercontent.com/MatejMa2ur/tikontrol/master/deploy/uninstall.rsc" dst-path=tikontrol-uninstall.rsc; /import tikontrol-uninstall.rsc
 ```
 
-It removes the static lease and DNS name, removes the certificate if no service uses it, and disables the app but keeps it and its data. To delete the app and its data too, run `:global keepData "no"` first. It never changes api-ssl, users, the firewall or the disk. To remove the memory limit: `/container/config/set memory-high=unlimited memory-max=unlimited`.
+It removes the static lease and DNS name, removes the certificate if no service uses it, and disables the app but keeps it and its data. To delete the app and its data too, run `:global keepData "no"` first. It never changes api-ssl, users, the firewall or the disk. The read-only user setup created stays; remove it with `/user/remove [find where comment="tik: tikontrol"]` and `/user/group/remove [find where comment="tik: tikontrol"]`. To remove the memory limit: `/container/config/set memory-high=unlimited memory-max=unlimited`.
 
 ## Troubleshooting
 

@@ -1,9 +1,10 @@
 <script lang="ts">
-  // First run: create the admin (needs the setup token from the log), then connect the router.
-  // Read-only is the default and is enforced by the router user's group, not by this page.
+  // First run. Usually one form: a MikroTik admin account proves you own the router; tikontrol then creates its
+  // read-only user there. Fallback: the setup token from the log, then paste commands (step 'router').
+  // Read-only is enforced by the router user's group, not by this page.
   import { onMount, untrack } from 'svelte'
-  import { api, logout, type Me } from '../lib/backend'
-  let { step, me }: { step: 'admin' | 'router'; me?: Me } = $props()
+  import { api, ApiError, logout, type Me } from '../lib/backend'
+  let { step, me, hint = null }: { step: 'admin' | 'router'; me?: Me; hint?: string | null } = $props()
 
   let error = $state('')
   let busy = $state(false)
@@ -13,7 +14,27 @@
     try { await f() } catch (e) { error = (e as Error).message } finally { busy = false }
   }
 
-  // admin
+  // one-step setup with a router admin account
+  let useToken = $state(false)
+  let user = $state('admin')
+  let adminPw = $state('')
+  let remember = $state(localStorage.getItem('tik.remember') !== 'false')
+  let fix = $state<string[]>([])
+  const findRouter = () => run(async () => {
+    pin = ''
+    fix = []
+    try { pin = (await api<{ pin: string }>('/setup/probe', { method: 'POST', body: { host, port } })).pin }
+    catch (e) { fix = (e instanceof ApiError && e.data?.commands) || []; throw e }
+  })
+  const connect = (e: SubmitEvent) => { e.preventDefault(); run(async () => {
+    try { await api('/setup/router', { method: 'POST', body: { host, port, pin, user, password: adminPw, remember } }) }
+    catch (err) { adminPw = ''; throw err }
+    localStorage.setItem('tik.remember', String(remember))
+    location.reload()
+  }) }
+  const fixCli = ':put [/certificate/get [find where name=[/ip/service/get api-ssl certificate]] fingerprint]'
+
+  // setup token
   let token = $state('')
   let backup = $state(false)
   let name = $state('local-admin')
@@ -21,7 +42,7 @@
   let password2 = $state('')
 
   // router
-  let host = $state(untrack(() => me?.routerHint ?? '')) // initial value only
+  let host = $state(untrack(() => me?.routerHint ?? hint ?? '')) // initial value only
   let port = $state(8729)
   let pin = $state('')
   let pinOk = $state(false)
@@ -50,7 +71,7 @@
   }) }
   const probe = () => run(async () => { pinOk = false; pin = (await api<{ pin: string }>('/router/probe', { method: 'POST', body: { host, port } })).pin })
   // address known (TIK_ROUTER or the default gateway): read its certificate right away
-  onMount(() => { if (step === 'router' && !me?.router && host) probe() })
+  onMount(() => { if (host) (step === 'admin' ? findRouter : step === 'router' && !me?.router ? probe : () => {})() })
   const save = (e: SubmitEvent) => { e.preventDefault(); run(async () => {
     await api('/router', { method: 'POST', body: { host, port, pin, mode: write ? 'read-write' : 'read-only', reader, writer: stored ? writer : null, confirm_write: confirmWrite } })
     location.reload()
@@ -71,35 +92,51 @@
 </script>
 
 <main class="setup">
-  {#if step === 'admin'}
+  {#if step === 'admin' && !useToken}
+    <form class="card" onsubmit={connect}>
+      <h1>Sign in with your MikroTik admin account</h1>
+      {#if !hint}
+        <div class="row"><label class="grow">Router address<input type="text" bind:value={host} required placeholder="192.168.88.1" /></label>
+          <button type="button" class="btn" onclick={findRouter} disabled={busy || !host}>Find</button></div>
+      {/if}
+      {#if pin}
+        <p class="small">Router <b>{host}</b>, certificate SHA-256:<br /><code class="fp">{pretty(pin)}</code></p>
+        <details class="adv"><summary>Is this my router?</summary><p class="small muted">To be sure, run <code>{fixCli}</code> in the router terminal: it must show the same value.</p></details>
+        <label>Username<input type="text" bind:value={user} required maxlength="64" autocomplete="username" /></label>
+        <label>Password<input type="password" bind:value={adminPw} required maxlength="256" autocomplete="current-password" /></label>
+        <label class="check"><input type="checkbox" bind:checked={remember} /> Keep me signed in for 30 days</label>
+        <p class="small muted">tikontrol will create on your router (comment <code>tik: tikontrol</code>):</p>
+        <ul class="small what">
+          <li>group <code>tikontrol-read</code>: read, api, test only</li>
+          <li>user <code>tikontrol-read</code> with a random password, only from tikontrol's address (reset if it exists)</li>
+        </ul>
+        {#if error}<p class="err" role="alert">{error}</p>{/if}
+        <button class="btn primary" disabled={busy}>{busy ? 'Connecting…' : 'Connect'}</button>
+      {:else if fix.length}
+        <p class="err" role="alert">{error}</p>
+        <p class="small">{host} has no API-SSL yet. Paste this in the router terminal (WinBox → New Terminal), then try again:</p>
+        <div class="cmdbox"><pre class="cmds">{fix.join('\n')}</pre>
+          <button type="button" class="btn ghost copy" onclick={() => navigator.clipboard?.writeText(fix.filter((c) => !c.startsWith('#')).join('\n'))}>Copy</button></div>
+        <button type="button" class="btn primary" onclick={findRouter} disabled={busy}>Try again</button>
+      {:else if busy}<p class="muted small">Looking for the router…</p>
+      {:else if error}<p class="err" role="alert">{error}</p>{/if}
+      <button type="button" class="btn ghost" onclick={() => { useToken = true; error = '' }}>No admin account? Use the setup token from the log</button>
+    </form>
+  {:else if step === 'admin'}
     <form class="card" onsubmit={admin}>
-      <h1>Welcome to tikontrol</h1>
-      <p class="muted">Three steps, no extra account needed:</p>
-      <ol class="steps small">
-        <li class="now"><b>Enter the setup token</b>: proves you run tikontrol.</li>
-        <li><b>Connect your router</b>: a read-only RouterOS user lets tikontrol show live data.</li>
-        <li><b>Sign in with your MikroTik account</b>: from then on, your router group decides what you can do.</li>
-      </ol>
-
+      <h1>Set up with the setup token</h1>
       <label>Setup token<input type="text" bind:value={token} required autocomplete="off" spellcheck="false" /></label>
-      <p class="hint">A one-time code tikontrol printed in its log when it first started (the terminal or container output). It proves you are the person running tikontrol, so nobody else on your network can set it up. It stops working once you sign in with your MikroTik account.</p>
-      <label class="check"><input type="checkbox" bind:checked={backup} /> Also create a local backup account (optional)</label>
+      <p class="hint">Printed in tikontrol's log at first start. It stops working once you sign in with your MikroTik account.</p>
+      <label class="check"><input type="checkbox" bind:checked={backup} /> Also create a local backup account</label>
       {#if backup}
-        <p class="hint">Only needed to get into tikontrol while the router is unreachable. Pick a name that is <b>not</b> your MikroTik username, e.g. <code>local-admin</code>: a local account always wins over a router account with the same name.</p>
+        <p class="hint">For when the router is unreachable. Use a name that is <b>not</b> your MikroTik username.</p>
         <label>Username<input type="text" bind:value={name} required maxlength="32" autocomplete="username" /></label>
         <label>Password (at least 12 characters)<input type="password" bind:value={password} required minlength="12" maxlength="256" autocomplete="new-password" /></label>
         <label>Repeat password<input type="password" bind:value={password2} required minlength="12" maxlength="256" autocomplete="new-password" /></label>
       {/if}
       {#if error}<p class="err" role="alert">{error}</p>{/if}
       <button class="btn primary" disabled={busy}>Continue</button>
-      <details class="adv"><summary>For advanced users</summary>
-        <ul class="small muted">
-          <li>The token opens a temporary setup session that can only be used to connect the router; it ends when the first admin signs in. You can add local accounts later under Settings → Control plane.</li>
-          <li>A local password is stored as a PBKDF2-SHA256 hash (600,000 rounds) in <code>state.json</code> inside <code>TIK_DATA</code>; the plain password is never kept.</li>
-          <li>Lost the token? Restart tikontrol while no account exists: it prints a new one.</li>
-          <li>Sessions end after 30 minutes idle or 12 hours. Five wrong passwords lock the address out for a while.</li>
-        </ul>
-      </details>
+      <button type="button" class="btn ghost" onclick={() => { useToken = false; error = '' }}>Back</button>
     </form>
   {:else}
     <form class="card wide" onsubmit={save}>
@@ -115,36 +152,17 @@
         </div>
       {/if}
 
-      <p class="muted">tikontrol talks to the router over the encrypted RouterOS API (API-SSL). Four steps, about five minutes:</p>
-      <ol class="steps small">
-        <li><b>Access mode</b>: read-only to start; you can switch later.</li>
-        <li><b>RouterOS commands</b>: create a certificate and a read-only user on the router.</li>
-        <li><b>Certificate check</b>: make sure tikontrol talks to <i>your</i> router.</li>
-        <li><b>Credentials</b>: tikontrol checks what the user can do before saving anything.</li>
-      </ol>
-
       <h2>1. Access mode</h2>
       <fieldset class="modes">
         <legend class="sr">Access mode</legend>
-        <label class="mode" class:on={!write}><input type="radio" name="mode" checked={!write} onchange={() => (write = false)} /> <b>Read-only</b> (recommended)<span class="muted small">tikontrol shows everything and changes nothing. The router enforces it: the user has no write, sensitive, password, policy or reboot policy, and no write credential is stored.</span></label>
-        <label class="mode" class:on={write}><input type="radio" name="mode" checked={write} onchange={() => (write = true)} /> <b>Read and write</b><span class="muted small">Changes go through Safe apply. The writer user can change the whole router: treat its password like the admin password.</span></label>
+        <label class="mode" class:on={!write}><input type="radio" name="mode" checked={!write} onchange={() => (write = false)} /> <b>Read-only</b> (recommended)<span class="muted small">Shows everything, changes nothing. No write credential is stored.</span></label>
+        <label class="mode" class:on={write}><input type="radio" name="mode" checked={write} onchange={() => (write = true)} /> <b>Read and write</b><span class="muted small">Changes go through Safe apply.</span></label>
       </fieldset>
-      <details class="adv"><summary>For advanced users</summary>
-        <ul class="small muted">
-          <li>Read-only is enforced by the <b>router</b>: the reader's group has only <code>read</code>, <code>api</code> and <code>test</code>. tikontrol checks the group on every poll and stops if it finds <code>write</code>, <code>sensitive</code>, <code>password</code>, <code>policy</code> or <code>reboot</code>.</li>
-          <li><code>sensitive</code> is left out on purpose, so tikontrol never sees Wi-Fi passwords, VPN keys or other secrets.</li>
-          <li>Read and write uses Safe apply: each change arms an automatic undo on the router, and you confirm it within 5 minutes or it rolls back.</li>
-        </ul>
-      </details>
+      <p class="muted small">Read-only is enforced by the router: the reader's group has only <code>read</code>, <code>api</code> and <code>test</code>, and tikontrol stops if it finds more.</p>
 
       <h2>2. Run these commands on the router</h2>
-      <p class="muted small">Open a RouterOS terminal (WinBox → <i>New Terminal</i>, or <code>ssh admin@router</code>) and paste the commands once. Replace <code>&lt;choose-a-long-password&gt;</code> with a password you pick; tikontrol never puts a password in a command, and you type it again in step 4.</p>
-      <ul class="small what">
-        <li><b>Certificate</b>: the router gets its own certificate so the connection is encrypted and tikontrol can recognise it.</li>
-        <li><b>Plain API off</b>: the unencrypted API (port 8728) sends passwords in clear text. Skip that line if something else of yours still uses it.</li>
-        <li><b>Read-only user</b>: a separate RouterOS user that can look but not touch, accepted only from tikontrol's address.</li>
-      </ul>
-      <label class="inline">tikontrol's IP address, so the router only accepts it from there <input type="text" bind:value={tikIp} placeholder="e.g. 192.168.88.2" inputmode="decimal" /></label>
+      <p class="muted small">In a RouterOS terminal (WinBox → New Terminal). Replace <code>&lt;choose-a-long-password&gt;</code>; you type it again in step 4.</p>
+      <label class="inline">tikontrol's IP address <input type="text" bind:value={tikIp} placeholder="e.g. 192.168.88.2" inputmode="decimal" /></label>
       <div class="cmdbox">
         <pre class="cmds">{commands.join('\n')}</pre>
         <button type="button" class="btn ghost copy" onclick={() => navigator.clipboard?.writeText(commands.filter((c) => !c.startsWith('#')).join('\n'))}>Copy</button>
@@ -159,7 +177,6 @@
       </details>
 
       <h2>3. Router address and certificate</h2>
-      <p class="muted small">tikontrol reads the router's certificate and shows its fingerprint. You compare it with what the router itself says, once. From then on tikontrol refuses any other certificate, so nobody can pretend to be your router.</p>
       <div class="grid2">
         <label>Router address<input type="text" bind:value={host} required placeholder="192.168.88.1" /></label>
         <label>API-SSL port<input type="number" bind:value={port} min="1" max="65535" required /></label>
@@ -167,14 +184,14 @@
       <button type="button" class="btn" onclick={probe} disabled={busy || !host}>Read certificate</button>
       {#if pin}
         <div class="pin">
-          <p class="small">Run <code>:put [/certificate/get tikontrol-api fingerprint]</code> in the router terminal. The result must be exactly this:</p>
+          <p class="small">Run <code>{fixCli}</code> on the router; it must match:</p>
           <code class="fp">{pretty(pin)}</code>
           <label class="check"><input type="checkbox" bind:checked={pinOk} /> This is my router's certificate</label>
         </div>
       {/if}
 
       <h2>4. Credentials</h2>
-      <p class="muted small">The user and password from step 2. tikontrol logs in once, reads the user's real permissions, and only saves if they are right. The password is stored encrypted on this machine.</p>
+      <p class="muted small">From step 2. tikontrol checks the user's real policies before saving; the password is stored encrypted.</p>
       <div class="grid2">
         <label>Reader user<input type="text" bind:value={reader.user} required autocomplete="off" /></label>
         <label>Reader password<input type="password" bind:value={reader.password} required autocomplete="new-password" /></label>
@@ -186,8 +203,8 @@
       {#if write}
         <fieldset class="modes">
           <legend class="small">Who makes the changes</legend>
-          <label class="mode" class:on={writeAs === 'me'}><input type="radio" name="writeAs" checked={writeAs === 'me'} onchange={() => (writeAs = 'me')} /> <b>The admin who is logged in</b> (recommended)<span class="muted small">Sign in with your MikroTik account; changes run as you. Your password stays in memory for your session only, so tikontrol stores no write password.</span></label>
-          <label class="mode" class:on={writeAs === 'stored'}><input type="radio" name="writeAs" checked={writeAs === 'stored'} onchange={() => (writeAs = 'stored')} /> <b>A stored writer user</b><span class="muted small">Lets local tikontrol accounts make changes. Its password is stored encrypted and can change the whole router.</span></label>
+          <label class="mode" class:on={writeAs === 'me'}><input type="radio" name="writeAs" checked={writeAs === 'me'} onchange={() => (writeAs = 'me')} /> <b>The admin who is logged in</b> (recommended)<span class="muted small">Changes run as you; no write password is stored.</span></label>
+          <label class="mode" class:on={writeAs === 'stored'}><input type="radio" name="writeAs" checked={writeAs === 'stored'} onchange={() => (writeAs = 'stored')} /> <b>A stored writer user</b><span class="muted small">Stored encrypted; can change the whole router.</span></label>
         </fieldset>
         <label class="check warn"><input type="checkbox" bind:checked={confirmWrite} /> {stored ? 'I understand the writer credential can change or break the whole router, and tikontrol will store it encrypted.' : 'I understand that admins who sign in with their MikroTik account can change the router through tikontrol.'}</label>
       {/if}
@@ -226,8 +243,8 @@
   .err { color: var(--bad); margin: 0; }
   .status { border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; }
   .status p { margin: 4px 0 0; }
-  .steps { margin: 0; padding-left: 20px; display: grid; gap: 4px; color: var(--muted); }
-  .steps b { color: var(--text); }
+  .grow { flex: 1; }
+  .row:has(.grow) { align-items: end; }
   .what { margin: 0; padding-left: 18px; display: grid; gap: 3px; }
   .hint { margin: -6px 0 0; font-size: 12px; color: var(--muted); }
   .adv { border-top: 1px solid var(--line); padding-top: 6px; }
