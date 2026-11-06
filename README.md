@@ -26,6 +26,8 @@
   </p>
 </div>
 
+> **Install on your router in one paste:** see [docs/INSTALL.md](docs/INSTALL.md).
+
 <!-- TABLE OF CONTENTS -->
 <details>
   <summary>Table of Contents</summary>

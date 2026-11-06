@@ -11,7 +11,7 @@ Clean-room: we copy the behaviour, never the assets.
 **Backing:** `ROS` = RouterOS API on the router · `CMR` = MikroTik CMR server · `tik` = our own logic/DB · `✗` = nothing can back it
 
 <!-- progress:start -->
-**Progress:** 9 ✅ · 191 🟨 · 17 🎨 · 7 ⬜ · 8 ➖ (232 items, 4% done)
+**Progress:** 9 ✅ · 192 🟨 · 17 🎨 · 7 ⬜ · 8 ➖ (233 items, 4% done)
 <!-- progress:end -->
 
 ---
@@ -300,6 +300,7 @@ Clean-room: we copy the behaviour, never the assets.
 | Dark / light theme, or Auto following the OS setting | tik | 1 | ✅ |
 | Runs as RouterOS container (arm/v7, arm64) | tik build | 1 | 🟨 |
 | Runs on Docker (home server) | tik build | 0 | 🟨 |
+| One-paste RouterOS installer (`deploy/install.rsc`, checks, api-ssl, App, static lease, DNS) and uninstaller ([INSTALL.md](INSTALL.md)) | tik + ROS `/app` | 1 | 🟨 |
 | CHR dev/test router | – | 0 | ⬜ |
 
 ## Themes

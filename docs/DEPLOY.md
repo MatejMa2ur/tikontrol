@@ -2,6 +2,8 @@
 
 tikontrol is one static binary (about 2.5 MB, with the UI built in) that uses a few MB of RAM. It runs on a home server (Docker), or as a RouterOS container on an arm64 or x86 router with enough storage. Read [FEASIBILITY.md](FEASIBILITY.md) first: a home server is the safer host, because a container on the router itself cannot notice when a change cuts the LAN off.
 
+**Installing on a MikroTik router?** [INSTALL.md](INSTALL.md) has a one-paste installer that does the RouterOS App setup below for you.
+
 Read-only is the default. Nothing is exposed to the internet by default: do not forward port 8443, use WireGuard or Back To Home to reach it from outside.
 
 ## Settings
@@ -64,7 +66,7 @@ docker logs tikontrol   # setup token and certificate fingerprint
 
 ## RouterOS container
 
-Untested on router hardware so far (see [NEXT_STEPS.md](NEXT_STEPS.md)). Needs RouterOS 7.18 or later, the `container` package, device-mode containers enabled (a physical button press), and external storage. The hAP ac² is too small.
+The easy path is the RouterOS App installer in [INSTALL.md](INSTALL.md) (7.22+). The manual plain-container steps below are untested on router hardware so far (see [NEXT_STEPS.md](NEXT_STEPS.md)). Needs RouterOS 7.18 or later, the `container` package, device-mode containers enabled (a physical button press), and external storage (on a hAP ac², a USB stick: its internal flash is too small).
 
 ### Build the image
 

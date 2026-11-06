@@ -1,0 +1,25 @@
+# tikontrol as a custom RouterOS app store (RouterOS 7.22+): a YAML array of app definitions.
+# Add it once (this replaces other store URLs; append with a comma to keep them):
+#   /app/settings/set app-store-urls="https://raw.githubusercontent.com/MatejMa2ur/tikontrol/master/deploy/app-store.yaml"
+# The entry is deploy/routeros-app.yaml; tests/install.test.ts keeps them identical.
+# Storage, api-ssl, use-https=no and the memory limit still need deploy/install.rsc or docs/INSTALL.md.
+- name: tikontrol
+  descr: 'Read-only-by-default web UI for this router'
+  page: 'https://github.com/MatejMa2ur/tikontrol'
+  category: networking
+  'default-credentials': 'setup token: see the container log'
+  services:
+    tikontrol:
+      image: 'ghcr.io/matejma2ur/tikontrol:latest'
+      environment:
+        - 'TIK_DATA=/data'
+        - 'TIK_LISTEN=0.0.0.0:8443'
+      ports:
+        - '8443:8443:web'
+      restart: 'unless-stopped'
+      volumes:
+        - 'data:/data'
+  'supported-archs':
+    - arm
+    - 'arm64'
+    - 'x86'
