@@ -99,7 +99,35 @@
     try { con = await api('/tools/console', { method: 'POST', body: { command: cmd } }) } catch (e) { conErr = (e as Error).message } finally { conBusy = false }
   }
   const conCols = $derived(con ? [...new Set(con.rows.flatMap((r) => Object.keys(r)))] : [])
+
+  // tikontrol's own mode: read-only (default) or read & write. Read & write stores nothing new:
+  // changes run as the signed-in MikroTik admin and go through Safe apply.
+  let rw = $state(session.me?.router?.mode === 'read-write')
+  let rwConfirm = $state(false)
+  let modeMsg = $state('')
+  async function setMode(write: boolean) {
+    modeMsg = ''
+    try {
+      await api('/router/mode', { method: 'PUT', body: write ? { mode: 'read-write', confirm_write: true } : { mode: 'read-only' } })
+      rw = write; rwConfirm = false
+      location.reload() // readOnly in /me changes everywhere
+    } catch (e) { modeMsg = (e as Error).message }
+  }
 </script>
+
+{#if isBackend && session.me?.router}
+  <Section title="Changes from tikontrol" desc="Read-only shows everything and changes nothing. Read & write lets admins change the router from tikontrol.">
+    <p class="small">tikontrol is <b>{rw ? 'read & write' : 'read-only'}</b>.
+      {#if rw}Changes run as the MikroTik admin who is signed in (nothing extra is stored) and every change goes through Safe apply: you review it, and it rolls back by itself if the router stops answering.{/if}</p>
+    {#if !isAdmin}<p class="muted small">Only an admin can change this.</p>
+    {:else if rw}<button class="btn" onclick={() => setMode(false)}>Switch to read-only</button>
+    {:else}
+      <label class="small"><input type="checkbox" bind:checked={rwConfirm} /> I understand tikontrol can then change this router's configuration</label>
+      <div><button class="btn primary" disabled={!rwConfirm} onclick={() => setMode(true)}>Allow changes</button></div>
+    {/if}
+    {#if modeMsg}<p class="err" role="alert">{modeMsg}</p>{/if}
+  </Section>
+{/if}
 
 {#if isBackend}
   <Section title="tikontrol users" desc="Who can sign in to tikontrol. Viewers see everything but change nothing.">

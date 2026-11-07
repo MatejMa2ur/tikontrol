@@ -115,7 +115,8 @@ fn route(app: &Arc<App>, req: &Req, s: &Session) -> Resp {
             *app.snap.write().unwrap_or_else(|e| e.into_inner()) = Default::default();
             saved(r)
         }
-        ("POST", "/api/v1/router/probe" | "/api/v1/router") | ("DELETE", "/api/v1/router") => need_admin(),
+        ("PUT", "/api/v1/router/mode") if admin => set_mode(app, req, s),
+        ("POST", "/api/v1/router/probe" | "/api/v1/router") | ("DELETE", "/api/v1/router") | ("PUT", "/api/v1/router/mode") => need_admin(),
         _ => crate::routes::extra(app, req, s).unwrap_or_else(|| Resp::error(404, "not found")),
     }
 }
@@ -681,6 +682,39 @@ fn set_router(app: &Arc<App>, req: &Req) -> Resp {
     saved(r)
 }
 
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct SetMode {
+    mode: Mode,
+    /// read-write is a high-risk change: the browser must confirm it explicitly
+    #[serde(default)]
+    confirm_write: bool,
+}
+
+/// Switches tikontrol between read-only and read-write without re-entering the router credentials.
+/// Read-write stores nothing new: changes run as the signed-in MikroTik admin (or a writer set up earlier).
+/// Back to read-only drops any stored write credential.
+fn set_mode(app: &App, req: &Req, s: &Session) -> Resp {
+    let b: SetMode = match body(req) {
+        Ok(b) => b,
+        Err(r) => return r,
+    };
+    if b.mode == Mode::ReadWrite && !b.confirm_write {
+        return Resp::error(400, "confirm_write is required to allow changes");
+    }
+    let mut st = lock(&app.store);
+    let Some(r) = st.state.router.as_mut() else { return Resp::error(409, "no router connected") };
+    r.mode = b.mode.clone();
+    if b.mode == Mode::ReadOnly {
+        r.writer = None;
+    }
+    let res = st.save();
+    drop(st);
+    let text = format!("{}: tikontrol switched to {}", s.user, if b.mode == Mode::ReadWrite { "read & write" } else { "read-only" });
+    lock(&app.live.history).event(crate::live::Ev { t: crate::app::now(), cat: "Admin".into(), level: "warning".into(), text, mac: None });
+    saved(res)
+}
+
 fn asset(req: &Req) -> Resp {
     if req.method != "GET" && req.method != "HEAD" {
         return Resp::error(405, "method not allowed");
@@ -782,6 +816,20 @@ pub mod tests {
         let again = handle(&app, req("POST", "/api/v1/setup/admin", r#"{"token":"x","name":"evil","password":"a long admin password"}"#));
         assert_eq!(again.status, 409);
         assert_eq!(json_of(&handle(&app, req("GET", "/api/v1/health", "")))["needsSetup"], false);
+    }
+
+    #[test]
+    fn mode_switch_needs_admin_confirmation_and_a_router() {
+        let app = new_app();
+        let (c, csrf) = admin_session(&app);
+        let put = |b: &str| handle(&app, with_session(req("PUT", "/api/v1/router/mode", b), &c, &csrf)).status;
+        assert_eq!(put(r#"{"mode":"read-write"}"#), 400, "must be confirmed");
+        assert_eq!(put(r#"{"mode":"read-write","confirm_write":true}"#), 409, "no router yet");
+        lock(&app.store).state.router = Some(RouterCfg { host: "192.0.2.1".into(), port: 8729, pin: "00".into(), mode: Mode::ReadOnly, reader: Cred { user: "r".into(), password: "x".into() }, writer: None });
+        assert_eq!(put(r#"{"mode":"read-write","confirm_write":true}"#), 200);
+        assert_eq!(lock(&app.store).state.router.as_ref().unwrap().mode, Mode::ReadWrite);
+        assert_eq!(put(r#"{"mode":"read-only"}"#), 200);
+        assert_eq!(lock(&app.store).state.router.as_ref().unwrap().mode, Mode::ReadOnly);
     }
 
     #[test]

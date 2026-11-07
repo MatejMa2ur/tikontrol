@@ -204,6 +204,12 @@ paths:
                 confirm_write: { type: boolean }
       responses: { '200': { description: saved }, '400': { description: invalid or over-privileged }, '409': { description: read-write needs confirm_write }, '502': { description: router refused } }
     delete: { security: [{ session: [], csrf: [] }], summary: Forget the router (admin), responses: { '200': { description: ok } } }
+  /api/v1/router/mode:
+    put:
+      summary: Switch tikontrol between read-only and read & write (admin, CSRF)
+      description: Read & write needs confirm_write and stores no new credential; changes run as the signed-in MikroTik admin through Safe apply. Read-only drops any stored writer.
+      requestBody: { content: { application/json: { schema: { type: object, required: [mode], properties: { mode: { type: string, enum: [read-only, read-write] }, confirm_write: { type: boolean } } } } } }
+      responses: { '200': { description: saved }, '400': { description: read-write not confirmed }, '403': { description: not an admin }, '409': { description: no router connected } }
   /api/v1/router/probe:
     post: { security: [{ session: [], csrf: [] }], summary: Read the API-SSL certificate fingerprint (admin; sends no credentials), responses: { '200': { description: '{ pin }' } } }
   /api/v1/router/setup-commands:
