@@ -525,9 +525,11 @@ pub fn tick(app: &App) {
 }
 
 pub fn spawn(app: Arc<App>, every: Duration) {
-    std::thread::spawn(move || loop {
-        std::thread::sleep(every);
-        tick(&app);
+    std::thread::spawn(move || {
+        while !app.gone() {
+            std::thread::sleep(every);
+            tick(&app);
+        }
     });
 }
 

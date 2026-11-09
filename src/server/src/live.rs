@@ -382,7 +382,7 @@ pub fn spawn(app: Arc<App>, path: PathBuf) {
         let mut conn: Option<Box<dyn Router + Send>> = None;
         let mut last_save = now();
         let mut last_err: Option<String> = None;
-        loop {
+        while !app.gone() {
             let watching = *lock(&app.live.subscribers) > 0;
             if app.router_cfg().is_some() && app.snap.read().map(|s| s.data.is_some()).unwrap_or(false) {
                 if conn.is_none() {

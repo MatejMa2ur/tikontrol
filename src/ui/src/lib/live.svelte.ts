@@ -1,7 +1,7 @@
 // Live state. With the tikontrol server the numbers arrive over Server-Sent Events (/api/v1/live)
 // and history comes from its store; in the mockup they are a random walk around the snapshot values.
 import { clients, internet, router, isBackend } from './data'
-import { api } from './backend'
+import { api, site } from './backend'
 import { applyTheme, designs, palettes, DEFAULT_DESIGN, DEFAULT_PALETTE } from './themes'
 
 const N = 120 // seconds of history in the WAN chart
@@ -35,7 +35,7 @@ function push(rx: number, tx: number, t = now()) {
 if (isBackend) {
   live.rx = live.rx.map(() => 0)
   live.tx = live.tx.map(() => 0)
-  const es = new EventSource('/api/v1/live')
+  const es = new EventSource(site ? `/api/v1/live?site=${encodeURIComponent(site)}` : '/api/v1/live')
   es.onmessage = (m) => {
     try {
       const f = JSON.parse(m.data)

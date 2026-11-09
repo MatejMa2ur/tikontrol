@@ -27,6 +27,8 @@ struct Change {
     user: String,
     created: u64,
     state: State,
+    /// the router it was previewed for (App::site): it can only be applied, kept or reverted there
+    site: String,
 }
 
 fn changes() -> &'static Mutex<BTreeMap<String, Change>> {
@@ -52,7 +54,7 @@ fn state_json(c: &Change) -> serde_json::Value {
 
 /// The logged-in MikroTik account if there is one, otherwise the stored writer.
 fn writer(app: &App, s: &Session) -> Result<Box<dyn crate::ros::conn::Router + Send>, String> {
-    match &s.ros {
+    match app.ros(s) {
         Some(pw) => app.open_as(&s.user, &pw.0),
         None => app.open(As::Writer),
     }
@@ -66,7 +68,8 @@ fn can_write(app: &App, s: &Session) -> Result<(), &'static str> {
         return Err("demo mode: nothing can be changed");
     }
     match app.router_cfg() {
-        Some(r) if r.mode == Mode::ReadWrite && (r.writer.is_some() || s.ros.is_some()) => Ok(()),
+        Some(r) if r.mode == Mode::ReadWrite && (r.writer.is_some() || app.ros(s).is_some()) => Ok(()),
+        Some(r) if r.mode == Mode::ReadWrite && !app.site.is_empty() => Err("this router has no stored writer: your MikroTik sign-in only works on the main router"),
         Some(r) if r.mode == Mode::ReadWrite => Err("log in with your MikroTik account to make changes: tikontrol stores no write password"),
         _ => Err("read-only mode: tikontrol has no write access to this router (by design: the router user has no write policy)"),
     }
@@ -93,7 +96,7 @@ pub fn route(app: &Arc<App>, req: &Req, s: &Session) -> Option<Resp> {
         ("GET", "/api/v1/apply") => {
             let c = lock(changes());
             // ids are random, so order by time: newest first
-            let mut v: Vec<_> = c.iter().filter(|(_, c)| c.state != State::Previewed).collect();
+            let mut v: Vec<_> = c.iter().filter(|(_, c)| c.state != State::Previewed && c.site == app.site).collect();
             v.sort_by_key(|(_, c)| std::cmp::Reverse(c.created));
             let list: Vec<_> = v.into_iter().take(20).map(|(id, c)| json!({ "id": id, "change": state_json(c) })).collect();
             Resp::json(200, &json!(list))
@@ -119,7 +122,7 @@ pub fn route(app: &Arc<App>, req: &Req, s: &Session) -> Option<Resp> {
             if c.len() > 200 {
                 return Some(Resp::error(429, "too many pending changes"));
             }
-            c.insert(id, Change { plan, user: s.user.clone(), created: now(), state: State::Previewed });
+            c.insert(id, Change { plan, user: s.user.clone(), created: now(), state: State::Previewed, site: app.site.clone() });
             Resp::json(200, &resp)
         }
         ("POST", "/api/v1/apply/start") => {
@@ -132,7 +135,7 @@ pub fn route(app: &Arc<App>, req: &Req, s: &Session) -> Option<Resp> {
             };
             let plan = {
                 let c = lock(changes());
-                match c.get(&b.id) {
+                match c.get(&b.id).filter(|x| x.site == app.site) {
                     Some(x) if x.state == State::Previewed && x.user == s.user => x.plan.clone(),
                     Some(_) => return Some(Resp::error(409, "this change was already applied or belongs to someone else")),
                     None => return Some(Resp::error(404, "no such change: preview it again")),
@@ -173,7 +176,7 @@ pub fn route(app: &Arc<App>, req: &Req, s: &Session) -> Option<Resp> {
             };
             let plan = {
                 let c = lock(changes());
-                match c.get(&b.id).map(|x| (x.state.clone(), x.plan.clone())) {
+                match c.get(&b.id).filter(|x| x.site == app.site).map(|x| (x.state.clone(), x.plan.clone())) {
                     Some((State::Armed { deadline }, p)) if now() + MARGIN < deadline => p,
                     Some((State::Armed { .. }, _)) => return Some(Resp::error(409, "too late: the router is reverting this change by itself")),
                     Some(_) => return Some(Resp::error(409, "this change is not waiting for confirmation")),

@@ -175,6 +175,17 @@ pub struct State {
     pub history_days: u64,
     /// "keep me signed in" browsers (api.rs): survive restarts and updates
     pub remembered: Vec<Remembered>,
+    /// more routers (sites.rs). The first router stays in `router`, so a single-router state file loads unchanged.
+    pub sites: Vec<Site>,
+}
+
+/// An extra router. Its passwords are sealed with labels that include the id, so they can't be swapped between routers.
+#[derive(Serialize, Deserialize, Clone, Debug)]
+pub struct Site {
+    /// random, never reused
+    pub id: String,
+    pub name: String,
+    pub router: Option<RouterCfg>,
 }
 
 /// One browser that chose "keep me signed in". Only the token's SHA-256 is stored; a MikroTik password,

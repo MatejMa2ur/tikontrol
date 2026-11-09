@@ -69,11 +69,27 @@ fn handle_with(app: &Arc<App>, req: &Req, public: bool, session: Option<Session>
     }
     if session.is_none() {
         if let Some(r) = crate::apikeys::authenticate(app, req) {
-            return r.map_or_else(|e| e, |s| route(app, req, &s));
+            return r.map_or_else(|e| e, |s| on_site(app, req, &s));
         }
     }
     let Some(s) = session else { return Resp::error(401, "login required") };
-    route(app, req, &s)
+    on_site(app, req, &s)
+}
+
+/// Signed-in requests run against the router named by the `x-tik-site` header (or `site` query
+/// parameter, for EventSource), else the main router. Sites are only resolved after authentication.
+fn on_site(app: &Arc<App>, req: &Req, s: &Session) -> Resp {
+    if req.path == "/api/v1/sites" {
+        return crate::sites::route(app, req, s); // the site list lives on the main App
+    }
+    let id = req.header("x-tik-site").map(str::to_string).or_else(|| req.param("site")).unwrap_or_default();
+    if id.is_empty() || id == app.site {
+        return route(app, req, s);
+    }
+    match lock(&app.sites).get(&id).cloned() {
+        Some(a) => route(&a, req, s),
+        None => Resp::error(404, "no such site"),
+    }
 }
 
 fn route(app: &Arc<App>, req: &Req, s: &Session) -> Resp {
@@ -108,7 +124,9 @@ fn route(app: &Arc<App>, req: &Req, s: &Session) -> Resp {
         ("POST", "/api/v1/router") if admin => set_router(app, req),
         ("DELETE", "/api/v1/router") if admin => {
             let mut st = lock(&app.store);
-            st.state.router = None;
+            if let Some(slot) = app.cfg_slot(&mut st.state) {
+                *slot = None;
+            }
             let r = st.save();
             drop(st);
             app.drop_reader();
@@ -475,14 +493,15 @@ fn start_session(app: &App, user: &str, role: Role) -> Resp {
 
 fn me(app: &App, s: &Session) -> Resp {
     let st = lock(&app.store);
-    let r = st.state.router.as_ref();
+    let r = app.cfg(&st.state);
     let snap = app.snap.read().unwrap_or_else(|e| e.into_inner());
     Resp::json(
         200,
         &json!({
             "user": s.user, "role": s.role, "csrf": s.csrf, "setup": s.user == auth::SETUP_USER,
             "router": if app.demo.is_some() { Some(json!({ "host": "demo", "mode": Mode::ReadOnly })) } else { r.map(|r| json!({ "host": r.host, "mode": r.mode })) },
-            "readOnly": r.is_none_or(|r| r.mode == Mode::ReadOnly || (r.writer.is_none() && s.ros.is_none())) || s.role != Role::Admin,
+            "readOnly": r.is_none_or(|r| r.mode == Mode::ReadOnly || (r.writer.is_none() && app.ros(s).is_none())) || s.role != Role::Admin,
+            "site": app.site,
             "mikrotik": s.ros.is_some(),
             "policies": snap.policies,
             "error": snap.error,
@@ -542,7 +561,7 @@ fn prefs_ok(p: &Prefs) -> bool {
 fn router_info(app: &App) -> Resp {
     let st = lock(&app.store);
     let snap = app.snap.read().unwrap_or_else(|e| e.into_inner());
-    match &st.state.router {
+    match app.cfg(&st.state) {
         None => Resp::json(200, &json!({ "configured": false })),
         Some(r) => Resp::json(
             200,
@@ -678,9 +697,10 @@ fn set_router(app: &Arc<App>, req: &Req) -> Resp {
         }
     }
     let mut st = lock(&app.store);
-    let reader = Cred { user: b.reader.user.clone(), password: st.sealer.seal("router-password:reader", &b.reader.password) };
-    let writer = b.writer.as_ref().map(|w| Cred { user: w.user.clone(), password: st.sealer.seal("router-password:writer", &w.password) });
-    st.state.router = Some(RouterCfg { reader, writer, ..tmp });
+    let reader = Cred { user: b.reader.user.clone(), password: st.sealer.seal(&app.label("reader"), &b.reader.password) };
+    let writer = b.writer.as_ref().map(|w| Cred { user: w.user.clone(), password: st.sealer.seal(&app.label("writer"), &w.password) });
+    let Some(slot) = app.cfg_slot(&mut st.state) else { return Resp::error(404, "no such site") };
+    *slot = Some(RouterCfg { reader, writer, ..tmp });
     let r = st.save();
     drop(st);
     app.drop_reader();
@@ -713,7 +733,7 @@ fn set_mode(app: &App, req: &Req, s: &Session) -> Resp {
         return Resp::error(400, "confirm_write is required to allow changes");
     }
     let mut st = lock(&app.store);
-    let Some(r) = st.state.router.as_mut() else { return Resp::error(409, "no router connected") };
+    let Some(r) = app.cfg_slot(&mut st.state).and_then(|s| s.as_mut()) else { return Resp::error(409, "no router connected") };
     r.mode = b.mode.clone();
     if b.mode == Mode::ReadOnly {
         r.writer = None;
@@ -954,7 +974,7 @@ pub mod tests {
         }
         let log = Arc::new(std::sync::Mutex::new(vec![]));
         let l = log.clone();
-        let conn: crate::app::Connector = Box::new(move |_, u, p| {
+        let conn: crate::app::Connector = Arc::new(move |_, u, p| {
             if p != "router-pass" {
                 return Err("router rejected the login".into());
             }

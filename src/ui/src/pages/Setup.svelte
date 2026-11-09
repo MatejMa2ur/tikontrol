@@ -3,7 +3,7 @@
   // read-only user there. Fallback: the setup token from the log, then paste commands (step 'router').
   // Read-only is enforced by the router user's group, not by this page.
   import { onMount, untrack } from 'svelte'
-  import { api, ApiError, logout, type Me } from '../lib/backend'
+  import { api, ApiError, logout, site, switchSite, type Me } from '../lib/backend'
   let { step, me, hint = null }: { step: 'admin' | 'router'; me?: Me; hint?: string | null } = $props()
 
   let error = $state('')
@@ -146,7 +146,7 @@
     </div>
   {:else}
     <form class="card wide" onsubmit={save}>
-      <div class="row between"><h1>Connect your router</h1><button type="button" class="btn ghost" onclick={logout}>Sign out</button></div>
+      <div class="row between"><h1>Connect your router</h1><span class="row">{#if site}<button type="button" class="btn ghost" onclick={() => switchSite('')}>Back to the main router</button>{/if}<button type="button" class="btn ghost" onclick={logout}>Sign out</button></span></div>
       {#if me?.role !== 'admin'}<p class="err">Only an admin can connect the router.</p>{/if}
       {#if me?.router}
         <div class="status" role="status">

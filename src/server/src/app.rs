@@ -5,7 +5,9 @@ use crate::live::Live;
 use crate::policy::{self, Policies};
 use crate::ros::conn::{Conn, Router, Target};
 use crate::ros::queries;
-use crate::store::{Mode, RouterCfg, Store};
+use crate::store::{Mode, RouterCfg, State, Store};
+use std::collections::BTreeMap;
+use std::sync::atomic::{AtomicBool, Ordering};
 use serde_json::Value;
 use std::sync::{Arc, Mutex, MutexGuard, RwLock};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
@@ -33,14 +35,25 @@ pub enum As {
     Writer,
 }
 
-pub type Connector = Box<dyn Fn(&RouterCfg, &str, &str) -> Result<Box<dyn Router + Send>, String> + Send + Sync>;
+pub type Connector = Arc<dyn Fn(&RouterCfg, &str, &str) -> Result<Box<dyn Router + Send>, String> + Send + Sync>;
 
+/// One App per router ("site"). The main App serves the first router (`state.router`) and holds the
+/// others in `sites`; they share the store, sessions and limiter, and each has its own snapshot, live
+/// data, history file, pending changes and reader connection.
 pub struct App {
-    pub store: Mutex<Store>,
-    pub sessions: Mutex<Sessions>,
-    pub limiter: Mutex<Limiter>,
+    pub store: Arc<Mutex<Store>>,
+    pub sessions: Arc<Mutex<Sessions>>,
+    pub limiter: Arc<Mutex<Limiter>>,
     /// one-time token printed to the log at first start; needed to create the first admin
-    pub setup_token: Mutex<Option<String>>,
+    pub setup_token: Arc<Mutex<Option<String>>>,
+    /// "" for the main router, else the id of an entry in `state.sites`
+    pub site: String,
+    /// the other routers' Apps (only on the main App)
+    pub sites: Mutex<BTreeMap<String, Arc<App>>>,
+    /// set when a site is removed: its threads stop
+    gone: AtomicBool,
+    /// time between snapshots (TIK_POLL)
+    pub every: Duration,
     pub snap: RwLock<Snap>,
     pub connector: Connector,
     pub tls: bool,
@@ -53,7 +66,7 @@ pub struct App {
 }
 
 pub fn real_connector() -> Connector {
-    Box::new(|cfg, user, pw| {
+    Arc::new(|cfg, user, pw| {
         let t = Target { host: cfg.host.clone(), port: cfg.port, pin: cfg.pin.clone() };
         Ok(Box::new(Conn::connect(&t, user, pw)?) as Box<dyn Router + Send>)
     })
@@ -67,15 +80,105 @@ impl App {
             live,
             demo: None,
             mcp: Default::default(),
-            store: Mutex::new(store),
-            sessions: Mutex::default(),
-            limiter: Mutex::default(),
-            setup_token: Mutex::new(setup),
+            store: Arc::new(Mutex::new(store)),
+            sessions: Arc::default(),
+            limiter: Arc::default(),
+            setup_token: Arc::new(Mutex::new(setup)),
+            site: String::new(),
+            sites: Mutex::default(),
+            gone: AtomicBool::new(false),
+            every: Duration::from_secs(30),
             snap: RwLock::default(),
             connector,
             tls,
             reader: Mutex::new(None),
         }
+    }
+
+    /// An App for the extra router `id`, sharing this (main) App's store, sessions and limiter.
+    pub fn for_site(&self, id: &str) -> App {
+        let path = lock(&self.store).dir().join(format!("history-{id}.json"));
+        App {
+            live: Live::load(&path),
+            demo: None,
+            mcp: Default::default(),
+            store: self.store.clone(),
+            sessions: self.sessions.clone(),
+            limiter: self.limiter.clone(),
+            setup_token: self.setup_token.clone(),
+            site: id.into(),
+            sites: Mutex::default(),
+            gone: AtomicBool::new(false),
+            every: self.every,
+            snap: RwLock::default(),
+            connector: self.connector.clone(),
+            tls: self.tls,
+            reader: Mutex::new(None),
+        }
+    }
+
+    /// Where this router's history is kept.
+    pub fn history_path(&self) -> std::path::PathBuf {
+        let dir = lock(&self.store).dir();
+        if self.site.is_empty() { dir.join("history.json") } else { dir.join(format!("history-{}.json", self.site)) }
+    }
+
+    /// Starts the background work for this router: snapshot poller, live sampler, alerts.
+    pub fn spawn_workers(self: &Arc<Self>) {
+        self.spawn_poller(self.every);
+        crate::live::spawn(self.clone(), self.history_path());
+        crate::alerts::spawn(self.clone(), Duration::from_secs(30));
+    }
+
+    /// Main App only: starts an App (and its threads) for every extra router in the store.
+    pub fn start_sites(self: &Arc<Self>) {
+        let ids: Vec<String> = lock(&self.store).state.sites.iter().map(|s| s.id.clone()).collect();
+        for id in ids {
+            let a = Arc::new(self.for_site(&id));
+            a.spawn_workers();
+            lock(&self.sites).insert(id, a);
+        }
+    }
+
+    /// Main App only: stops a removed router's threads and deletes its history.
+    pub fn drop_site_app(&self, id: &str) {
+        if let Some(a) = lock(&self.sites).remove(id) {
+            a.gone.store(true, Ordering::Relaxed);
+            a.drop_reader();
+            let _ = std::fs::remove_file(a.history_path());
+            let _ = std::fs::remove_file(lock(&self.store).dir().join(format!("blueprint-{id}.json")));
+        }
+    }
+
+    pub fn gone(&self) -> bool {
+        self.gone.load(Ordering::Relaxed)
+    }
+
+    /// This App's router in the state (None: not connected yet, or the site was removed).
+    pub fn cfg<'a>(&self, s: &'a State) -> Option<&'a RouterCfg> {
+        if self.site.is_empty() {
+            return s.router.as_ref();
+        }
+        s.sites.iter().find(|x| x.id == self.site)?.router.as_ref()
+    }
+
+    /// The slot this App's router lives in; None when the site was removed.
+    pub fn cfg_slot<'a>(&self, s: &'a mut State) -> Option<&'a mut Option<RouterCfg>> {
+        if self.site.is_empty() {
+            return Some(&mut s.router);
+        }
+        s.sites.iter_mut().find(|x| x.id == self.site).map(|x| &mut x.router)
+    }
+
+    /// Sealing label for this router's `role` ("reader" / "writer") password.
+    pub fn label(&self, role: &str) -> String {
+        if self.site.is_empty() { format!("router-password:{role}") } else { format!("router-password:{}:{role}", self.site) }
+    }
+
+    /// The signed-in MikroTik account's password, used only against the main router: it is never
+    /// sent to another router.
+    pub fn ros<'a>(&self, s: &'a crate::auth::Session) -> Option<&'a crate::auth::Secret> {
+        s.ros.as_ref().filter(|_| self.site.is_empty())
     }
 
     /// First admin signed in: the setup token and any setup sessions stop working, for good.
@@ -91,19 +194,20 @@ impl App {
     }
 
     pub fn router_cfg(&self) -> Option<RouterCfg> {
-        lock(&self.store).state.router.clone()
+        let st = lock(&self.store);
+        self.cfg(&st.state).cloned()
     }
 
     /// Opens a connection as the reader or writer. The password is decrypted only for the login.
     pub fn open(&self, who: As) -> Result<Box<dyn Router + Send>, String> {
         let st = lock(&self.store);
-        let cfg = st.state.router.clone().ok_or("no router configured")?;
+        let cfg = self.cfg(&st.state).cloned().ok_or("no router configured")?;
         let (cred, label) = match who {
-            As::Reader => (Some(cfg.reader.clone()), "router-password:reader"),
-            As::Writer => (cfg.writer.clone(), "router-password:writer"),
+            As::Reader => (Some(cfg.reader.clone()), self.label("reader")),
+            As::Writer => (cfg.writer.clone(), self.label("writer")),
         };
         let cred = cred.ok_or("read-only mode: no write credential is stored")?;
-        let pw = st.sealer.open_str(label, &cred.password).ok_or("stored router password cannot be decrypted (wrong key file?)")?;
+        let pw = st.sealer.open_str(&label, &cred.password).ok_or("stored router password cannot be decrypted (wrong key file?)")?;
         drop(st);
         (self.connector)(&cfg, &cred.user, &pw)
     }
@@ -185,7 +289,7 @@ impl App {
         let app = self.clone();
         std::thread::spawn(move || {
             let mut n = 0u64;
-            loop {
+            while !app.gone() {
                 app.poll(n.is_multiple_of(4)); // latency every 4th poll: pings cost router CPU and take seconds
                 n += 1;
                 std::thread::sleep(every * app.backoff());
@@ -219,7 +323,7 @@ pub mod tests {
     }
 
     pub fn fake_connector(policy: &'static str) -> Connector {
-        Box::new(move |_, user, pw| {
+        Arc::new(move |_, user, pw| {
             if pw != "router-pass" {
                 return Err("router rejected the login".into());
             }

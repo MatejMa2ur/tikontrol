@@ -55,6 +55,7 @@ fn main() {
     }
 
     let mut a = app::App::new(st, app::real_connector(), tls_on);
+    a.every = Duration::from_secs(poll);
     if let Some(f) = env("TIK_DEMO") {
         let snap = std::fs::read(&f).ok().and_then(|b| serde_json::from_slice(&b).ok()).unwrap_or_else(|| die(&format!("TIK_DEMO: cannot read {f}")));
         println!("tikontrol: demo mode, serving {f} instead of a router");
@@ -64,8 +65,8 @@ fn main() {
     if let Some(t) = app::lock(&app.setup_token).as_ref() {
         println!("tikontrol: first start. Create the admin account in the browser with setup token {t}");
     }
-    app.spawn_poller(Duration::from_secs(poll));
-    tikontrol::live::spawn(app.clone(), data.join("history.json"));
+    app.spawn_workers(); // poller, live sampler and alerts for the main router
+    app.start_sites(); // the same for every extra router
     if let Some(f) = env("TIK_GEOIP") {
         let g = tikontrol::flows::Geo::parse(&std::fs::read_to_string(&f).unwrap_or_else(|e| die(&format!("TIK_GEOIP {f}: {e}"))));
         eprintln!("tikontrol: GeoIP: {} IPv4 ranges loaded", g.len());
@@ -75,7 +76,6 @@ fn main() {
         tikontrol::flows::spawn(app.clone(), &f).unwrap_or_else(|e| die(&format!("TIK_FLOWS {f}: {e}")));
         println!("tikontrol: NetFlow v5 collector on {f} (router packets only)");
     }
-    tikontrol::alerts::spawn(app.clone(), Duration::from_secs(30));
     tikontrol::discovery::spawn(app.clone()); // idle unless an admin turns the schedule on
     let handler: http::Handler = {
         let app = app.clone();

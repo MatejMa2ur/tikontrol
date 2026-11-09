@@ -1,7 +1,7 @@
 <script lang="ts">
   import { tick as settled } from 'svelte'
   import { router, isSample, simulated, isBackend, load } from './lib/data'
-  import { api, logout, session } from './lib/backend'
+  import { api, logout, session, site, switchSite, type Site } from './lib/backend'
   import { apply } from './lib/apply.svelte'
   import { prefs } from './lib/live.svelte'
   import Icon from './lib/Icon.svelte'
@@ -72,7 +72,9 @@
     const i = setInterval(tick, 30_000)
     return () => clearInterval(i)
   })
-  const modeLabel = $derived(me?.readOnly ? 'Read-only' : 'Read & write')
+  let sites = $state<Site[]>([])
+  if (isBackend) api<Site[]>('/sites').then((s) => (sites = s)).catch(() => {})
+  const modeLabel =$derived(me?.readOnly ? 'Read-only' : 'Read & write')
   const modeTitle = $derived(me?.policies ? `Router user ${me.policies.user} (group ${me.policies.group}): ${me.policies.policy.join(', ')}` : '')
 </script>
 
@@ -94,7 +96,15 @@
     <Palette {pages} />
     <button class="btn ghost" class:on={prefs.showRos} onclick={() => (prefs.showRos = !prefs.showRos)} title="Show the RouterOS commands behind every card"><Icon name="code" size={15} /></button>
     <button class="btn ghost" onclick={() => { prefs.auto = false; prefs.theme = prefs.theme === 'dark' ? 'light' : 'dark' }} aria-label="Toggle theme"><Icon name={prefs.theme === 'dark' ? 'sun' : 'moon'} size={15} /></button>
-    <span class="site hide-sm"><span class="dot ok"></span><span class="led"></span>{router.board?.startsWith(router.identity) ? router.board : `${router.identity} ${router.board}`}<Icon name="down" size={11} /></span>
+    {#if sites.length > 1}
+      <!-- site switcher: every request then carries this router's id (lib/backend.ts) -->
+      <label class="site"><span class="dot ok"></span><span class="sr">Router</span>
+        <select value={site} onchange={(e) => switchSite(e.currentTarget.value)} aria-label="Router shown">
+          {#each sites as s (s.id)}<option value={s.id}>{s.name}{s.identity ? ` · ${s.identity}` : ''}</option>{/each}
+        </select></label>
+    {:else}
+      <span class="site hide-sm"><span class="dot ok"></span><span class="led"></span>{router.board?.startsWith(router.identity) ? router.board : `${router.identity} ${router.board}`}<Icon name="down" size={11} /></span>
+    {/if}
     {#if isBackend}
       <button class="avatar" popovertarget="me-menu" title="Signed in as {me?.user}" aria-label="Account menu for {me?.user}">{(me?.user ?? 'a').slice(0, 1).toUpperCase()}</button>
       <div id="me-menu" class="me-menu" popover>
@@ -141,6 +151,8 @@
   .right { margin-left: auto; gap: 6px; }
   .btn.on { color: var(--accent); }
   .site { display: inline-flex; align-items: center; gap: 8px; padding: 5px 12px; border-radius: 99px; background: var(--bg); border: 1px solid var(--line); font-size: 12px; font-weight: 550; }
+  .site select { background: transparent; border: 0; color: inherit; font: inherit; padding: 0; }
+  .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
   .led { width: 16px; height: 4px; border-radius: 2px; background: var(--muted); }
   button.avatar { border: 0; cursor: pointer; }
   .me-menu { position: fixed; inset: 52px 12px auto auto; margin: 0; min-width: 200px; padding: 12px; display: none; flex-direction: column; gap: 6px; background: var(--panel); color: var(--text); border: 1px solid var(--line); border-radius: var(--radius); box-shadow: 0 8px 24px #0004; }

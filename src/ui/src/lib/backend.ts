@@ -25,6 +25,17 @@ export type Boot =
   | { mode: 'app'; me: Me; snapshot: any }
 
 export const session = { csrf: '', me: null as Me | null }
+
+/** The router this browser looks at ('' = the main one). Every request carries it; the server scopes
+ *  live data, history and Safe apply to it. */
+export const site = localStorage.getItem('tik.site') ?? ''
+export type Site = { id: string; name: string; identity: string | null; host: string | null; mode: string | null; error: string | null }
+export function switchSite(id: string) {
+  if (id) localStorage.setItem('tik.site', id)
+  else localStorage.removeItem('tik.site')
+  location.hash = '#/dashboard'
+  location.reload()
+}
 /** The first snapshot, set by main.ts before the app (and data.ts) load. */
 export const preload = { snapshot: null as any }
 
@@ -37,6 +48,7 @@ export async function api<T = any>(path: string, opts: { method?: string; body?:
   const headers: Record<string, string> = {}
   if (opts.body !== undefined) headers['content-type'] = 'application/json'
   if (method !== 'GET') headers['x-csrf-token'] = session.csrf
+  if (site) headers['x-tik-site'] = site
   const r = await fetch(`/api/v1${path}`, { method, headers, body: opts.body === undefined ? undefined : JSON.stringify(opts.body), credentials: 'same-origin' })
   const text = await r.text()
   let data: any = null
@@ -62,6 +74,8 @@ export async function boot(): Promise<Boot> {
     if (!snapshot) return { mode: 'router', me }
     return { mode: 'app', me, snapshot }
   } catch (e) {
+    // the chosen router was removed (maybe from another browser): back to the main one
+    if (e instanceof ApiError && e.status === 404 && site) { switchSite(''); return new Promise(() => {}) }
     if (e instanceof ApiError && e.status === 401) return health.needsSetup ? { mode: 'setup', hint: health.routerHint ?? null } : { mode: 'login' }
     throw e
   }
