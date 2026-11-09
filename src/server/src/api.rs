@@ -931,7 +931,9 @@ pub mod tests {
     }
 
     /// A fake router that keeps every command it saw, across connections.
-    fn recording_app(policy: &'static str) -> (Arc<App>, Arc<std::sync::Mutex<Vec<Vec<String>>>>) {
+    type Recorded = Arc<std::sync::Mutex<Vec<Vec<String>>>>;
+
+    fn recording_app(policy: &'static str) -> (Arc<App>, Recorded) {
         use crate::ros::queries::tests::Fake;
         struct Rec(Fake, Arc<std::sync::Mutex<Vec<Vec<String>>>>);
         impl conn::Router for Rec {
