@@ -11,7 +11,7 @@ Clean-room: we copy the behaviour, never the assets.
 **Backing:** `ROS` = RouterOS API on the router · `CMR` = MikroTik CMR server · `tik` = our own logic/DB · `✗` = nothing can back it
 
 <!-- progress:start -->
-**Progress:** 65 ✅ · 139 🟨 · 17 🎨 · 5 ⬜ · 8 ➖ (234 items, 29% done)
+**Progress:** 72 ✅ · 136 🟨 · 16 🎨 · 2 ⬜ · 8 ➖ (234 items, 32% done)
 <!-- progress:end -->
 
 ---
@@ -41,7 +41,7 @@ Clean-room: we copy the behaviour, never the assets.
 | P19 | Settings → Profiles | Settings · Profiles | 3 |🎨 |
 | P20 | Settings → Control Plane (admins, backups, updates, integrations, console) | Settings · System | 2 | 🟨 |
 | P21 | Settings → System (site, logging, SNMP, device auth) | Settings · System | 2 | 🟨 |
-| P22 | Site Manager (multi-site, cloud) | Sites switcher | 4 | ⬜ |
+| P22 | Site Manager (multi-site, cloud) | Sites switcher (local routers only; no cloud: tikontrol never phones home) | 4 | ✅ |
 | P23 | Login / onboarding wizard | Login + first-run wizard | 1 | 🟨 |
 | P24 | Global search (⌘K): clients, devices, SSIDs, settings pages | Command palette | 2 | 🟨 |
 
@@ -84,8 +84,8 @@ Clean-room: we copy the behaviour, never the assets.
 | Topology map (auto layout, wired + wireless links) | CMR layout · ROS neighbor + bridge host | 2 | 🟨 |
 | Topology Spotlight (highlight/filter) | tik | 3 | 🟨 |
 | Device Supervisor (health anomalies; needs CMR server) | CMR state alerts | 4 |🎨 |
-| Blueprints / config drift inspector (blocked: `/export` over the API with only `read` policy is unverified, and a 7.21 pre-release leaked keys in hide-sensitive exports; test on CHR first) | tik (export diff) | 4 |🎨 |
-| Device SSH credentials management | ROS `/user` | 3 | ⬜ |
+| Blueprints / config drift inspector (diff of the reader's structured prints, not `/export`: over the API with only `read` it returns an empty `!done`, and exports risk secrets) | tik (snapshot diff) | 4 | ✅ |
+| Device SSH credentials management (public keys only; writer needs the `policy` policy) | ROS `/user/ssh-keys` | 3 | ✅ |
 | Device LED control / Etherlighting | ROS LED · Etherlighting ✗ (UI hw) | 4 | 🟨 |
 | Shadow mode / gateway HA | ✗ (VRRP is possible but out of scope) | – | ➖ |
 
@@ -274,17 +274,17 @@ Clean-room: we copy the behaviour, never the assets.
 ## Control plane / System
 | Feature | Backing | Phase | Status |
 |---|---|---|---|
-| Admin users + roles | tik (own users) + ROS `/user` | 2 | 🟨 |
+| Admin users + roles | tik (own users) + ROS `/user` | 2 | ✅ |
 | SSO / cloud account | ✗ local auth only | – | ➖ |
 | Sign in with MikroTik account (role from router group, password only in session memory, changes run as that user) | tik + ROS login | 2 | 🟨 |
 | Backups (scheduled, download, restore) | ROS `/system/backup` + `/export` | 2 | 🟨 |
 | Firmware/app updates (channel, auto-update window) | ROS / CMR | 2 | 🟨 |
-| Integrations / local API (+ API keys) | tik REST | 4 | 🟨 |
+| Integrations / local API (+ API keys) | tik REST | 4 | ✅ |
 | Console (terminal in browser) | ROS (SSH/API terminal) | 3 | 🟨 |
 | Site settings (name, country, timezone, NTP) | ROS `/system/clock`, ntp | 2 | ✅ |
 | SNMP | ROS `/snmp` | 3 | ✅ |
 | Remote logging / NetFlow export settings | ROS | 3 | ✅ |
-| Data retention settings | tik | 2 | 🟨 |
+| Data retention settings | tik | 2 | ✅ |
 | Trusted HTTPS: local CA (name-constrained) signs a 397-day server cert, auto-renewed; CA download + per-device trust steps | tik `/api/v1/ca.crt` | 2 | ✅ |
 | Device auth / SSH settings, service hardening | ROS `/ip/service` | 2 | ✅ |
 | Debug tools: ping, traceroute, packet capture | ROS `/ping`, `/tool/traceroute`, sniffer | 3 | 🟨 |
@@ -294,7 +294,7 @@ Clean-room: we copy the behaviour, never the assets.
 ## Platform
 | Feature | Backing | Phase | Status |
 |---|---|---|---|
-| Multi-site / multi-router | tik + CMR | 4 | ⬜ |
+| Multi-site / multi-router (own sealed credentials, data, history and Safe apply per router) | tik | 4 | ✅ |
 | Mobile app | ✗ → responsive PWA instead | – | ➖ |
 | Responsive layout / PWA install | tik | 1 | 🟨 |
 | Dark / light theme, or Auto following the OS setting | tik | 1 | ✅ |

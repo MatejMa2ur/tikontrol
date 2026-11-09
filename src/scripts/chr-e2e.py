@@ -6,16 +6,25 @@ read & write and drives every case through the same HTTP API the UI uses. Each c
 RouterOS `/export terse`: the change must alter the config, and Revert (or the matching remove intent
 after Keep) must give back exactly the config from before.
 
-    python3 src/scripts/chr-e2e.py [--bin target/release/tikontrol] [--only kind,kind] [--cases file.json]
+    python3 src/scripts/chr-e2e.py [--bin target/release/tikontrol] [--only kind,kind] [--sites CHR_DIR:OFFSET]
+
+CHR_DIR / CHR_OFFSET select the CHR like chr.sh does (api-ssl on 8729+offset; tikontrol listens on 9443+offset).
+--sites adds a second CHR as an extra router ("site") and checks that live data, credentials and Safe apply stay
+per router; it also checks API keys, retention, viewers and the config drift inspector. --only none skips the cases.
 
 Never point this at a real router: it writes.
 """
 import argparse, functools, http.cookiejar, json, os, re, shutil, ssl, subprocess, sys, tempfile, time, urllib.error, urllib.request
 
 DIR = os.path.expanduser(os.environ.get("CHR_DIR", "~/.cache/tikontrol-chr"))
+OFFSET = int(os.environ.get("CHR_OFFSET", "0"))
+API = 8729 + OFFSET
 HERE = os.path.dirname(os.path.abspath(__file__))
-PORT = 9443
+PORT = 9443 + OFFSET
 BASE = f"https://127.0.0.1:{PORT}"
+# throwaway test keys (public halves only)
+SSH_ED = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIBv30pa9ZGPrTRuTgYYp3OGtlBnqE/BtqvZvn9Z5daiJ e2e@example.com"
+SSH_RSA2048 = "ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQC6rvtXcTXWl3ak9p5K3PfC0dHQ6QDmvDwcCbID6PSz3URJoMKxVZxiNgznkTTz1QR1P8FLUFaEQ2yMqxuAOqxxH999M/skpuwsbS2NQmAJMWDQptCoM2myWRLR41+O3OiSe1cz8R9MWR2FiI6h4ALdDrL1frrd0jbEUVw0OZVuVp2q/UVwOSz4bD7bZQqGcW3gK+Ql4F6UBueg25Pkar49p8QEr/hczAfnjbtUHmxXuCOgfLmtnbdhJ/lR0ugOUGWRq8dWKEi71P+OO5xjJLNvrm0gbRN9nAJynj24bLtkZ4PlGpmiKfRXcZ7VdmbXa0MaOQt2H+mODUwR8/22gHAx"
 
 M1, M2 = "02:00:00:AA:BB:01", "02:00:00:AA:BB:02"
 WGKEY = "Y2hyLXRlc3QtcHVibGljLWtleS1ub3QtcmVhbC0xMjM="
@@ -98,6 +107,10 @@ CASES = [
     ({"kind": "backup-schedule", "enabled": True}, {"kind": "backup-schedule", "enabled": False}, "ok"),
     ({"kind": "set-leds", "all_leds_off": "immediate"}, None, "error"),
     ({"kind": "locate", "interface": "ether2"}, None, "action"),
+    # SSH keys go on a test user, never admin: a key turns off admin's SSH password login, which this script uses
+    ({"kind": "ssh-key", "user": "tik-ssh-test", "label": "laptop", "key": SSH_ED}, {"kind": "remove-ssh-key", "user": "tik-ssh-test", "label": "laptop"}, "ok"),
+    ({"kind": "ssh-key", "user": "tik-ssh-test", "label": "weak", "key": SSH_RSA2048}, None, "error"),
+    ({"kind": "remove-ssh-key", "user": "tik-ssh-test", "label": "manual"}, None, "error"),  # a key tikontrol didn't add
     # profiles
     ({"kind": "client-group", "group": "kids", "members": [{"mac": M1, "ip": "192.168.88.50"}]}, None, "ok"),
     ({"kind": "group-limit", "group": "kids", "down": "20M", "up": "5M"}, {"kind": "remove-group-limit", "group": "kids"}, "ok"),
@@ -133,18 +146,21 @@ SETUP = [
     ':if ([:len [/interface/wireguard find name=wg-setup]] = 0) do={ /interface/wireguard add name=wg-setup listen-port=13299; /interface/wireguard/peers add interface=wg-setup public-key="c2V0dXAtcGVlci1rZXktbm90LXJlYWwtMDAwMDAwMDA=" allowed-address=10.98.0.2/32 comment="test: peer" }',
     ':if ([:len [/routing/table find name=tik-test]] = 0) do={ /routing/table add name=tik-test fib }',
     ':if ([:len [/interface/ovpn-server/server find name=ovpn-test]] = 0) do={ /interface/ovpn-server/server add name=ovpn-test certificate=api disabled=yes }',
+    # a disabled user for the SSH key cases, with one key tikontrol must not touch
+    f':if ([:len [/user find name=tik-ssh-test]] = 0) do={{ /user add name=tik-ssh-test group=read disabled=yes password=not-a-real-secret-{os.getpid()} }}',
+    ':if ([:len [/user/ssh-keys find comment="test: manual"]] = 0) do={ /user/ssh-keys add user=tik-ssh-test key="ecdsa-sha2-nistp256 AAAAE2VjZHNhLXNoYTItbmlzdHAyNTYAAAAIbmlzdHAyNTYAAABBBG+EfQGrvCIUUsHp6+RfCqflp6YkDA4/1rdFiJDISSBw0XD9M9U1AWHT9wAIFl0Y0Ep+xfClwaiwPWSeyPhHOt8=" comment="test: manual" }',
 ]
 
 
-def ros(cmd):
-    return subprocess.run([os.path.join(DIR, "ssh-chr.sh"), cmd], capture_output=True, text=True, timeout=120).stdout
+def ros(cmd, d=None):
+    return subprocess.run([os.path.join(d or DIR, "ssh-chr.sh"), cmd], capture_output=True, text=True, timeout=120).stdout
 
 
 VOLATILE = re.compile(r"^#|^/system scheduler add .*name=tik-revert|^/certificate|^/file|^/system keymat-provider")
 
 
-def export():
-    out = ros("/export terse")
+def export(d=None):
+    out = ros("/export terse", d)
     lines = [l.rstrip() for l in out.replace("\r", "").split("\n") if l.strip()]
     return [l for l in lines if not VOLATILE.search(l)]
 
@@ -159,11 +175,17 @@ class Client:
         self.jar = http.cookiejar.CookieJar()
         self.op = urllib.request.build_opener(urllib.request.HTTPSHandler(context=ssl._create_unverified_context()), urllib.request.HTTPCookieProcessor(self.jar))
         self.csrf = None
+        self.site = ""  # x-tik-site: which router the requests are for
+        self.bearer = None
 
     def call(self, m, p, body=None):
         h = {"content-type": "application/json", "origin": BASE}
         if self.csrf:
             h["x-csrf-token"] = self.csrf
+        if self.site:
+            h["x-tik-site"] = self.site
+        if self.bearer:
+            h["authorization"] = f"Bearer {self.bearer}"
         r = urllib.request.Request(BASE + p, data=None if body is None else json.dumps(body).encode(), method=m, headers=h)
         try:
             with self.op.open(r, timeout=180) as x:
@@ -197,10 +219,115 @@ class Client:
         return "ok", p
 
 
+def check(name, ok, detail=""):
+    print(f"{'PASS' if ok else 'FAIL'} {name:46} {'' if ok else detail}")
+    return 0 if ok else 1
+
+
+def wait(c, path, cond, secs=120):
+    end = time.time() + secs
+    while time.time() < end:
+        s, d = c.call("GET", path)
+        if s == 200 and cond(d):
+            return d
+        time.sleep(3)
+    return None
+
+
+def sites(c, d2, off2, data):
+    """A second router as an extra site: own credentials, data, history and Safe apply. Plus API keys,
+    retention, a viewer account and the drift inspector against real router data."""
+    f = 0
+    rpw, wpw = os.urandom(12).hex(), os.urandom(12).hex()
+    clean = '/user/remove [find name~"^tik-e2e-"]; /user/group/remove [find name~"^tik-e2e-"]; /user/remove [find name=tik-ssh-test]'
+    ros(clean, d2)
+    # least privilege as the setup commands describe: a read-only reader, and a writer without `policy`
+    ros(f'/user/group/add name=tik-e2e-read policy=read,api,test; /user/add name=tik-e2e-read group=tik-e2e-read password="{rpw}"; '
+        f'/user/group/add name=tik-e2e-write policy=read,write,api,test; /user/add name=tik-e2e-write group=tik-e2e-write password="{wpw}"; '
+        f'/user/add name=tik-ssh-test group=read disabled=yes password="{rpw}x"', d2)
+    ident_a = (wait(c, "/api/v1/snapshot", lambda d: True) or {}).get("identity")
+    ident_b = ros(":put [/system/identity/get name]", d2).strip()
+
+    s, r = c.call("POST", "/api/v1/sites", {"name": "Site B"})
+    f += check("sites: add a router", s == 200, r)
+    sid = r["id"]
+    c.site = sid
+    s, p = c.call("POST", "/api/v1/router/probe", {"host": "127.0.0.1", "port": 8729 + off2})
+    s, r = c.call("POST", "/api/v1/router", {"host": "127.0.0.1", "port": 8729 + off2, "pin": p.get("pin", ""), "mode": "read-write",
+                                             "reader": {"user": "tik-e2e-read", "password": rpw}, "writer": {"user": "tik-e2e-write", "password": wpw}, "confirm_write": True})
+    f += check("sites: connect it (reader + writer)", s == 200, r)
+    snap = wait(c, "/api/v1/snapshot", lambda d: True)
+    f += check("sites: live data comes from that router", bool(snap) and snap.get("identity") == ident_b != ident_a, f"{ident_a} / {ident_b} / {snap and snap.get('identity')}")
+    c.site = ""
+    f += check("sites: main router unchanged", c.call("GET", "/api/v1/snapshot")[1].get("identity") == ident_a)
+    c.site = sid
+    leaked = [x for x in (json.dumps(c.call("GET", "/api/v1/router")[1]), json.dumps(c.call("GET", "/api/v1/sites")[1]), json.dumps(c.call("GET", "/api/v1/me")[1]), open(os.path.join(data, "state.json")).read()) if rpw in x or wpw in x]
+    f += check("sites: no password in responses or state.json", not leaked)
+
+    # Safe apply is per router, and a change can't hop routers
+    s, _ = c.call("POST", "/api/v1/drift/baseline", {})
+    f += check("drift: save blueprint", s == 200)
+    before_a, before_b = export(), export(d2)
+    s, p = c.call("POST", "/api/v1/apply/preview", {"intent": {"kind": "dns-record", "name": "siteb.lan", "address": "192.168.88.62"}})
+    c.site = ""
+    s2, _ = c.call("POST", "/api/v1/apply/start", {"id": p["id"]})
+    f += check("sites: change can't run on another router", s2 == 404, s2)
+    c.site = sid
+    s, r = c.call("POST", "/api/v1/apply/start", {"id": p["id"]})
+    f += check("sites: change lands on its router only", s == 200 and export(d2) != before_b and export() == before_a, r)
+    d = wait(c, "/api/v1/drift", lambda d: any(x["menu"] == "dnsStatic" and any(y.get("name") == "siteb.lan" for y in x["added"]) for x in d["changes"]), 90)
+    f += check("drift: the new DNS record shows as drift", d is not None)
+    s, r = c.call("POST", "/api/v1/apply/revert", {"id": p["id"]})
+    f += check("sites: revert restores that router", s == 200 and export(d2) == before_b, r)
+    d = wait(c, "/api/v1/drift", lambda d: d["changes"] == [], 90)
+    f += check("drift: none after the revert", d is not None, c.call("GET", "/api/v1/drift")[1])
+
+    # /user/ssh-keys needs the `policy` policy: this writer has none, so the router refuses
+    s, p = c.call("POST", "/api/v1/apply/preview", {"intent": {"kind": "ssh-key", "user": "tik-ssh-test", "label": "laptop", "key": SSH_ED}})
+    s, r = c.call("POST", "/api/v1/apply/start", {"id": p.get("id", "")})
+    f += check("ssh-key: refused without the policy policy", s != 200 and "permission" in json.dumps(r) and export(d2) == before_b, r)
+
+    # API keys: read-only, real data, per router
+    c.site = ""
+    s, r = c.call("POST", "/api/v1/apikeys", {"name": "e2e"})
+    k = Client()
+    k.bearer = r.get("key")
+    s, snap = k.call("GET", "/api/v1/snapshot")
+    f += check("api key: reads the router", s == 200 and snap.get("identity") == ident_a)
+    k.site = sid
+    s, snap = k.call("GET", "/api/v1/snapshot")
+    f += check("api key: reads the second router too", s == 200 and snap.get("identity") == ident_b)
+    f += check("api key: can't write", k.call("POST", "/api/v1/apply/preview", {"intent": {"kind": "dns-record", "name": "x.lan", "address": "192.168.88.63"}})[0] in (401, 403))
+
+    # retention and history
+    s, _ = c.call("PUT", "/api/v1/retention", {"days": 7})
+    f += check("retention: set and read back", s == 200 and c.call("GET", "/api/v1/retention")[1].get("days") == 7)
+    f += check("retention: history served", c.call("GET", "/api/v1/history?range=day")[0] == 200)
+
+    # a viewer sees router data (incl. router users) and can't change anything
+    c.call("POST", "/api/v1/admins", {"name": "e2e-viewer", "password": "a long viewer password", "role": "viewer"})
+    v = Client()
+    v.call("POST", "/api/v1/login", {"name": "e2e-viewer", "password": "a long viewer password"})
+    s, snap = v.call("GET", "/api/v1/snapshot")
+    f += check("viewer: sees router users", s == 200 and any(u.get("name") == "admin" for u in snap.get("users", [])))
+    s, p = v.call("POST", "/api/v1/apply/preview", {"intent": {"kind": "dns-record", "name": "x.lan", "address": "192.168.88.63"}})
+    f += check("viewer: can't apply", s != 200 or v.call("POST", "/api/v1/apply/start", {"id": p["id"]})[0] == 403)
+    f += check("viewer: can't add routers", v.call("POST", "/api/v1/sites", {"name": "x"})[0] == 403)
+
+    # removing the site forgets its credentials
+    s, _ = c.call("DELETE", f"/api/v1/sites?id={sid}")
+    c.site = sid
+    f += check("sites: removed router is gone", s == 200 and c.call("GET", "/api/v1/me")[0] == 404 and sid not in open(os.path.join(data, "state.json")).read())
+    c.site = ""
+    ros(clean, d2)
+    return f
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--bin", default=os.path.join(HERE, "..", "server", "target", "release", "tikontrol"))
     ap.add_argument("--only", default="")
+    ap.add_argument("--sites", default="", help="second CHR as DIR:OFFSET, e.g. ~/.cache/tikontrol-chr-b:600")
     a = ap.parse_args()
     only = set(filter(None, a.only.split(",")))
     data = tempfile.mkdtemp(prefix="tik-e2e-")
@@ -216,9 +343,9 @@ def main():
             ros(cmd)
         c = Client()
         pw = open(os.path.join(DIR, "admin.pw")).read().strip()
-        s, p = c.call("POST", "/api/v1/setup/probe", {"host": "127.0.0.1", "port": 8729})
+        s, p = c.call("POST", "/api/v1/setup/probe", {"host": "127.0.0.1", "port": API})
         assert s == 200, p
-        s, r = c.call("POST", "/api/v1/setup/router", {"host": "127.0.0.1", "port": 8729, "pin": p["pin"], "user": "admin", "password": pw})
+        s, r = c.call("POST", "/api/v1/setup/router", {"host": "127.0.0.1", "port": API, "pin": p["pin"], "user": "admin", "password": pw})
         assert s == 200, r
         s, r = c.call("PUT", "/api/v1/router/mode", {"mode": "read-write", "confirm_write": True})
         assert s == 200, r
@@ -270,6 +397,9 @@ def main():
             ok = not problems
             fails += not ok
             print(f"{'PASS' if ok else 'FAIL'} {name:46} {'' if ok else '; '.join(problems)}")
+        if a.sites:
+            d2, off2 = a.sites.rsplit(":", 1)
+            fails += sites(c, os.path.expanduser(d2), int(off2), data)
     finally:
         srv.terminate()
         shutil.rmtree(data, ignore_errors=True)
