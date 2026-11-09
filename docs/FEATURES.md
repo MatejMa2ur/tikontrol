@@ -11,7 +11,7 @@ Clean-room: we copy the behaviour, never the assets.
 **Backing:** `ROS` = RouterOS API on the router · `CMR` = MikroTik CMR server · `tik` = our own logic/DB · `✗` = nothing can back it
 
 <!-- progress:start -->
-**Progress:** 9 ✅ · 193 🟨 · 17 🎨 · 7 ⬜ · 8 ➖ (234 items, 4% done)
+**Progress:** 20 ✅ · 184 🟨 · 17 🎨 · 5 ⬜ · 8 ➖ (234 items, 9% done)
 <!-- progress:end -->
 
 ---
@@ -101,8 +101,8 @@ Clean-room: we copy the behaviour, never the assets.
 | Per-client apps / domains (flow destinations per client, named from the DNS cache; the cache itself has no client field) | tik flows + DNS cache (CMR is per-device) | 3 | 🟨 |
 | Rename / alias, custom icon, notes | tik | 1 | 🟨 |
 | Fixed IP (reservation) | ROS lease make-static | 2 | 🟨 |
-| Local DNS record for client | ROS `/ip/dns/static` | 2 | 🟨 |
-| Block / unblock | ROS address-list + filter | 2 | 🟨 |
+| Local DNS record for client | ROS `/ip/dns/static` | 2 | ✅ |
+| Block / unblock | ROS address-list + filter | 2 | ✅ |
 | Pause internet / schedules | ROS kid-control | 2 | 🟨 |
 | Speed limit (client groups) | ROS simple queues | 2 | 🟨 |
 | "Why is this client on 2.4 GHz?": reasons, band history from the log, Safe apply fixes (channel 36, 40 MHz, own 5 GHz SSID, signal-range access list) | tik from log + monitor · ROS wireless/wifi | 3 | 🟨 |
@@ -247,11 +247,11 @@ Clean-room: we copy the behaviour, never the assets.
 ## Routing
 | Feature | Backing | Phase | Status |
 |---|---|---|---|
-| Port forwarding | ROS NAT dst-nat | 2 | 🟨 |
-| Static routes | ROS `/ip/route` | 2 | 🟨 |
+| Port forwarding | ROS NAT dst-nat | 2 | ✅ |
+| Static routes | ROS `/ip/route` | 2 | ✅ |
 | Policy-based routes | ROS routing rules | 3 | 🟨 |
-| UPnP / NAT-PMP | ROS `/ip/upnp` | 2 | 🟨 |
-| Local DNS records | ROS dns static | 2 | 🟨 |
+| UPnP / NAT-PMP | ROS `/ip/upnp` | 2 | ✅ |
+| Local DNS records | ROS dns static | 2 | ✅ |
 | Dynamic routing (OSPF / BGP) | ROS (advanced: show only) | 4 | 🟨 |
 
 ## Profiles
@@ -288,7 +288,7 @@ Clean-room: we copy the behaviour, never the assets.
 | Trusted HTTPS: local CA (name-constrained) signs a 397-day server cert, auto-renewed; CA download + per-device trust steps | tik `/api/v1/ca.crt` | 2 | ✅ |
 | Device auth / SSH settings, service hardening | ROS `/ip/service` | 2 | 🟨 |
 | Debug tools: ping, traceroute, packet capture | ROS `/ping`, `/tool/traceroute`, sniffer | 3 | 🟨 |
-| Safe apply (auto-revert) | tik + ROS scheduler | 3 | 🟨 |
+| Safe apply (auto-revert) | tik + ROS scheduler | 3 | ✅ |
 | "Show in RouterOS" for every object | tik | 2 | 🟨 |
 
 ## Platform
@@ -301,7 +301,7 @@ Clean-room: we copy the behaviour, never the assets.
 | Runs as RouterOS container (arm/v7, arm64) | tik build | 1 | 🟨 |
 | Runs on Docker (home server) | tik build | 0 | 🟨 |
 | One-paste RouterOS installer (`deploy/install.rsc`, checks, api-ssl, App, static lease, DNS) and uninstaller ([INSTALL.md](INSTALL.md)) | tik + ROS `/app` | 1 | 🟨 |
-| CHR dev/test router | – | 0 | ⬜ |
+| CHR dev/test router (`src/scripts/chr.sh`, QEMU) | – | 0 | ✅ |
 
 ## Themes
 Not a UniFi feature: this is our own addition. Light or dark, the colour theme and the design theme are three separate choices. Themes are sets of CSS variables, so they need no router support.
@@ -331,15 +331,15 @@ Not a UniFi feature: this is our own addition. The router enforces it, not tikon
 | Feature | Backing | Phase | Status |
 |---|---|---|---|
 | Choose read-only or read and write at setup, with read-only as the default | tik | 1 | 🟨 |
-| Router-enforced read-only: connect with a user that has no `write` policy | ROS user groups | 1 | 🟨 |
+| Router-enforced read-only: connect with a user that has no `write` policy | ROS user groups | 1 | ✅ |
 | Guided setup: show the commands to create the read-only group and user | tik + ROS | 1 | 🟨 |
-| One-step setup: sign in with a MikroTik admin, tikontrol creates its read-only group and user | tik + ROS | 1 | 🟨 |
+| One-step setup: sign in with a MikroTik admin, tikontrol creates its read-only group and user | tik + ROS | 1 | ✅ |
 | Detect the connected user's real policies and show them, instead of trusting a setting | ROS `/user` | 1 | 🟨 |
 | Read-only badge, with edit controls disabled and the reason shown | tik | 1 | 🟨 |
 | Store no write credential in read-only mode | tik | 1 | ✅ |
 | Switching to read and write needs a new credential and an explicit confirmation | tik | 2 | 🟨 |
 | MCP follows the same mode: no proposed changes in read-only mode | tik | 2 | 🟨 |
-| Test on CHR that the router rejects writes from the read-only user | tik | 0 | ⬜ |
+| Test on CHR that the router rejects writes from the read-only user | tik | 0 | ✅ |
 
 ## AI assistants (MCP)
 Not a UniFi feature: this is our own addition. An MCP server lets an AI assistant query tikontrol and propose changes.

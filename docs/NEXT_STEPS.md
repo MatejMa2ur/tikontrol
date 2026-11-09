@@ -29,7 +29,6 @@ Read-only only. Make no changes to a live router, and test anything that writes 
 
 From [FEASIBILITY.md](FEASIBILITY.md):
 
-- Does a read-only user really get rejected on every write?
 - Do dotted names such as `channel.band` work in `proplist`?
 - Can a container reach its own router's API (8729) and REST?
 - How does `/safe-mode` behave over the binary API?
@@ -37,16 +36,38 @@ From [FEASIBILITY.md](FEASIBILITY.md):
 - What does polling cost on small hardware?
 - How does a RouterOS App appear in WinBox, and is its link clickable? (See [research/winbox_integration.md](research/winbox_integration.md))
 
-## Backend: written but not yet tested on RouterOS
+## Test router (CHR)
 
-The Rust server in `src/server/` is implemented and unit-tested against a fake router only. Nothing below has run
-on real RouterOS or CHR, which is why those rows in FEATURES.md are 🟨, not ✅. Test on a disposable CHR first.
+`src/scripts/chr.sh` boots a disposable CHR (RouterOS arm64) in QEMU and forwards its API to localhost (api-ssl on
+8729). It runs under TCG emulation, because with HVF on Apple Silicon the CHR kernel panics. A fresh CHR has no
+API-SSL certificate and no `WAN` interface list: create both before testing. QEMU's user network puts NAT between
+tikontrol and the router, like Docker's bridge network does.
 
-- **Read-only enforcement:** create the reader with the setup commands, then prove every write is rejected by the router.
-- **API details:** dotted proplists (`channel.band`), `place-before` with an `.id` for drop rules, `!trap` handling of
-  each intent, and the snapshot queries' field names on 7.18+ (including the optional CMR fields).
-- **Safe apply:** the scheduler `start-date` format (old `jan/02/2026` vs new `2026-01-02`), whether `policy=read,write,test`
-  is enough for every inverse, behaviour under device mode, and that the revert really fires after 5 minutes.
+## Verified on CHR 7.25.1
+
+Driven through tikontrol's HTTP API, the same endpoints the UI calls. The UI itself was not clicked through.
+
+- **One-step setup** creates the reader group and user. It now restricts the reader to the address the router sees
+  (`/user/active`), not tikontrol's own address. Before this fix, setup behind NAT locked the reader out.
+- **Read-only enforcement:** a user in the reader group gets `not enough permissions` for every write tried:
+  identity, address, firewall, user and group, own password, services, scheduler, script, reboot, file and DNS flush.
+  `/export` over the API returns nothing, and a WireGuard private key never appears in any answer.
+- **Safe apply:** the new `start-date` format is accepted, and `policy=read,write,test` is enough for every inverse
+  tried. Keep and Revert both remove the revert job. With no confirmation, the router reverted the change by
+  itself after 5 minutes and logged it.
+- **Intents** work end to end, including keep and revert: block and unblock, pause and resume, limit and unlimit,
+  DNS record, port forward, static route, UPnP, ad-list toggle, disable services and WireGuard peer.
+- **Fixed in the same pass:**
+  - Fixed IP silently did nothing when there was no lease.
+  - Reverting a Fixed IP on a lease that was already static deleted that lease. tikontrol now refuses the change.
+  - Kick only knew the legacy `wireless` path. It now also handles `wifi`.
+  - The change history was ordered by random id instead of by time.
+
+## Backend: still to test on RouterOS
+
+- **API details:** dotted proplists (`channel.band`) and Wi-Fi intents need wireless hardware (CHR has none), plus
+  the optional CMR fields. Fixed IP on a dynamic lease and Kick have only been tested in their refusal paths.
+- **Safe apply:** behaviour under device mode; revert after a router reboot inside the window.
 - **Inverses not complete:** Wi-Fi passphrase and PPPoE changes restore values read beforehand; check none of these
   secrets end up in the scheduler script or the log, and decide whether such changes should be non-revertible instead.
 - **Containers:** whether a container can reach its own router's API on 8729; `memory-high` vs `memory-max` on the
