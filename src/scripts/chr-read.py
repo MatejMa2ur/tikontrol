@@ -1,0 +1,160 @@
+#!/usr/bin/env python3
+"""Read-feature checks against a running tikontrol that is set up (read-only) with a disposable CHR.
+
+Signs in as the CHR admin (password from $CHR_DIR/admin.pw, never printed) and checks what the read pages and
+tools return: router data, the router's own refusal of writes as the reader, debug tools, console allow-list,
+API keys (GET only) and MCP (read tools, privacy mode, no secrets). It changes nothing on the router; it
+enables MCP and creates an API key in tikontrol and removes both again.
+
+    CHR_DIR=~/.cache/tikontrol-chr-ui python3 src/scripts/chr-read.py [https://127.0.0.1:9643]
+
+Expects the fictional activity this repo's CHR notes describe: static leases "Living room TV"
+(02:00:00:AA:BB:20 / 192.168.88.20), a netwatch, a WireGuard peer, a backup, a failed login among the last 40 log lines.
+"""
+import http.cookiejar, json, os, re, ssl, sys, time, urllib.error, urllib.request
+
+BASE = sys.argv[1] if len(sys.argv) > 1 else "https://127.0.0.1:9643"
+DIR = os.path.expanduser(os.environ.get("CHR_DIR", "~/.cache/tikontrol-chr"))
+PW = open(os.path.join(DIR, "admin.pw")).read().strip()
+CTX = ssl._create_unverified_context()
+fails = []
+
+
+def check(ok, what):
+    print(("ok   " if ok else "FAIL ") + what, flush=True)
+    if not ok:
+        fails.append(what)
+
+
+class Client:
+    def __init__(self):
+        self.op = urllib.request.build_opener(urllib.request.HTTPSHandler(context=CTX), urllib.request.HTTPCookieProcessor(http.cookiejar.CookieJar()))
+        self.csrf = None
+
+    def call(self, m, p, body=None, headers=None):
+        h = {"content-type": "application/json", "origin": BASE}
+        if self.csrf:
+            h["x-csrf-token"] = self.csrf
+        h.update(headers or {})
+        h = {k: v for k, v in h.items() if v is not None}  # None drops a header (MCP clients send no Origin)
+        r = urllib.request.Request(BASE + p, data=None if body is None else json.dumps(body).encode(), method=m, headers=h)
+        try:
+            with self.op.open(r, timeout=180) as x:
+                s, t = x.status, x.read()
+        except urllib.error.HTTPError as e:
+            s, t = e.code, e.read()
+        try:
+            d = json.loads(t or b"null")
+        except ValueError:
+            d = t.decode(errors="replace")
+        if isinstance(d, dict) and d.get("csrf"):
+            self.csrf = d["csrf"]
+        return s, d
+
+
+c = Client()
+s, me = c.call("POST", "/api/v1/login", {"name": "admin", "password": PW})
+check(s == 200, "sign in with the MikroTik admin")
+s, me = c.call("GET", "/api/v1/me")
+pol = (me.get("policies") or {}).get("policy", [])
+check(me.get("readOnly") is True and pol and not {"write", "sensitive", "password", "policy", "reboot"} & set(pol), f"read-only badge: detected reader policies {pol}")
+
+s, d = c.call("GET", "/api/v1/snapshot")
+check(s == 200 and d.get("identity") == "chr-test", "snapshot from the CHR")
+check(any(l.get("comment") == "Living room TV" for l in d.get("leases", [])), "static DHCP lease")
+check(any(b.get("name", "").startswith("test-backup") for b in d.get("backups", [])), "backups list")
+check(len(d.get("netwatch", [])) >= 2 and len(d.get("wgPeers", [])) >= 1, "netwatch + WireGuard peers")
+check(any("login failure" in l.get("message", "") for l in d.get("log", [])), "failed login kept in the log (Security)")
+check(d.get("update", {}).get("installed-version") and d.get("resource", {}).get("version"), "updates: installed version + channel")
+check(isinstance(d.get("latency"), dict), "latency kept between pings")
+check(not any(k in json.dumps(d) for k in ("private-key", PW)), "snapshot carries no private key or admin password")
+
+for p in ["/api/v1/history?range=1h", "/api/v1/health/internet", "/api/v1/events", "/api/v1/alerts", "/api/v1/clients/offline", "/api/v1/flows", "/api/v1/admins", "/api/v1/retention"]:
+    s, _ = c.call("GET", p)
+    check(s == 200, f"GET {p}")
+s, t = c.call("GET", "/api/v1/events?format=csv")
+check(s == 200 and str(t).startswith("time,category,level,text"), "events CSV export")
+s, a = c.call("GET", "/api/v1/alerts")
+open_ = [h for h in a.get("history", []) if not h.get("ack")]
+check(s == 200 and open_, f"alarm history: {len(open_)} open (a fresh CHR has insecure services on)")
+if open_:
+    s, _ = c.call("POST", "/api/v1/alerts/ack", {"id": open_[0]["id"]})
+    check(s == 200 and c.call("GET", "/api/v1/alerts")[1].get("unacked") == len(open_) - 1, "acknowledge an alarm")
+
+s, r = c.call("POST", "/api/v1/tools/ping", {"host": "10.0.2.2", "count": 2})
+check(s == 200, f"debug ping ({s})")
+time.sleep(2.2)  # the debug tools allow one run per 2 s per session
+s, r = c.call("POST", "/api/v1/tools/traceroute", {"host": "10.0.2.2"})
+check(s == 200, f"debug traceroute ({s})")
+time.sleep(2.2)
+s, r = c.call("POST", "/api/v1/tools/dns", {"name": "example.com"})
+check(s == 200, f"debug DNS lookup ({s})")
+time.sleep(2.2)
+s, r = c.call("POST", "/api/v1/tools/console", {"command": "/ip/route/print"})
+check(s == 200 and "10.0.2.2" in json.dumps(r), "console: /ip/route/print")
+time.sleep(2.2)
+s, r = c.call("POST", "/api/v1/tools/console", {"command": "/system/reboot"})
+check(s == 400, "console refuses /system/reboot")
+s, r = c.call("POST", "/api/v1/apply/preview", {"intent": {"kind": "dns-record", "name": "x.lan", "address": "192.168.88.9"}})
+if s == 200:
+    s, r = c.call("POST", "/api/v1/apply/start", {"id": r["id"]})
+check(s >= 400, f"read-only: applying a change is refused ({s} {r.get('error') if isinstance(r, dict) else ''})")
+
+# API keys: read-only bearer access, never writes
+s, k = c.call("POST", "/api/v1/apikeys", {"name": "chr-read-check"})
+check(s == 200 and k.get("key"), "create API key")
+bare = Client()
+s, _ = bare.call("GET", "/api/v1/snapshot", headers={"authorization": f"Bearer {k.get('key')}"})
+check(s == 200, "API key reads the snapshot")
+s, _ = bare.call("POST", "/api/v1/tools/ping", {"host": "10.0.2.2"}, headers={"authorization": f"Bearer {k.get('key')}"})
+check(s in (401, 403), f"API key cannot POST ({s})")
+s, _ = c.call("DELETE", "/api/v1/apikeys?name=chr-read-check")
+check(s == 200, "delete API key")
+
+# MCP
+s, m = c.call("POST", "/api/v1/mcp/enable", {})
+tok = m.get("token") if isinstance(m, dict) else None
+check(s == 200 and tok and m.get("privacy") is True, "enable MCP (privacy on by default)")
+n = [0]
+
+
+def rpc(method, params=None):
+    n[0] += 1
+    s, r = bare.call("POST", "/mcp", {"jsonrpc": "2.0", "id": n[0], "method": method, "params": params or {}}, headers={"authorization": f"Bearer {tok}", "origin": None})
+    return r.get("result") if isinstance(r, dict) else None
+
+
+init = rpc("initialize", {"protocolVersion": "2025-06-18", "capabilities": {}, "clientInfo": {"name": "chr-read", "version": "1"}})
+check(bool(init), "MCP initialize")
+tools = [t["name"] for t in (rpc("tools/list") or {}).get("tools", [])]
+check(len(tools) > 3, f"MCP tools: {', '.join(tools)}")
+check(not any(t.startswith("propose") for t in tools), "read-only: MCP offers no proposed changes")
+
+
+def all_tools():
+    out = ""
+    for t in sorted(tools, key=lambda t: t != "list_clients"):  # list_clients first: get_client takes a MAC from it
+        if t.startswith("propose"):
+            continue
+        mac = re.search(r'\\"mac\\": ?\\"([^\\]+)\\"', out)
+        r = rpc("tools/call", {"name": t, "arguments": {"mac": mac.group(1)} if t == "get_client" and mac else {}})
+        check(r is not None and not r.get("isError"), f"MCP {t}")
+        out += json.dumps(r)
+    return out
+
+
+private = all_tools()
+for secret in (PW, "Living room TV", "02:00:00:AA:BB:20", "192.168.88.20", "private-key", "password\": \""):
+    check(secret not in private, f"privacy mode hides {'the admin password' if secret == PW else secret!r}")
+s, _ = c.call("POST", "/api/v1/mcp/privacy", {"privacy": False})
+plain = all_tools()
+check("Living room TV" in plain, "privacy off shows real names")
+check(PW not in plain and "private-key" not in plain and tok not in plain, "MCP never returns credentials")
+s, _ = bare.call("POST", "/mcp", {"jsonrpc": "2.0", "id": 1, "method": "tools/list"}, headers={"authorization": "Bearer wrong", "origin": None})
+check(s == 401, "MCP refuses a wrong token")
+c.call("POST", "/api/v1/mcp/disable", {})
+s, _ = bare.call("POST", "/mcp", {"jsonrpc": "2.0", "id": 1, "method": "tools/list"}, headers={"authorization": f"Bearer {tok}", "origin": None})
+check(s == 404, "MCP off again: old token dead")
+
+print(f"\n{len(fails)} failed" if fails else "\nall read checks passed")
+sys.exit(1 if fails else 0)
