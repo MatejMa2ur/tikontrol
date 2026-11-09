@@ -245,7 +245,7 @@ fn setup_open(app: &App, host: &str, port: u16) -> Result<(), Resp> {
     if !valid_host(host) || port == 8728 {
         return Err(Resp::error(400, "invalid router address (API-SSL only)"));
     }
-    if router_hint().is_some_and(|h| h != host) {
+    if router_hint().is_some_and(|h| hint_host(&h) != host) {
         return Err(Resp::error(403, "only the router tikontrol found can be used here; use the setup token for another one"));
     }
     Ok(())
@@ -514,6 +514,14 @@ fn me(app: &App, s: &Session) -> Resp {
 /// the router itself when tikontrol runs as a RouterOS container).
 fn router_hint() -> Option<String> {
     std::env::var("TIK_ROUTER").ok().filter(|h| !h.is_empty()).or_else(|| default_gateway(&std::fs::read_to_string("/proc/net/route").ok()?))
+}
+
+/// The host part of a `TIK_ROUTER` written as `host:port` (IPv4 or name; a bare IPv6 address stays whole).
+fn hint_host(h: &str) -> &str {
+    match h.split_once(':') {
+        Some((host, port)) if port.parse::<u16>().is_ok() => host,
+        _ => h,
+    }
 }
 
 /// Default gateway from Linux's /proc/net/route (addresses are little-endian hex).
@@ -984,9 +992,16 @@ pub mod tests {
     }
 
     fn one_step(app: &Arc<App>, user: &str, pw: &str) -> (Resp, String) {
-        let host = router_hint().unwrap_or("127.0.0.1".into());
+        let host = router_hint().map(|h| hint_host(&h).to_string()).unwrap_or("127.0.0.1".into());
         let pin = "a".repeat(64);
         (handle(app, req("POST", "/api/v1/setup/router", &format!(r#"{{"host":"{host}","pin":"{pin}","user":"{user}","password":"{pw}"}}"#))), host)
+    }
+
+    #[test]
+    fn router_hint_may_carry_a_port() {
+        assert_eq!(hint_host("127.0.0.1:8929"), "127.0.0.1");
+        assert_eq!(hint_host("192.168.88.1"), "192.168.88.1");
+        assert_eq!(hint_host("fd00::1"), "fd00::1");
     }
 
     #[test]

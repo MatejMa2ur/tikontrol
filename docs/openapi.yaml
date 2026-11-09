@@ -59,7 +59,7 @@ paths:
     get:
       security: []
       summary: Liveness and whether first-run setup is needed (public)
-      responses: { '200': { description: ok, content: { application/json: { schema: { type: object, properties: { ok: { type: boolean }, version: { type: string }, needsSetup: { type: boolean }, routerHint: { type: string, nullable: true, description: 'only while setup is needed: TIK_ROUTER or the default gateway' } } } } } } }
+      responses: { '200': { description: ok, content: { application/json: { schema: { type: object, properties: { ok: { type: boolean }, version: { type: string }, needsSetup: { type: boolean }, routerHint: { type: string, nullable: true, description: 'only while setup is needed: TIK_ROUTER (host or host:port) or the default gateway' } } } } } } }
   /api/v1/ca.crt:
     get:
       security: []

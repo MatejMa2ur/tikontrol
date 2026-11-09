@@ -42,8 +42,10 @@
   let password2 = $state('')
 
   // router
-  let host = $state(untrack(() => me?.routerHint ?? hint ?? '')) // initial value only
-  let port = $state(8729)
+  // initial values only; the hint may be `host:port` (TIK_ROUTER)
+  const hinted = untrack(() => (me?.routerHint ?? hint ?? '').match(/^([^:]*)(?::(\d+))?$/))
+  let host = $state(hinted?.[1] ?? untrack(() => me?.routerHint ?? hint ?? ''))
+  let port = $state(Number(hinted?.[2] ?? 8729))
   let pin = $state('')
   let pinOk = $state(false)
   let write = $state(false)
@@ -56,6 +58,7 @@
   let writer = $state({ user: 'tikontrol-write', password: '' })
   let commands = $state<string[]>([])
   $effect(() => {
+    if (step !== 'router') return // needs a session; the one-step form has none yet
     const q = `?write=${stored ? 1 : 0}${tikIp ? `&ip=${encodeURIComponent(tikIp)}` : ''}`
     api<{ commands: string[] }>(`/router/setup-commands${q}`).then((r) => (commands = r.commands)).catch(() => {})
   })

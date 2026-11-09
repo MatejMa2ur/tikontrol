@@ -24,7 +24,7 @@ All settings are environment variables.
 
 ## First start
 
-When tikontrol knows the router (`TIK_ROUTER`, or the default gateway, which is the router when tikontrol runs as a RouterOS container) and API-SSL answers there, setup is one form:
+When tikontrol knows the router (`TIK_ROUTER`, optionally `host:port` for a non-default API-SSL port, or the default gateway, which is the router when tikontrol runs as a RouterOS container) and API-SSL answers there, setup is one form:
 
 1. Open `https://<host>:8443`. tikontrol shows the router address and its certificate SHA-256.
 2. Sign in with a **full MikroTik admin** account (`read`, `write`, `policy`, `api`, `test`). Anything less is refused and nothing is written.
