@@ -92,7 +92,10 @@ pub fn route(app: &Arc<App>, req: &Req, s: &Session) -> Option<Resp> {
     Some(match (req.method.as_str(), req.path.as_str()) {
         ("GET", "/api/v1/apply") => {
             let c = lock(changes());
-            let list: Vec<_> = c.iter().rev().filter(|(_, c)| c.state != State::Previewed).take(20).map(|(id, c)| json!({ "id": id, "change": state_json(c) })).collect();
+            // ids are random, so order by time: newest first
+            let mut v: Vec<_> = c.iter().filter(|(_, c)| c.state != State::Previewed).collect();
+            v.sort_by_key(|(_, c)| std::cmp::Reverse(c.created));
+            let list: Vec<_> = v.into_iter().take(20).map(|(id, c)| json!({ "id": id, "change": state_json(c) })).collect();
             Resp::json(200, &json!(list))
         }
         ("POST", "/api/v1/apply/preview") => {

@@ -256,6 +256,15 @@ pub fn compile(i: &Intent, current: &mut dyn Router) -> Result<Plan, String> {
         FixedIp { mac } => {
             let mac = norm_mac(mac)?;
             let lease = "/ip/dhcp-server/lease";
+            // `find` matching nothing would "succeed" without a change, and the undo removes the lease,
+            // so an already static one (maybe made by hand) would be deleted on revert
+            let leases = current.run(&Cmd::new("/ip/dhcp-server/lease/print").proplist(&["dynamic"]).query("mac-address", &mac))?;
+            if leases.is_empty() {
+                return Err(format!("{mac} has no DHCP lease on this router, so there is no address to fix"));
+            }
+            if leases.iter().any(|l| l.get("dynamic").map(String::as_str) != Some("true")) {
+                return Err(format!("{mac} already has a fixed IP"));
+            }
             let c = format!("tik:fixed:{mac}");
             let ops = vec![Op::on(lease, "make-static", "mac-address", &mac, vec![]), Op::on(lease, "set", "mac-address", &mac, vec![("comment", c.clone())])];
             // removing the static lease lets the client get a dynamic one again
@@ -263,7 +272,12 @@ pub fn compile(i: &Intent, current: &mut dyn Router) -> Result<Plan, String> {
         }
         KickWifi { mac } => {
             let mac = norm_mac(mac)?;
-            let ops = vec![Op::on("/interface/wireless/registration-table", "remove", "mac-address", &mac, vec![])];
+            // legacy `wireless` (hAP ac²) or the newer `wifi` package: use whichever lists the client
+            let path = ["/interface/wireless/registration-table", "/interface/wifi/registration-table"]
+                .into_iter()
+                .find(|p| current.run(&Cmd::new(&format!("{p}/print")).proplist(&["mac-address"]).query("mac-address", &mac)).is_ok_and(|r| !r.is_empty()))
+                .ok_or_else(|| format!("{mac} is not connected over Wi-Fi to this router"))?;
+            let ops = vec![Op::on(path, "remove", "mac-address", &mac, vec![])];
             Plan { title: format!("Reconnect {mac}"), risk: Risk::Low, warnings: vec![], ops, undo: vec![], revertible: false }
         }
         DnsRecord { name, address } => {
@@ -538,6 +552,22 @@ mod tests {
         let p = compile(&Intent::BlockClient { mac: "AA:BB:CC:DD:EE:FF".into() }, &mut f).unwrap();
         assert!(p.cli()[0].ends_with("place-before=*2A"));
         assert_eq!(p.undo_cli(), [r#"/ip/firewall/filter/remove [find comment="tik:block:AA:BB:CC:DD:EE:FF"]"#]);
+    }
+
+    #[test]
+    fn client_actions_need_the_client_on_the_router() {
+        let m = "AA:BB:CC:DD:EE:FF";
+        // found on CHR: with no lease / no Wi-Fi registration these used to "succeed" without a change
+        assert!(compile(&Intent::FixedIp { mac: m.into() }, &mut Fake::default()).unwrap_err().contains("no DHCP lease"));
+        assert!(compile(&Intent::KickWifi { mac: m.into() }, &mut Fake::default()).unwrap_err().contains("not connected over Wi-Fi"));
+        let mut f = Fake::default();
+        f.answers.insert("/ip/dhcp-server/lease/print".into(), Ok(vec![row(&[("dynamic", "false")])]));
+        assert!(compile(&Intent::FixedIp { mac: m.into() }, &mut f).unwrap_err().contains("already has a fixed IP"), "undo would delete a static lease");
+        f.answers.insert("/ip/dhcp-server/lease/print".into(), Ok(vec![row(&[("dynamic", "true")])]));
+        f.answers.insert("/interface/wireless/registration-table/print".into(), Err("no such command prefix".into()));
+        f.answers.insert("/interface/wifi/registration-table/print".into(), Ok(vec![row(&[("mac-address", m)])]));
+        assert!(compile(&Intent::FixedIp { mac: m.into() }, &mut f).unwrap().cli()[0].starts_with("/ip/dhcp-server/lease/make-static"));
+        assert!(compile(&Intent::KickWifi { mac: m.into() }, &mut f).unwrap().cli()[0].starts_with("/interface/wifi/registration-table/remove"));
     }
 
     #[test]
