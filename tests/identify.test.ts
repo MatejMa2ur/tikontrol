@@ -1,7 +1,7 @@
 // Run from the repo root: node --test tests/identify.test.ts
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
-import { guessDevice, isPrivateMac, makerOf } from '../src/ui/src/lib/identify.ts'
+import { catOf, guessDevice, isPrivateMac, makerOf } from '../src/ui/src/lib/identify.ts'
 
 test('maker from the MAC prefix, none for private addresses', () => {
   assert.equal(makerOf('00:03:93:12:34:56'), 'Apple')
@@ -22,4 +22,13 @@ test('type and OS guess from hostname, vendor class, maker and neighbours', () =
   assert.deepEqual(guessDevice({ ...base, neighbor: { platform: 'MikroTik', board: 'hAP ax2', version: '7.20' } }), { kind: 'devices', type: 'hAP ax2', os: 'MikroTik 7.20' })
   assert.equal(guessDevice({ priv: true, wired: false })?.kind, 'phone')
   assert.equal(guessDevice({ priv: false, wired: true }), undefined)
+})
+
+test('log lines get an events category', () => {
+  assert.equal(catOf(['system', 'error', 'critical'], 'login failure for user admin from 192.168.88.9 via ssh'), 'Security')
+  assert.equal(catOf(['system', 'info'], 'dhcp lease added by ssh-cmd:admin@192.168.88.9 (*1 = /ip dhcp-server lease add)'), 'Admin')
+  assert.equal(catOf(['system', 'info', 'account'], 'user admin logged in from 192.168.88.9 via winbox'), 'Admin')
+  assert.equal(catOf(['dhcp', 'info'], 'defconf assigned 192.168.88.20 for 02:00:00:AA:BB:20'), 'Clients')
+  assert.equal(catOf(['wireless', 'info'], '02:00:00:AA:BB:20@wlan1: connected'), 'WiFi')
+  assert.equal(catOf(['system', 'info'], 'wg-home link up'), 'System')
 })

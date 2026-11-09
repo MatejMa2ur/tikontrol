@@ -80,3 +80,10 @@ export function guessDevice(o: { hostname?: string; classId?: string; maker?: st
   if (o.priv && !o.wired) return g('phone', 'Phone or laptop', os)
   if (os) return g('unknown', '', os)
 }
+
+/** Events category of a RouterOS log line. */
+// "login failure for user x" is Security; "... added by ssh-cmd:admin@10.0.0.9 (...)" or "changed by winbox-..." is Admin
+export const catOf = (topics: string[], message = ''): 'Clients' | 'WiFi' | 'System' | 'Security' | 'Admin' =>
+  topics.includes('wireless') || topics.includes('wifi') ? 'WiFi' : topics.includes('dhcp') ? 'Clients'
+    : topics.includes('firewall') || /login failure/.test(message) ? 'Security'
+    : topics.includes('account') || / by [\w-]+:[^\s@]+@\S+/.test(message) ? 'Admin' : 'System'

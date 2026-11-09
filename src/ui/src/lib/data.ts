@@ -5,7 +5,7 @@
 import { simulateBe3 } from './be3'
 import { bandLabel, detectHardware, normalizeWifi, parseChannel, standardOf } from './hardware'
 import { preload } from './backend'
-import { guessDevice, isPrivateMac, makerOf, type Kind } from './identify'
+import { catOf, guessDevice, isPrivateMac, makerOf, type Kind } from './identify'
 export type { Kind }
 
 const files = import.meta.glob('./*.json', { eager: true, import: 'default' }) as Record<string, any>
@@ -74,7 +74,7 @@ export const bps = (n: number) => {
   return `${n < 10 && i ? n.toFixed(1) : Math.round(n)} ${u[i]}`
 }
 export const subtitle = (c: Client, shown: string) =>
-  [c.vendor ?? (c.privateMac ? 'Private Wi-Fi address' : c.hostname && c.hostname !== shown ? c.hostname : 'Unknown maker'), c.type].filter(Boolean).join(' · ')
+  [c.vendor ?? (c.privateMac ? (c.wired ? 'Private address' : 'Private Wi-Fi address') : c.hostname && c.hostname !== shown ? c.hostname : 'Unknown maker'), c.type].filter(Boolean).join(' · ')
 
 export function signalQuality(dbm?: number) {
   if (dbm == null) return { label: 'Wired', level: 'ok' as const }
@@ -156,7 +156,8 @@ const clients: Client[] = [...macs].filter(Boolean).map((mac) => {
 })
 
 const offline = [
-  ...arp.filter((a) => a.status !== 'reachable' && !macs.has(a['mac-address'])).map((a) => ({ mac: a['mac-address'] as string, ip: a.address as string, seen: a.status as string })),
+  // ARP entries on the WAN side (the ISP's gateway) and failed ones without a MAC are not clients
+  ...arp.filter((a) => a.status !== 'reachable' && a['mac-address'] && a.interface !== raw.wan?.[0]?.interface && !macs.has(a['mac-address'])).map((a) => ({ mac: a['mac-address'] as string, ip: a.address as string, seen: a.status as string })),
   ...leases.filter((l) => l.status !== 'bound').map((l) => ({ mac: l['mac-address'] as string, ip: l.address as string, seen: l['last-seen'] as string })),
 ].filter((o, i, all) => all.findIndex((x) => x.mac === o.mac) === i)
 
@@ -208,13 +209,11 @@ const ssids = [...new Set(wifi.map((w) => w.ssid))].map((ssid) => ({
   clients: clients.filter((c) => c.ssid === ssid).length,
 }))
 
-const catOf = (topics: string[]): Event['cat'] =>
-  topics.includes('wireless') ? 'WiFi' : topics.includes('dhcp') ? 'Clients' : topics.includes('account') ? 'Admin' : topics.includes('firewall') ? 'Security' : 'System'
 const nameFor = (mac: string) => clients.find((c) => c.mac === mac)?.name ?? mac
 const events: Event[] = log
   .map((l) => ({
     time: l.time,
-    cat: catOf(l.topics ?? []),
+    cat: catOf(l.topics ?? [], String(l.message)),
     level: (l.topics ?? []).includes('error') ? 'error' : (l.topics ?? []).includes('warning') ? 'warning' : 'info',
     // "AA:BB..@wlan2: connected, signal strength -84" -> "Alex's phone connected to 5 GHz (-84 dBm)"
     text: String(l.message).replace(/^([0-9A-F:]{17})@(w(?:lan|ifi)\d): (connected|disconnected)[^,]*(?:, registered to other interface)?, signal strength (-\d+)/,

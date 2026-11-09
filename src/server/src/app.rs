@@ -259,7 +259,13 @@ impl App {
         });
         let mut s = self.snap.write().unwrap_or_else(|e| e.into_inner());
         match result {
-            Ok((p, data)) => {
+            Ok((p, mut data)) => {
+                // latency is measured only every few polls: keep the last measurement in between
+                if data.get("latency").is_none() {
+                    if let (Some(lat), Some(o)) = (s.data.as_ref().and_then(|d| d.get("latency")), data.as_object_mut()) {
+                        o.insert("latency".into(), lat.clone());
+                    }
+                }
                 if let Some(lat) = data.get("latency").and_then(Value::as_object) {
                     let worst = lat.values().filter_map(|v| v["ms"].as_f64()).fold(0.0, f64::max);
                     *lock(&self.live.latency_ms) = worst;
@@ -350,6 +356,15 @@ pub mod tests {
         let s = app.snap.read().unwrap();
         assert_eq!(s.error, None);
         assert_eq!(s.data.as_ref().unwrap()["identity"], "TestRouter");
+    }
+
+    #[test]
+    fn polls_without_pings_keep_the_last_latency() {
+        let app = app_with_router("read,api,test", Mode::ReadOnly);
+        app.poll(true);
+        assert!(app.snap.read().unwrap().data.as_ref().unwrap().get("latency").is_some());
+        app.poll(false);
+        assert!(app.snap.read().unwrap().data.as_ref().unwrap().get("latency").is_some());
     }
 
     #[test]

@@ -321,7 +321,9 @@ pub fn snapshot(r: &mut dyn Router, with_latency: bool) -> Value {
 /// Same trimming as snapshot.py: keep the UI payload small.
 fn trim(out: &mut Map<String, Value>) {
     if let Some(Value::Array(log)) = out.get_mut("log") {
-        log.retain(|l| l["message"].as_str().is_some_and(|m| !m.contains("via ssh") && !m.contains("publickey accepted") && !m.contains("via api")));
+        // drop the API session noise (tikontrol's own polling logs in and out every few seconds), keep every login
+        // failure and other logins: they are admin activity and security events
+        log.retain(|l| l["message"].as_str().is_some_and(|m| !m.contains("publickey accepted") && !(m.contains("via api") && (m.contains(" logged in ") || m.contains(" logged out ")))));
         let n = log.len().saturating_sub(40);
         log.drain(..n);
     }
@@ -412,15 +414,15 @@ pub mod tests {
         f.answers.insert("/system/identity/print".into(), Ok(vec![row(&[("name", "Router")])]));
         f.answers.insert("/system/resource/print".into(), Ok(vec![row(&[("cpu-load", "3"), ("board-name", "hAP ac^2")])]));
         f.answers.insert("/ip/dhcp-client/print".into(), Ok(vec![row(&[("interface", "ether1"), ("address", "10.0.0.2/24")])]));
-        f.answers.insert("/log/print".into(), Ok(vec![row(&[("message", "user admin logged in via ssh"), ("topics", "system,info")]), row(&[("message", "x"), ("topics", "dhcp,info")])]));
+        f.answers.insert("/log/print".into(), Ok(vec![row(&[("message", "user tikontrol-read logged in from 10.0.0.9 via api"), ("topics", "system,info,account")]), row(&[("message", "login failure for user admin from 10.0.0.9 via api"), ("topics", "system,error,critical")]), row(&[("message", "x"), ("topics", "dhcp,info")])]));
         f.answers.insert("/interface/wireless/print".into(), Err("no such command prefix".into()));
         f.answers.insert("/ping".into(), Ok(vec![row(&[("avg-rtt", "9ms"), ("packet-loss", "0")])]));
         let s = snapshot(&mut f, true);
         assert_eq!(s["identity"], "Router");
         assert_eq!(s["resource"]["cpu-load"], 3);
         assert_eq!(s["wan"][0]["interface"], "ether1");
-        assert_eq!(s["log"].as_array().unwrap().len(), 1);
-        assert_eq!(s["log"][0]["topics"], json!(["dhcp", "info"]));
+        assert_eq!(s["log"].as_array().unwrap().len(), 2);
+        assert_eq!(s["log"][1]["topics"], json!(["dhcp", "info"]));
         assert_eq!(s["latency"]["Quad9"]["ms"], 9.0);
         assert!(s.get("wifi").is_none());
         assert_eq!(s["_errors"][0]["key"], "wifi");

@@ -2,6 +2,7 @@
   import { keep, kept } from '../lib/keep'
   import { events, clients, insights, isBackend, raw, type Event } from '../lib/data'
   import { review, apply } from '../lib/apply.svelte'
+  import { api } from '../lib/backend'
   import Ros from '../lib/Ros.svelte'
   import Icon from '../lib/Icon.svelte'
   import Tabs from '../lib/ui/Tabs.svelte'
@@ -13,8 +14,14 @@
   let { tab = 'events' }: { tab?: string } = $props()
 
   // ---- Events: router log + events we derive ourselves (client joined/left, admin changes) ----
-  const ownEvents: Event[] = clients.filter((c) => c.online && c.uptimeS != null && c.uptimeS < 3600).map((c) => ({ time: new Date(Date.now() - c.uptimeS! * 1000).toISOString().replace('T', ' ').slice(0, 19), cat: 'Clients', level: 'info', text: `${c.name} came online (${c.wired ? 'wired' : c.band})` }))
-  const all = $derived([...apply.done.map((d) => ({ time: new Date().toISOString().slice(0, 11) + d.at, cat: 'Admin' as const, level: 'info' as const, text: `Configuration changed: ${d.title}` })), ...ownEvents, ...events].sort((a, b) => b.time.localeCompare(a.time)))
+  // local "YYYY-MM-DD HH:MM:SS", the format of RouterOS log times, so everything sorts together
+  const local = (ms: number) => new Date(ms - new Date(ms).getTimezoneOffset() * 60000).toISOString().replace('T', ' ').slice(0, 19)
+  // with the server: the events it derived and stored (client joined/left/roamed, Internet down/back);
+  // without it: clients that came online in the last hour, from the snapshot
+  let stored = $state<Event[]>([])
+  if (isBackend) api<{ t: number; cat: Event['cat']; level: Event['level']; text: string }[]>('/events').then((l) => (stored = (l ?? []).map((e) => ({ time: local(e.t * 1000), cat: e.cat, level: e.level, text: e.text })))).catch(() => {})
+  const ownEvents: Event[] = isBackend ? [] : clients.filter((c) => c.online && c.uptimeS != null && c.uptimeS < 3600).map((c) => ({ time: local(Date.now() - c.uptimeS! * 1000), cat: 'Clients', level: 'info', text: `${c.name} came online (${c.wired ? 'wired' : c.band})` }))
+  const all = $derived([...apply.done.map((d) => ({ time: local(Date.now()).slice(0, 11) + d.at, cat: 'Admin' as const, level: 'info' as const, text: `Configuration changed: ${d.title}` })), ...ownEvents, ...stored, ...events].sort((a, b) => b.time.localeCompare(a.time)))
   const cats = ['All', 'Clients', 'WiFi', 'System', 'Security', 'Admin'] as const
   let cat = $state<(typeof cats)[number]>(kept('events.cat', 'All'))
   let q = $state(kept('events.q', ''))
@@ -22,7 +29,7 @@
   const count = (c: string) => (c === 'All' ? all.length : all.filter((e) => e.cat === c).length)
   const lvl = (e: Event) => (e.level === 'error' ? 'bad' : e.level === 'warning' ? 'warn' : '')
   function exportCsv() {
-    const csv = ['time,category,level,event', ...rows.map((e) => [e.time, e.cat, e.level, `"${e.text.replace(/"/g, '""')}"`].join(','))].join('\n')
+    const csv = ['time,category,level,event', ...rows.map((e) => [e.time, e.cat, e.level, `"${e.text.replace(/^[=+\-@\t\r]/, "'$&").replace(/"/g, '""')}"`].join(','))].join('\n')
     const a = document.createElement('a')
     a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv' }))
     a.download = `tikontrol-events-${new Date().toISOString().slice(0, 10)}.csv`
@@ -50,7 +57,8 @@
     review('Remote syslog', [`/system/logging/action/add name=tikremote target=remote remote=${address} remote-port=${port || 514}`, ...topics.map((t) => `/system/logging/add topics=${t} action=tikremote`)], { kind: 'remote-syslog', address, port: +(port || 514), topics })
   }
   let quiet = $state({ on: false, from: '23:00', to: '07:00' })
-  let unacked = $state(0) // from the server when isBackend
+  let unacked = $state(0) // from the server when isBackend; AlarmManager keeps it current once opened
+  if (isBackend) api<{ unacked: number }>('/alerts').then((v) => (unacked = v.unacked)).catch(() => {})
   let history = $state(insights.filter((i) => i.level !== 'ok').map((i, n) => ({ id: n, title: i.title, sev: i.level === 'bad' ? 'critical' : 'warning', at: 'Today', ack: false })))
   $effect(() => { keep('events.cat', cat); keep('events.q', q) })
 </script>
