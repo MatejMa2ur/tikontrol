@@ -40,7 +40,7 @@
   </tr>
   <tr>
     <td nowrap><img src="docs/images/icons/progress.svg" width="16" height="16" alt="">&nbsp;<strong>Status</strong></td>
-    <td>Early development, <a href="docs/FEATURES.md">progress</a><img src="docs/images/icons/spacer.svg" width="2000" height="1" alt=""></td>
+    <td>Early development, <a href="docs/FEATURES.md">progress</a><img align="right" src="docs/images/icons/spacer.svg" width="2000" height="1" alt=""></td>
   </tr>
 </table>
 
