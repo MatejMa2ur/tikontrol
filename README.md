@@ -9,7 +9,8 @@
 
   <p align="center">An independent, UniFi-inspired management UI for MikroTik RouterOS</p>
 
-[![CI][ci-shield]][ci-url] [![Image][image-shield]][image-url] [![Last commit][commit-shield]][commit-url] [![Issues][issues-shield]][issues-url]
+[![CI][ci-shield]][ci-url] [![Image][image-shield]][image-url] [![Last commit][commit-shield]][commit-url]<br>
+[![Rust][Rust]][Rust-url] [![Svelte][Svelte]][Svelte-url] [![TypeScript][TypeScript]][TypeScript-url] [![Vite][Vite]][Vite-url]
 
   <p align="center">
     <a href="docs/INSTALL.md"><strong>Install</strong></a>
@@ -22,14 +23,14 @@
   </p>
 </div>
 
-| | |
-| --- | --- |
-| 🧭 **What** | One clean web page for a MikroTik router: dashboard, clients, Wi-Fi, ports, firewall, VPN, topology and alerts |
-| 📦 **Runs on** | The router itself as a RouterOS App (container on USB storage), or any Linux/macOS machine |
-| 🔒 **Safety** | Read-only by default. Changes need your confirmation and go through Safe apply, which rolls back automatically |
-| 🛠️ **Built with** | Rust server and Svelte 5 UI in one small binary |
-| 🚀 **Install** | One paste in the router terminal: [docs/INSTALL.md](docs/INSTALL.md) |
-| 📈 **Status** | Early development. Per-feature progress: [docs/FEATURES.md](docs/FEATURES.md) |
+| <img src="docs/images/icons/router.svg" width="16" height="16" alt=""> Runs on | <img src="docs/images/icons/shield.svg" width="16" height="16" alt=""> Safe | <img src="docs/images/icons/terminal.svg" width="16" height="16" alt=""> Install | <img src="docs/images/icons/progress.svg" width="16" height="16" alt=""> Status |
+| --- | --- | --- | --- |
+| Your MikroTik router, or any Docker host | Read-only by default; changes undo themselves unless confirmed | [One paste](docs/INSTALL.md) in the router terminal | Early development, [progress](docs/FEATURES.md) |
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/images/dashboard-dark.png">
+  <img src="docs/images/dashboard.png" alt="tikontrol dashboard">
+</picture>
 
 <!-- TABLE OF CONTENTS -->
 <details>
@@ -39,7 +40,6 @@
       <a href="#about-the-project">About The Project</a>
       <ul>
         <li><a href="#screenshots">Screenshots</a></li>
-        <li><a href="#built-with">Built With</a></li>
       </ul>
     </li>
     <li>
@@ -63,11 +63,6 @@
 
 <!-- ABOUT THE PROJECT -->
 ## About The Project
-
-<picture>
-  <source media="(prefers-color-scheme: dark)" srcset="docs/images/dashboard-dark.png">
-  <img src="docs/images/dashboard.png" alt="tikontrol dashboard">
-</picture>
 
 tikontrol is a clean, opinionated web UI for MikroTik routers, inspired by how UniFi Network organises a home network: dashboard, client list, networks, Wi-Fi, firewall and port forwarding, VPN, topology and alerts.
 
@@ -99,15 +94,6 @@ tikontrol has a light and a dark theme. These screenshots use fictional sample d
 The hAP be³ Media preview is simulated from MikroTik's spec sheet:
 
 ![Simulated hAP be³ Media dashboard](docs/images/dashboard-be3.png)
-
-### Built With
-
-[![Svelte][Svelte]][Svelte-url]
-[![TypeScript][TypeScript]][TypeScript-url]
-[![Vite][Vite]][Vite-url]
-[![Rust][Rust]][Rust-url]
-
-One Rust binary with the UI embedded. See [PLAN.md §6](docs/PLAN.md#6-stack).
 
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
 
@@ -256,8 +242,6 @@ Project Link: [https://github.com/MatejMa2ur/tikontrol](https://github.com/Matej
 [image-url]: https://github.com/MatejMa2ur/tikontrol/pkgs/container/tikontrol
 [commit-shield]: https://img.shields.io/github/last-commit/MatejMa2ur/tikontrol?style=for-the-badge
 [commit-url]: https://github.com/MatejMa2ur/tikontrol/commits/master
-[issues-shield]: https://img.shields.io/github/issues/MatejMa2ur/tikontrol.svg?style=for-the-badge
-[issues-url]: https://github.com/MatejMa2ur/tikontrol/issues
 [Svelte]: https://img.shields.io/badge/Svelte-FF3E00?style=for-the-badge&logo=svelte&logoColor=white
 [Svelte-url]: https://svelte.dev/
 [TypeScript]: https://img.shields.io/badge/TypeScript-3178C6?style=for-the-badge&logo=typescript&logoColor=white
