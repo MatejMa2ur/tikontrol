@@ -23,6 +23,8 @@
   </p>
 </div>
 
+<hr>
+
 <table>
   <tr>
     <td><img src="docs/images/icons/router.svg" width="16" height="16" alt="">&nbsp;<strong>Runs on</strong></td>
