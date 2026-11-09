@@ -1,32 +1,35 @@
 <a id="readme-top"></a>
 
-[![Contributors][contributors-shield]][contributors-url]
-[![Forks][forks-shield]][forks-url]
-[![Stargazers][stars-shield]][stars-url]
-[![Issues][issues-shield]][issues-url]
-
-<!-- PROJECT LOGO -->
-<br />
 <div align="center">
   <a href="https://github.com/MatejMa2ur/tikontrol">
-    <img src="src/ui/public/favicon.svg" alt="Logo" width="80" height="80">
+    <img src="src/ui/public/favicon.svg" alt="tikontrol logo" width="80" height="80">
   </a>
 
-<h3 align="center">tikontrol</h3>
+  <h3 align="center">tikontrol</h3>
+
+  <p align="center">An independent, UniFi-inspired management UI for MikroTik RouterOS</p>
+
+[![CI][ci-shield]][ci-url] [![Image][image-shield]][image-url] [![Last commit][commit-shield]][commit-url] [![Issues][issues-shield]][issues-url]
 
   <p align="center">
-    An independent, UniFi-inspired management UI for MikroTik RouterOS
-    <br />
-    <a href="docs/PLAN.md"><strong>Explore the docs »</strong></a>
-    <br />
-    <br />
+    <a href="docs/INSTALL.md"><strong>Install</strong></a>
+    &middot;
+    <a href="docs/PLAN.md">Docs</a>
+    &middot;
     <a href="https://github.com/MatejMa2ur/tikontrol/issues/new?labels=bug">Report Bug</a>
     &middot;
     <a href="https://github.com/MatejMa2ur/tikontrol/issues/new?labels=enhancement">Request Feature</a>
   </p>
 </div>
 
-> **Install on your router in one paste:** see [docs/INSTALL.md](docs/INSTALL.md).
+| | |
+| --- | --- |
+| 🧭 **What** | One clean web page for a MikroTik router: dashboard, clients, Wi-Fi, ports, firewall, VPN, topology and alerts |
+| 📦 **Runs on** | The router itself as a RouterOS App (container on USB storage), or any Linux/macOS machine |
+| 🔒 **Safety** | Read-only by default. Changes need your confirmation and go through Safe apply, which rolls back automatically |
+| 🛠️ **Built with** | Rust server and Svelte 5 UI in one small binary |
+| 🚀 **Install** | One paste in the router terminal: [docs/INSTALL.md](docs/INSTALL.md) |
+| 📈 **Status** | Early development. Per-feature progress: [docs/FEATURES.md](docs/FEATURES.md) |
 
 <!-- TABLE OF CONTENTS -->
 <details>
@@ -70,7 +73,7 @@ tikontrol is a clean, opinionated web UI for MikroTik routers, inspired by how U
 
 - Hosted in a RouterOS v7 container. No extra server, no cloud.
 - Talks to RouterOS through its own API. RouterOS stays the source of truth, and WinBox/WebFig keep working next to it.
-- It can also manage other MikroTik devices on the LAN (APs, switches) from the same place.
+- Other MikroTik devices on the LAN (APs, switches) show up as neighbours. Managing them from the same place is planned.
 
 **Non-goals**
 
@@ -78,7 +81,7 @@ tikontrol is a clean, opinionated web UI for MikroTik routers, inspired by how U
 - Features that RouterOS can't back, such as real DPI or a native mobile app. See [RESEARCH.md](docs/RESEARCH.md).
 
 > [!NOTE]
-> tikontrol is in the **UI mockup phase**. The pages run on a router snapshot with simulated live numbers, and nothing is written to a router yet.
+> tikontrol is in **early development**. It runs on real router data, read-only by default. Most features work but have not had their full test pass yet.
 
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
 
@@ -102,8 +105,9 @@ The hAP be³ Media preview is simulated from MikroTik's spec sheet:
 [![Svelte][Svelte]][Svelte-url]
 [![TypeScript][TypeScript]][TypeScript-url]
 [![Vite][Vite]][Vite-url]
+[![Rust][Rust]][Rust-url]
 
-The planned backend is a single Rust binary with the UI embedded. See [PLAN.md §6](docs/PLAN.md#6-stack).
+One Rust binary with the UI embedded. See [PLAN.md §6](docs/PLAN.md#6-stack).
 
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
 
@@ -235,12 +239,12 @@ Project Link: [https://github.com/MatejMa2ur/tikontrol](https://github.com/Matej
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
 
 <!-- MARKDOWN LINKS & IMAGES -->
-[contributors-shield]: https://img.shields.io/github/contributors/MatejMa2ur/tikontrol.svg?style=for-the-badge
-[contributors-url]: https://github.com/MatejMa2ur/tikontrol/graphs/contributors
-[forks-shield]: https://img.shields.io/github/forks/MatejMa2ur/tikontrol.svg?style=for-the-badge
-[forks-url]: https://github.com/MatejMa2ur/tikontrol/network/members
-[stars-shield]: https://img.shields.io/github/stars/MatejMa2ur/tikontrol.svg?style=for-the-badge
-[stars-url]: https://github.com/MatejMa2ur/tikontrol/stargazers
+[ci-shield]: https://img.shields.io/github/actions/workflow/status/MatejMa2ur/tikontrol/ci.yml?branch=master&style=for-the-badge&label=CI
+[ci-url]: https://github.com/MatejMa2ur/tikontrol/actions/workflows/ci.yml
+[image-shield]: https://img.shields.io/github/actions/workflow/status/MatejMa2ur/tikontrol/image.yml?branch=master&style=for-the-badge&label=image
+[image-url]: https://github.com/MatejMa2ur/tikontrol/pkgs/container/tikontrol
+[commit-shield]: https://img.shields.io/github/last-commit/MatejMa2ur/tikontrol?style=for-the-badge
+[commit-url]: https://github.com/MatejMa2ur/tikontrol/commits/master
 [issues-shield]: https://img.shields.io/github/issues/MatejMa2ur/tikontrol.svg?style=for-the-badge
 [issues-url]: https://github.com/MatejMa2ur/tikontrol/issues
 [Svelte]: https://img.shields.io/badge/Svelte-FF3E00?style=for-the-badge&logo=svelte&logoColor=white
@@ -249,3 +253,5 @@ Project Link: [https://github.com/MatejMa2ur/tikontrol](https://github.com/Matej
 [TypeScript-url]: https://www.typescriptlang.org/
 [Vite]: https://img.shields.io/badge/Vite-646CFF?style=for-the-badge&logo=vite&logoColor=white
 [Vite-url]: https://vite.dev/
+[Rust]: https://img.shields.io/badge/Rust-000000?style=for-the-badge&logo=rust&logoColor=white
+[Rust-url]: https://www.rust-lang.org/
