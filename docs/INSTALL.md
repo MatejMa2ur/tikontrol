@@ -2,7 +2,7 @@
 
 One paste in the router's terminal installs tikontrol as a RouterOS App. The script checks your router first and stops with a plain explanation when something is missing. It never formats a disk, never changes the plain `api` service, the firewall or any user.
 
-> **Status:** the steps the script automates were done by hand on a hAP ac² with RouterOS 7.26beta1. The script itself has not been run on hardware yet. If you try it, please report the result in an issue.
+> **Status:** tested on a hAP ac² with RouterOS 7.26beta1, including a re-run on an already installed router. Other models should work the same way; if you try one, please report the result in an issue.
 
 ## What you need
 

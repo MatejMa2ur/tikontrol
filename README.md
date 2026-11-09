@@ -45,8 +45,8 @@
     <li>
       <a href="#getting-started">Getting Started</a>
       <ul>
-        <li><a href="#prerequisites">Prerequisites</a></li>
-        <li><a href="#installation">Installation</a></li>
+        <li><a href="#on-your-router">On your router</a></li>
+        <li><a href="#for-development">For development</a></li>
       </ul>
     </li>
     <li><a href="#usage">Usage</a></li>
@@ -71,8 +71,8 @@
 
 tikontrol is a clean, opinionated web UI for MikroTik routers, inspired by how UniFi Network organises a home network: dashboard, client list, networks, Wi-Fi, firewall and port forwarding, VPN, topology and alerts.
 
-- Hosted in a RouterOS v7 container. No extra server, no cloud.
-- Talks to RouterOS through its own API. RouterOS stays the source of truth, and WinBox/WebFig keep working next to it.
+- Runs on the router itself as a RouterOS App, or on any home server. No cloud, no account, no outbound calls.
+- Talks to RouterOS over the encrypted API (API-SSL) with its own least-privilege user. RouterOS stays the source of truth, and WinBox/WebFig keep working next to it.
 - Other MikroTik devices on the LAN (APs, switches) show up as neighbours. Managing them from the same place is planned.
 
 **Non-goals**
@@ -87,7 +87,7 @@ tikontrol is a clean, opinionated web UI for MikroTik routers, inspired by how U
 
 ### Screenshots
 
-tikontrol has a light and a dark theme. These screenshots use fictional sample data, so no real network appears here. To refresh them, run the mockup, add `?theme=light` or `?theme=dark` to the URL and capture each page.
+tikontrol has a light and a dark theme. These screenshots use fictional sample data, so no real network appears here. To refresh them, run the UI in development mode, add `?theme=light` or `?theme=dark` to the URL and capture each page.
 
 | Light | Dark |
 | --- | --- |
@@ -114,43 +114,52 @@ One Rust binary with the UI embedded. See [PLAN.md §6](docs/PLAN.md#6-stack).
 <!-- GETTING STARTED -->
 ## Getting Started
 
-### Prerequisites
+### On your router
 
-- Node.js 24 or newer and npm
-- Optional: Python 3 and SSH access to a RouterOS v7 router, to use your own data instead of the sample
+One paste in the router terminal installs tikontrol as a RouterOS App. [INSTALL.md](docs/INSTALL.md) lists what you need (RouterOS 7.22+, the `container` package, an ext4 USB stick or microSD card) and every change the script makes.
 
-### Installation
+```
+/tool/fetch url="https://raw.githubusercontent.com/MatejMa2ur/tikontrol/master/deploy/install.rsc" dst-path=tikontrol-install.rsc; /import tikontrol-install.rsc
+```
+
+Then open `https://tikontrol.lan:8443` (or **App → tikontrol** in WebFig) and sign in with your MikroTik admin account. tikontrol creates its own read-only user on the router and never stores your admin password. New versions install automatically, and your settings survive updates.
+
+To run it on a home server with Docker instead, see [DEPLOY.md](docs/DEPLOY.md).
+
+### For development
+
+You need Node.js 24+ and a current Rust toolchain.
 
 1. Clone the repo
    ```sh
    git clone https://github.com/MatejMa2ur/tikontrol.git
    cd tikontrol
    ```
-2. Optional: take a read-only snapshot of your router over SSH
+2. UI only, on fictional sample data, with hot reload at <http://localhost:5173>
    ```sh
-   src/scripts/snapshot.py > src/ui/src/lib/snapshot.json
+   cd src/ui && npm install && npm run dev
    ```
-3. Install the dependencies and start the mockup
+3. The full app: build the UI, then run the server in demo mode (no router needed) at <https://localhost:8443>
    ```sh
-   cd src/ui
-   npm install
-   npm run dev
+   (cd src/ui && npm run build)
+   cd src/server && TIK_DEMO=../ui/src/lib/sample.json cargo run
    ```
+   The setup token for the first admin account is printed in the terminal. Without `TIK_DEMO`, the setup page connects to a real router.
+
+Optional: `src/scripts/snapshot.py > src/ui/src/lib/snapshot.json` takes a read-only snapshot of your own router over SSH for the dev UI. It is gitignored and never part of a build.
 
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
 
 <!-- USAGE -->
 ## Usage
 
-Open <http://localhost:5173>. You don't need to be on the router's network: without a snapshot, the UI falls back to the fictional `src/ui/src/lib/sample.json`. Live numbers are simulated around the snapshot.
+- **Dashboard, Clients, Devices and topology, Ports, Insights and Events**, plus Settings for Wi-Fi, networks, internet and VPN: live data from the router, refreshed in the background. Polling slows down by itself when the router's CPU is busy.
+- **Read-only by default.** To allow changes, go to **Settings → Control plane** and switch tikontrol to read & write. Every change is then shown before it is applied and goes through Safe apply: the router undoes it by itself after 5 minutes unless you confirm from the browser that everything still works.
+- **Themes:** Settings → System → Appearance has light, dark and auto, plus one-click looks (Controller, Router admin, Minimal).
+- **AI assistants:** an optional MCP endpoint lets an assistant read the network, with its own API keys. Nothing is sent anywhere unless you set it up.
+- Make, model and Wi-Fi capabilities are detected from what the router reports, so there is nothing to set up per model. `?device=be3` in the dev UI previews a hAP be³ Media.
 
-The make, model, CPU, memory and Wi-Fi capabilities are detected from what the router reports, so there is nothing to set up per model. To preview a router you don't own, open <http://localhost:5173/?device=be3>. It simulates a hAP be³ Media from MikroTik's spec sheet, with the sample network's clients and traffic.
-
-To run the tests from the repo root:
-
-```sh
-node --test tests/hardware.test.ts
-```
+Run the tests from the repo root with `node --test tests/*.test.ts` and, in `src/server`, `cargo test`.
 
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
 
@@ -158,10 +167,13 @@ node --test tests/hardware.test.ts
 ## Project Structure
 
 ```
-docs/          Plan, research, feasibility study, feature tracker and screenshots
-src/scripts/   Router snapshot, anonymiser and progress counter
-src/ui/        Svelte 5 + Vite mockup
-tests/         Hardware detection tests
+deploy/        Router installer and uninstaller, RouterOS App definition
+docs/          Install and deploy guides, plan, research, feature tracker, OpenAPI spec, screenshots
+src/server/    Rust server: RouterOS API client, auth, Safe apply, MCP; embeds the built UI
+src/ui/        Svelte 5 + Vite web UI
+src/scripts/   Router snapshot, anonymiser, OUI table and progress counter
+tests/         UI logic and installer tests
+Containerfile  Multi-arch image (arm/v7, arm64, amd64), published to ghcr.io
 ```
 
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
@@ -169,13 +181,17 @@ tests/         Hardware detection tests
 <!-- HARDWARE -->
 ## Hardware
 
-| | hAP ac² (current) | hAP be³ Media (planned) |
+tikontrol is one small binary (a few MB, with the UI built in) and is capped at 48 MB of RAM on the router.
+
+| | hAP ac² | hAP be³ Media |
 | --- | --- | --- |
 | Architecture | ARM 32-bit | ARM 64-bit |
 | RAM | 128 MiB | 2 GB |
-| Storage | 16 MiB flash | 512 MB NAND + microSD |
+| Storage | 16 MiB flash + USB stick | 512 MB NAND + microSD |
 | Wi-Fi | Legacy `wireless` package | WiFi 7, new `wifi` package |
-| tikontrol | Too tight for a full on-router controller | Planned on-router host |
+| tikontrol | Runs on the router (container on a USB stick) | Planned; previewed with simulated data |
+
+Any router that can run containers works: see the list in [INSTALL.md](docs/INSTALL.md#what-you-need).
 
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
 
@@ -184,30 +200,25 @@ tests/         Hardware detection tests
 
 **Progress is tracked in [FEATURES.md](docs/FEATURES.md)**: every UniFi page and feature, what backs it on MikroTik, and its status. See [PLAN.md](docs/PLAN.md) for the plan and [RESEARCH.md](docs/RESEARCH.md) for prior art and platform limits. [FEASIBILITY.md](docs/FEASIBILITY.md) is the latest study of what is possible, with its source notes in [docs/research](docs/research).
 
-- [ ] Phase 0: Dev environment, connect to the router
-- [ ] Phase 1: Read-only dashboard and clients
-- [ ] Phase 2: Safe writes
+- [x] Phase 0: Dev environment, connect to the router
+- [x] Phase 1: Read-only dashboard and clients (built; final test pass pending)
+- [ ] Phase 2: Safe writes (in progress)
 - [ ] Phase 3: Structural changes through Safe apply
-- [ ] Phase 4: Fleet management and extras
-
-**Open questions**
-
-- The hAP ac² is too tight for a full on-router controller. Host it on a separate home server first? (see [RESEARCH.md](docs/RESEARCH.md) §5)
-- Fork or contribute to [nasnet-panel](https://github.com/nasnet-community/nasnet-panel) rather than start from zero?
+- [ ] Phase 4: Fleet management: several routers and access points from one place
 
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
 
 <!-- CONTRIBUTING -->
 ## Contributing
 
-Bug reports and ideas are welcome through [issues](https://github.com/MatejMa2ur/tikontrol/issues). If a change moves a feature to a new state, update its Status cell in [FEATURES.md](docs/FEATURES.md) and run `src/scripts/progress.py`.
+Bug reports and ideas are welcome through [issues](https://github.com/MatejMa2ur/tikontrol/issues). Read [CLAUDE.md](CLAUDE.md) first: it holds the security rules every change follows, and no real values from anyone's network may be committed. If a change moves a feature to a new state, update its Status cell in [FEATURES.md](docs/FEATURES.md) and run `src/scripts/progress.py`.
 
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
 
 <!-- LICENSE -->
 ## License
 
-No license has been chosen yet.
+No license has been chosen yet, so all rights are reserved for now. Ask before reusing the code.
 
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
 
