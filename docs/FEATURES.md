@@ -11,7 +11,7 @@ Clean-room: we copy the behaviour, never the assets.
 **Backing:** `ROS` = RouterOS API on the router · `CMR` = MikroTik CMR server · `tik` = our own logic/DB · `✗` = nothing can back it
 
 <!-- progress:start -->
-**Progress:** 72 ✅ · 144 🟨 · 8 🎨 · 2 ⬜ · 8 ➖ (234 items, 32% done)
+**Progress:** 107 ✅ · 109 🟨 · 8 🎨 · 2 ⬜ · 8 ➖ (234 items, 47% done)
 <!-- progress:end -->
 
 ---
@@ -20,17 +20,17 @@ Clean-room: we copy the behaviour, never the assets.
 
 | # | UniFi page | tikontrol page | Phase | Status |
 |---|---|---|---|---|
-| P1 | Dashboard | Dashboard | 1 | 🟨 |
-| P2 | UniFi Devices (list) | Devices | 3 | 🟨 |
+| P1 | Dashboard | Dashboard | 1 | ✅ |
+| P2 | UniFi Devices (list) | Devices | 3 | ✅ |
 | P3 | Topology | Topology (tab in Devices) | 2 | 🟨 |
-| P4 | Device detail (overview / ports / insights / settings) | Device drawer | 3 | 🟨 |
-| P5 | Client Devices (list) | Clients | 1 | 🟨 |
-| P6 | Client detail (overview / insights / settings) | Client drawer | 1 | 🟨 |
-| P7 | Ports (port manager) | Ports | 2 | 🟨 |
+| P4 | Device detail (overview / ports / insights / settings) | Device drawer | 3 | ✅ |
+| P5 | Client Devices (list) | Clients | 1 | ✅ |
+| P6 | Client detail (overview / insights / settings) | Client drawer | 1 | ✅ |
+| P7 | Ports (port manager) | Ports | 2 | ✅ |
 | P8 | Radios (Radio Manager, coverage, connectivity; needs hardware (Wi-Fi AP)) | Radios | 3 |🟨 |
-| P9 | Insights / Traffic flows | Traffic | 3 | 🟨 |
-| P10 | Alarm Manager | Alerts | 2 | 🟨 |
-| P11 | System Log (events, admin activity, security, updates) | Events | 1 | 🟨 |
+| P9 | Insights / Traffic flows | Traffic | 3 | ✅ |
+| P10 | Alarm Manager | Alerts | 2 | ✅ |
+| P11 | System Log (events, admin activity, security, updates) | Events | 1 | ✅ |
 | P12 | Hotspot Manager | Guest portal | 4 |🎨 |
 | P13 | Settings → WiFi | Settings · WiFi | 2 |🟨 |
 | P14 | Settings → Networks | Settings · Networks | 3 |🟨 |
@@ -42,27 +42,27 @@ Clean-room: we copy the behaviour, never the assets.
 | P20 | Settings → Control Plane (admins, backups, updates, integrations, console) | Settings · System | 2 | 🟨 |
 | P21 | Settings → System (site, logging, SNMP, device auth) | Settings · System | 2 | 🟨 |
 | P22 | Site Manager (multi-site, cloud) | Sites switcher (local routers only; no cloud: tikontrol never phones home) | 4 | ✅ |
-| P23 | Login / onboarding wizard | Login + first-run wizard | 1 | 🟨 |
-| P24 | Global search (⌘K): clients, devices, SSIDs, settings pages | Command palette | 2 | 🟨 |
+| P23 | Login / onboarding wizard | Login + first-run wizard | 1 | ✅ |
+| P24 | Global search (⌘K): clients, devices, SSIDs, settings pages | Command palette | 2 | ✅ |
 
 ---
 
 ## Dashboard
 | Feature | Backing | Phase | Status |
 |---|---|---|---|
-| Status-first summary with insights (insecure services, double NAT, low RAM, band flapping, pending firmware) | tik on ROS data | 1 | 🟨 |
-| Internet health (WAN up, latency, packet loss) | ROS netwatch + tik | 1 | 🟨 |
-| WAN live throughput (down/up) graph | ROS monitor-traffic | 1 | 🟨 |
-| Max download/upload speed indicators | tik | 1 | 🟨 |
-| ISP name, public IP, WAN IP | ROS `/ip/cloud`, dhcp-client | 1 | 🟨 |
+| Status-first summary with insights (insecure services, double NAT, low RAM, band flapping, pending firmware) | tik on ROS data | 1 | ✅ |
+| Internet health (WAN up, latency, packet loss) | ROS netwatch + tik | 1 | ✅ |
+| WAN live throughput (down/up) graph | ROS monitor-traffic | 1 | ✅ |
+| Max download/upload speed indicators | tik | 1 | ✅ |
+| ISP name, public IP, WAN IP (needs a real ISP WAN: the CHR sits behind QEMU NAT) | ROS `/ip/cloud`, dhcp-client | 1 | 🟨 |
 | Client count (wired / wireless / guest) | ROS | 1 | 🟨 |
-| Gateway resources (CPU, RAM, temp, uptime) | ROS `/system/resource`, health | 1 | 🟨 |
+| Gateway resources (CPU, RAM, temp, uptime) (CPU/RAM/uptime verified on CHR; temperature needs a sensor) | ROS `/system/resource`, health | 1 | 🟨 |
 | Top clients by traffic | ROS kid-control + tik | 1 | 🟨 |
 | Top applications | CMR apptraffic | 3 | ⬜ |
 | Traffic Identification card (by client now, by app once CMR is wired) | ROS reg-table bytes · CMR | 1 | 🟨 |
 | WiFi Technology card (clients by standard + band, activity, experience) | ROS reg-table | 1 | 🟨 |
 | Most active clients / access points strips | ROS + tik | 1 | 🟨 |
-| Internet Activity chart: client count cells + down/up, 1H/1D/1W | tik history | 2 | 🟨 |
+| Internet Activity chart: client count cells + down/up, 1H/1D/1W | tik history | 2 | ✅ |
 | Gateway column (WAN/gateway IP, uptime, latency to 3 resolvers, channel widths) | ROS | 1 | 🟨 |
 | WiFi experience / satisfaction score | tik (signal + rate heuristic) | 2 | 🟨 |
 | Recent critical events | ROS log + tik | 1 | 🟨 |
@@ -73,10 +73,10 @@ Clean-room: we copy the behaviour, never the assets.
 ## UniFi Devices / Topology
 | Feature | Backing | Phase | Status |
 |---|---|---|---|
-| Device list (name, model, IP, version, uptime, state; other devices' stats need the CMR server) | ROS this router + `/ip/neighbor` · CMR `/cmr/device` | 3 | 🟨 |
+| Device list (name, model, IP, version, uptime, state; other devices' stats need the CMR server) (this router verified on CHR; others need a second MikroTik / CMR) | ROS this router + `/ip/neighbor` · CMR `/cmr/device` | 3 | 🟨 |
 | Device adoption (one-click; needs CMR server) | CMR pairing | 3 |🎨 |
-| Auto-detect make, model, CPU, memory and WiFi capabilities | ROS `/system/resource`, `/system/routerboard` | 1 | 🟨 |
-| Device drawing: our own SVG of the port side per detected model (case colour, ports, USB, live link LEDs; generic box for unknown models) | tik (`hardware.ts` faceOf) | 2 | 🟨 |
+| Auto-detect make, model, CPU, memory and WiFi capabilities | ROS `/system/resource`, `/system/routerboard` | 1 | ✅ |
+| Device drawing: our own SVG of the port side per detected model (case colour, ports, USB, live link LEDs; generic box for unknown models) | tik (`hardware.ts` faceOf) | 2 | ✅ |
 | Device detail: CPU/RAM/temperature history (this router; temperature only where `/system/health` has a sensor) | tik history · CMR dashboard for others | 3 | 🟨 |
 | Device restart / locate (blink LED) | CMR reboot · ROS `/system/routerboard` LED | 3 | 🟨 |
 | Firmware update per device | CMR / ROS | 3 | 🟨 |
@@ -92,7 +92,7 @@ Clean-room: we copy the behaviour, never the assets.
 ## Client Devices
 | Feature | Backing | Phase | Status |
 |---|---|---|---|
-| Client list: name, IP, MAC, vendor, connection, uptime | ROS leases + ARP + reg-table + bridge host | 1 | 🟨 |
+| Client list: name, IP, MAC, vendor, connection, uptime (leases + ARP verified on CHR; wireless rows need Wi-Fi hardware) | ROS leases + ARP + reg-table + bridge host | 1 | 🟨 |
 | Device fingerprint / auto icon (phone, TV, PC…): maker from the MAC (embedded IEEE table, private-address note), type + OS guess from hostname, DHCP vendor class and MNDP/LLDP neighbours, first/last seen | tik (OUI + hostname + DHCP class-id) · ROS `/ip/neighbor` | 1 | ✅ |
 | Active LAN discovery, opt-in: mDNS/DNS-SD + SSDP/UPnP names and models ("What the device says"), improves maker and type | tik (server on the LAN, link-local multicast only) | 2 | 🟨 |
 | Wired: switch port · Wireless: SSID, band, signal, rate | ROS bridge host + reg-table | 1 | 🟨 |
@@ -108,7 +108,7 @@ Clean-room: we copy the behaviour, never the assets.
 | "Why is this client on 2.4 GHz?": reasons, band history from the log, Safe apply fixes (channel 36, 40 MHz, own 5 GHz SSID, signal-range access list) | tik from log + monitor · ROS wireless/wifi | 3 | 🟨 |
 | Kick / reconnect wireless client | ROS reg-table remove | 2 | 🟨 |
 | Override network/VLAN for client (client drawer: set/remove; needs hardware (Wi-Fi AP), CHR refusal tested) | ROS (MAC-based VLAN / access list) | 4 |🟨 |
-| Offline / historical clients list | tik | 2 | 🟨 |
+| Offline / historical clients list | tik | 2 | ✅ |
 | Roaming history (which AP, when) | tik (reg-table changes) · CMR wifi-logs | 3 | 🟨 |
 | Filters (wired / wireless / guest / offline) and search | tik | 1 | 🟨 |
 | Client groups | tik | 3 | 🟨 |
@@ -116,9 +116,9 @@ Clean-room: we copy the behaviour, never the assets.
 ## Ports
 | Feature | Backing | Phase | Status |
 |---|---|---|---|
-| Port grid with link state, speed, duplex | ROS `/interface/ethernet` monitor | 2 | 🟨 |
+| Port grid with link state, speed, duplex (link state verified on CHR; speed/duplex need a physical port (virtio reports none)) | ROS `/interface/ethernet` monitor | 2 | 🟨 |
 | Which client is on which port | ROS bridge host | 2 | 🟨 |
-| Per-port traffic / errors | ROS | 2 | 🟨 |
+| Per-port traffic / errors | ROS | 2 | ✅ |
 | PoE status / power cycle | ROS `/interface/ethernet/poe` (hw dependent) | 3 | 🟨 |
 | Port profile (VLAN access/trunk, native VLAN) | ROS bridge VLAN · CMR vlan | 3 | ✅ |
 | Port disable / enable | ROS | 2 | ✅ |
@@ -147,8 +147,8 @@ Clean-room: we copy the behaviour, never the assets.
 |---|---|---|---|
 | Traffic by application / category | CMR apptraffic | 3 |🎨 |
 | Traffic by client over time | tik | 2 | 🟨 |
-| Top domains | ROS DNS cache + tik | 3 | 🟨 |
-| Flow log (src, dst, port, bytes) | ROS traffic-flow (IPFIX) → tik collector | 3 | 🟨 |
+| Top domains | ROS DNS cache + tik | 3 | ✅ |
+| Flow log (src, dst, port, bytes) | ROS traffic-flow (IPFIX) → tik collector | 3 | ✅ |
 | Traffic by country (opt-in `TIK_GEOIP` local CSV, nothing downloaded) | tik GeoIP on flows | 4 | 🟨 |
 | Blocked threats view | ✗ (no IDS) | – | ➖ |
 
@@ -157,16 +157,16 @@ Clean-room: we copy the behaviour, never the assets.
 |---|---|---|---|
 | Alert rules (device offline, WAN down, new client, CPU/RAM) | tik · CMR alerts | 2 |🟨 |
 | Channels: email, push (ntfy), Telegram, webhook (ntfy/Telegram/webhook built, untested against the real services; email not done) | tik | 2 |🟨 |
-| Alert history / acknowledge | tik | 2 |🟨 |
+| Alert history / acknowledge | tik | 2 | ✅ |
 | Quiet hours / per-rule severity | tik | 3 |🟨 |
 
 ## System Log / Events
 | Feature | Backing | Phase | Status |
 |---|---|---|---|
-| Live event stream | ROS `/log follow` | 1 | 🟨 |
-| Categories: clients, devices, admin activity, security, updates | tik (topic mapping) | 1 | 🟨 |
-| Derived events (client joined/left, WAN flap) | tik | 2 | 🟨 |
-| Search / filter / export CSV | tik | 2 | 🟨 |
+| Live event stream | ROS `/log follow` | 1 | ✅ |
+| Categories: clients, devices, admin activity, security, updates | tik (topic mapping) | 1 | ✅ |
+| Derived events (client joined/left, WAN flap) (shown from the server; joins need Wi-Fi clients, a WAN flap a real WAN) | tik | 2 | 🟨 |
+| Search / filter / export CSV | tik | 2 | ✅ |
 | Remote syslog / SIEM forwarding | ROS logging action | 3 | ✅ |
 
 ## WiFi settings
@@ -277,17 +277,17 @@ Clean-room: we copy the behaviour, never the assets.
 | Admin users + roles | tik (own users) + ROS `/user` | 2 | ✅ |
 | SSO / cloud account | ✗ local auth only | – | ➖ |
 | Sign in with MikroTik account (role from router group, password only in session memory, changes run as that user) | tik + ROS login | 2 | 🟨 |
-| Backups (scheduled, download, restore) | ROS `/system/backup` + `/export` | 2 | 🟨 |
+| Backups (scheduled, download, restore) (list verified on CHR; no download from tikontrol yet) | ROS `/system/backup` + `/export` | 2 | 🟨 |
 | Firmware/app updates (channel, auto-update window) | ROS / CMR | 2 | 🟨 |
 | Integrations / local API (+ API keys) | tik REST | 4 | ✅ |
-| Console (terminal in browser) | ROS (SSH/API terminal) | 3 | 🟨 |
+| Console (terminal in browser) | ROS (SSH/API terminal) | 3 | ✅ |
 | Site settings (name, country, timezone, NTP) | ROS `/system/clock`, ntp | 2 | ✅ |
 | SNMP | ROS `/snmp` | 3 | ✅ |
 | Remote logging / NetFlow export settings | ROS | 3 | ✅ |
 | Data retention settings | tik | 2 | ✅ |
 | Trusted HTTPS: local CA (name-constrained) signs a 397-day server cert, auto-renewed; CA download + per-device trust steps | tik `/api/v1/ca.crt` | 2 | ✅ |
 | Device auth / SSH settings, service hardening | ROS `/ip/service` | 2 | ✅ |
-| Debug tools: ping, traceroute, packet capture | ROS `/ping`, `/tool/traceroute`, sniffer | 3 | 🟨 |
+| Debug tools: ping, traceroute, packet capture (ping/traceroute/DNS verified on CHR; packet capture needs the sniff policy) | ROS `/ping`, `/tool/traceroute`, sniffer | 3 | 🟨 |
 | Safe apply (auto-revert) | tik + ROS scheduler | 3 | ✅ |
 | "Show in RouterOS" for every object | tik | 2 | 🟨 |
 
@@ -296,7 +296,7 @@ Clean-room: we copy the behaviour, never the assets.
 |---|---|---|---|
 | Multi-site / multi-router (own sealed credentials, data, history and Safe apply per router) | tik | 4 | ✅ |
 | Mobile app | ✗ → responsive PWA instead | – | ➖ |
-| Responsive layout / PWA install | tik | 1 | 🟨 |
+| Responsive layout / PWA install | tik | 1 | ✅ |
 | Dark / light theme, or Auto following the OS setting | tik | 1 | ✅ |
 | Runs as RouterOS container (arm/v7, arm64) | tik build | 1 | 🟨 |
 | Runs on Docker (home server) | tik build | 0 | 🟨 |
@@ -334,11 +334,11 @@ Not a UniFi feature: this is our own addition. The router enforces it, not tikon
 | Router-enforced read-only: connect with a user that has no `write` policy | ROS user groups | 1 | ✅ |
 | Guided setup: show the commands to create the read-only group and user | tik + ROS | 1 | 🟨 |
 | One-step setup: sign in with a MikroTik admin, tikontrol creates its read-only group and user | tik + ROS | 1 | ✅ |
-| Detect the connected user's real policies and show them, instead of trusting a setting | ROS `/user` | 1 | 🟨 |
-| Read-only badge, with edit controls disabled and the reason shown | tik | 1 | 🟨 |
+| Detect the connected user's real policies and show them, instead of trusting a setting | ROS `/user` | 1 | ✅ |
+| Read-only badge, with edit controls disabled and the reason shown | tik | 1 | ✅ |
 | Store no write credential in read-only mode | tik | 1 | ✅ |
 | Switching to read and write needs a new credential and an explicit confirmation | tik | 2 | 🟨 |
-| MCP follows the same mode: no proposed changes in read-only mode | tik | 2 | 🟨 |
+| MCP follows the same mode: no proposed changes in read-only mode | tik | 2 | ✅ |
 | Test on CHR that the router rejects writes from the read-only user | tik | 0 | ✅ |
 
 ## AI assistants (MCP)
@@ -346,9 +346,9 @@ Not a UniFi feature: this is our own addition. An MCP server lets an AI assistan
 
 | Feature | Backing | Phase | Status |
 |---|---|---|---|
-| MCP server: off by default, local network only, own access token | tik | 2 | 🟨 |
-| Read-only tools: clients, Wi-Fi, events, insights, topology | tik + ROS | 2 | 🟨 |
+| MCP server: off by default, local network only, own access token | tik | 2 | ✅ |
+| Read-only tools: clients, Wi-Fi, events, insights, topology | tik + ROS | 2 | ✅ |
 | Proposed changes, applied only after approval in Review & apply | tik + Safe apply | 3 | 🟨 |
-| Privacy mode: hide or swap names and addresses before data leaves tikontrol | tik | 2 | 🟨 |
+| Privacy mode: hide or swap names and addresses before data leaves tikontrol | tik | 2 | ✅ |
 | Treat device names and SSIDs as untrusted input (prompt injection) | tik | 2 | 🟨 |
-| Never expose router credentials through MCP | tik | 2 | 🟨 |
+| Never expose router credentials through MCP | tik | 2 | ✅ |
