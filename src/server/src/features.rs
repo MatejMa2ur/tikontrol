@@ -53,14 +53,14 @@ fn state_json(c: &Change) -> serde_json::Value {
 }
 
 /// The logged-in MikroTik account if there is one, otherwise the stored writer.
-fn writer(app: &App, s: &Session) -> Result<Box<dyn crate::ros::conn::Router + Send>, String> {
+pub(crate) fn writer(app: &App, s: &Session) -> Result<Box<dyn crate::ros::conn::Router + Send>, String> {
     match app.ros(s) {
         Some(pw) => app.open_as(&s.user, &pw.0),
         None => app.open(As::Writer),
     }
 }
 
-fn can_write(app: &App, s: &Session) -> Result<(), &'static str> {
+pub(crate) fn can_write(app: &App, s: &Session) -> Result<(), &'static str> {
     if s.role != Role::Admin {
         return Err("only admins can change the router");
     }

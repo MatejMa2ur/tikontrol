@@ -193,6 +193,20 @@ paths:
       summary: 'Run one read command as the reader: a print of a menu the snapshot reads (with its fixed proplist) or `/interface/monitor-traffic <name> once`. Rate limited with the other tools'
       requestBody: { content: { application/json: { schema: { type: object, required: [command], properties: { command: { type: string } } } } } }
       responses: { '200': { description: '{ tool, command, rows[], note }' }, '400': { description: not on the read-only list }, '429': { description: too soon } }
+  /api/v1/tools/wifi-scan:
+    post:
+      security: [{ session: [], csrf: [] }]
+      summary: 'Neighbour Wi-Fi scan, one shot. High risk: every client on the radio disconnects for the duration. Admin only, read-write mode, runs as the writer (or your MikroTik account); confirm must be true; 1-10 s. Rows are deduplicated per access point (max 200) and are untrusted text from other devices'
+      requestBody: { content: { application/json: { schema: { type: object, required: [package, interface, confirm], additionalProperties: false, properties: { package: { enum: [wireless, wifi] }, interface: { type: string }, duration: { type: integer, minimum: 1, maximum: 10, default: 5 }, confirm: { type: boolean } } } } } }
+      responses: { '200': { description: '{ tool, command, rows[{ address, ssid, channel, signal | signal-strength, noise-floor, snr, security, radio-name }], note }' }, '400': { description: not confirmed, bad duration or interface }, '403': { description: not admin or read-only mode }, '429': { description: too soon }, '502': { description: the router refused (e.g. no such interface) } }
+  /api/v1/floorplan:
+    get: { summary: 'Coverage map: the saved floor plan { image (data URL), aps[{ label, x, y }] } or null. No RF model', responses: { '200': { description: ok } } }
+    put:
+      security: [{ session: [], csrf: [] }]
+      summary: 'Save the floor plan (admin). image is a PNG/JPEG/WebP data URL (no SVG; magic bytes checked), at most 200000 characters; up to 32 APs, label 1-32 chars, x/y in percent 0-100'
+      requestBody: { content: { application/json: { schema: { type: object, required: [image, aps], additionalProperties: false, properties: { image: { type: string, maxLength: 200000 }, aps: { type: array, maxItems: 32, items: { type: object, required: [label, x, y], properties: { label: { type: string }, x: { type: number }, y: { type: number } } } } } } } } }
+      responses: { '200': { description: ok }, '400': { description: invalid image or pins }, '403': { description: not admin } }
+    delete: { security: [{ session: [], csrf: [] }], summary: Remove the floor plan (admin), responses: { '200': { description: ok }, '403': { description: not admin } } }
   /api/v1/retention:
     get: { summary: "Days of tikontrol's own history kept (traffic, events, per-client usage)", responses: { '200': { description: '{ days, max }' } } }
     put:

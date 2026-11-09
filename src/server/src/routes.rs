@@ -42,6 +42,25 @@ pub fn extra(app: &Arc<App>, req: &Req, s: &Session) -> Option<Resp> {
             Resp::json(200, &json!(v))
         }
         ("GET", "/api/v1/events") => events(app, req),
+        ("GET", "/api/v1/floorplan") => match std::fs::read(floorplan_path(app)) {
+            Ok(b) => Resp::new(200, "application/json", b).with("cache-control", "no-store".into()),
+            Err(_) => Resp::json(200, &Value::Null),
+        },
+        ("PUT" | "DELETE", "/api/v1/floorplan") if s.role != crate::store::Role::Admin => Resp::error(403, "admin role required"),
+        ("DELETE", "/api/v1/floorplan") => match std::fs::remove_file(floorplan_path(app)) {
+            Err(e) if e.kind() != std::io::ErrorKind::NotFound => Resp::error(500, "could not delete the floor plan"),
+            _ => Resp::json(200, &json!({ "ok": true })),
+        },
+        ("PUT", "/api/v1/floorplan") => {
+            let b: Floorplan = match crate::api::body(req) {
+                Ok(b) => b,
+                Err(r) => return Some(r),
+            };
+            if let Err(e) = b.check() {
+                return Some(Resp::error(400, e));
+            }
+            crate::api::saved(crate::store::write_private(&floorplan_path(app), &serde_json::to_vec(&b).unwrap_or_default()))
+        }
         ("GET", "/api/v1/retention") => Resp::json(200, &json!({ "days": crate::live::retention_days(lock(&app.store).state.history_days), "max": crate::live::MAX_DAYS })),
         ("PUT", "/api/v1/retention") if s.role != crate::store::Role::Admin => Resp::error(403, "admin role required"),
         ("PUT", "/api/v1/retention") => {
@@ -115,6 +134,70 @@ fn live(app: &Arc<App>) -> Resp {
     }
 }
 
+/// Coverage map (Radios page): one floor plan image and where the APs sit on it, in percent.
+/// No RF model. Kept in its own file next to state.json so the state stays small.
+#[derive(serde::Deserialize, serde::Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct Floorplan {
+    /// data:image/{png,jpeg,webp};base64,... (the browser scales it down first)
+    image: String,
+    aps: Vec<Pin>,
+}
+
+#[derive(serde::Deserialize, serde::Serialize)]
+#[serde(deny_unknown_fields)]
+struct Pin {
+    label: String,
+    x: f64,
+    y: f64,
+}
+
+pub const MAX_PLAN_IMAGE: usize = 200_000;
+pub const MAX_PINS: usize = 32;
+
+fn floorplan_path(app: &App) -> std::path::PathBuf {
+    lock(&app.store).dir().join("floorplan.json")
+}
+
+impl Floorplan {
+    fn check(&self) -> Result<(), &'static str> {
+        // no SVG: it can carry script; the bytes must really be the image type they claim
+        let magic: [(&str, &[u8]); 3] = [("png", b"\x89PNG"), ("jpeg", b"\xff\xd8\xff"), ("webp", b"RIFF")];
+        let (kind, data) = self.image.strip_prefix("data:image/").and_then(|r| r.split_once(";base64,")).ok_or("image must be a PNG, JPEG or WebP data URL")?;
+        let want = magic.iter().find(|(k, _)| *k == kind).ok_or("image must be PNG, JPEG or WebP")?.1;
+        if self.image.len() > MAX_PLAN_IMAGE {
+            return Err("image too large: scale it down (about 150 KB)");
+        }
+        if data.len() < 16 || !data.bytes().all(|b| b.is_ascii_alphanumeric() || b"+/=".contains(&b)) || !b64_head(&data[..16]).starts_with(want) {
+            return Err("image data is not valid");
+        }
+        if self.aps.len() > MAX_PINS {
+            return Err("at most 32 access points");
+        }
+        let ok = |p: &Pin| (0.0..=100.0).contains(&p.x) && (0.0..=100.0).contains(&p.y) && !p.label.is_empty() && p.label.chars().count() <= 32 && !p.label.chars().any(char::is_control);
+        if !self.aps.iter().all(ok) {
+            return Err("each access point needs a label (1-32 characters) and a position of 0-100 %");
+        }
+        Ok(())
+    }
+}
+
+/// Decodes 16 base64 characters (12 bytes): enough to check an image's magic number.
+fn b64_head(s: &str) -> Vec<u8> {
+    let val = |c: u8| match c {
+        b'A'..=b'Z' => c - b'A',
+        b'a'..=b'z' => c - b'a' + 26,
+        b'0'..=b'9' => c - b'0' + 52,
+        b'+' => 62,
+        b'/' => 63,
+        _ => 0,
+    };
+    s.as_bytes().chunks(4).flat_map(|q| {
+        let n = q.iter().fold(0u32, |a, &c| a << 6 | val(c) as u32);
+        [(n >> 16) as u8, (n >> 8) as u8, n as u8]
+    }).collect()
+}
+
 /// Spreadsheet apps run cells starting with = + - @ as formulas: neutralise them on export.
 pub fn csv_cell(s: &str) -> String {
     let s = if s.starts_with(['=', '+', '-', '@', '\t', '\r']) { format!("'{s}") } else { s.to_string() };
@@ -151,5 +234,40 @@ mod tests {
         assert_eq!(csv_cell("=HYPERLINK(\"x\")"), "\"'=HYPERLINK(\"\"x\"\")\"");
         assert_eq!(csv_cell("plain"), "\"plain\"");
         assert_eq!(csv_cell("-1"), "\"'-1\"");
+    }
+
+    #[test]
+    fn floorplan_is_validated_saved_and_admin_only() {
+        use crate::api::handle;
+        use crate::api::tests::{admin_session, req, with_session};
+        use crate::app::tests::app_with_router;
+        use crate::store::Mode;
+        let text = |r: &Resp| match &r.body {
+            Body::Bytes(b) => String::from_utf8_lossy(b).to_string(),
+            _ => String::new(),
+        };
+        // a PNG header, base64
+        let png = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==";
+        let fp = |image: &str, aps: Value| Floorplan { image: image.into(), aps: serde_json::from_value(aps).unwrap() }.check();
+        assert!(fp(png, json!([{ "label": "Living room", "x": 10.5, "y": 99 }])).is_ok());
+        assert!(fp(&png.replace("png", "svg+xml"), json!([])).is_err());
+        assert!(fp(&png.replace("image/png", "image/jpeg"), json!([])).is_err(), "magic bytes must match");
+        assert!(fp(&format!("{png}<script>"), json!([])).is_err());
+        assert!(fp(&format!("{png}{}", "A".repeat(MAX_PLAN_IMAGE)), json!([])).is_err());
+        assert!(fp(png, json!([{ "label": "x", "x": 101, "y": 0 }])).is_err());
+        assert!(fp(png, json!([{ "label": "", "x": 1, "y": 0 }])).is_err());
+        assert!(fp(png, json!((0..33).map(|_| json!({ "label": "a", "x": 1, "y": 1 })).collect::<Vec<_>>())).is_err());
+
+        let app = Arc::new(app_with_router("read,api,test", Mode::ReadOnly));
+        let (c, csrf) = admin_session(&app);
+        let call = |m: &str, b: &str| handle(&app, with_session(req(m, "/api/v1/floorplan", b), &c, &csrf));
+        assert_eq!(text(&call("GET", "")), "null");
+        let body = json!({ "image": png, "aps": [{ "label": "AP", "x": 50, "y": 50 }] }).to_string();
+        assert_eq!(call("PUT", &body).status, 200);
+        assert!(text(&call("GET", "")).contains("\"label\":\"AP\""));
+        assert_eq!(call("PUT", r#"{"image":"data:image/svg+xml;base64,PHN2Zz4=","aps":[]}"#).status, 400);
+        assert_eq!(call("DELETE", "").status, 200);
+        assert_eq!(text(&call("GET", "")), "null");
+        assert_eq!(handle(&app, req("GET", "/api/v1/floorplan", "")).status, 401);
     }
 }

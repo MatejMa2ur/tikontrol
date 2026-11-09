@@ -83,7 +83,7 @@ const DNS_KEYS: &[&str] = &["name", "type", "data", "ttl"];
 
 pub fn route(app: &Arc<App>, req: &Req, s: &Session) -> Option<Resp> {
     let tool = req.path.strip_prefix("/api/v1/tools/")?;
-    if !matches!(tool, "ping" | "traceroute" | "dns" | "console") {
+    if !matches!(tool, "ping" | "traceroute" | "dns" | "console" | "wifi-scan") {
         return None;
     }
     if tool == "console" && req.method == "GET" {
@@ -92,7 +92,72 @@ pub fn route(app: &Arc<App>, req: &Req, s: &Session) -> Option<Resp> {
     if req.method != "POST" {
         return Some(Resp::error(405, "use POST"));
     }
+    if tool == "wifi-scan" {
+        return Some(wifi_scan(app, req, s));
+    }
     Some(run(app, req, s, tool))
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct Scan {
+    package: crate::intents::wifi::Pkg,
+    interface: String,
+    #[serde(default = "five")]
+    duration: u8,
+    /// the browser showed the "clients disconnect" warning and the user agreed
+    confirm: bool,
+}
+fn five() -> u8 {
+    5
+}
+
+pub const MAX_SCAN_SECS: u8 = 10;
+const SCAN_KEYS: &[&str] = &["address", "ssid", "channel", "signal", "signal-strength", "noise-floor", "snr", "security", "radio-name"];
+
+/// Neighbour scan: takes the radio off-channel, so every client on it disconnects for the duration.
+/// Not a config change (nothing to revert), but disruptive: admin only, the writer connection (so
+/// read-only mode can't run it), an explicit confirm, at most 10 s (under the API read timeout).
+fn wifi_scan(app: &Arc<App>, req: &Req, s: &Session) -> Resp {
+    let b: Scan = match body(req) {
+        Ok(b) => b,
+        Err(r) => return r,
+    };
+    if !b.confirm {
+        return Resp::error(400, "a scan disconnects every client on the radio: confirm it first");
+    }
+    if !(1..=MAX_SCAN_SECS).contains(&b.duration) {
+        return Resp::error(400, &format!("duration must be 1-{MAX_SCAN_SECS} seconds"));
+    }
+    let i = match crate::apply::ros_name(&b.interface) {
+        Ok(i) if !i.contains(' ') => i,
+        _ => return Resp::error(400, "invalid interface name"),
+    };
+    if let Err(e) = crate::features::can_write(app, s) {
+        return Resp::error(403, e);
+    }
+    if let Err(wait) = limit(&s.csrf, Instant::now()) {
+        return Resp::error(429, "one diagnostic at a time: wait a moment").with("retry-after", wait.to_string());
+    }
+    let cmd = Cmd::new(&format!("{}/scan", b.package.path())).arg(".id", &i).arg("duration", &format!("{}s", b.duration)).proplist(SCAN_KEYS);
+    let rows = crate::features::writer(app, s).and_then(|mut r| r.run(&cmd));
+    match rows {
+        Ok(rows) => Resp::json(200, &json!({ "tool": "wifi-scan", "command": cmd.to_cli(), "rows": pick(latest(rows), SCAN_KEYS), "note": "SSIDs and names come from other devices: shown as text only." })),
+        Err(e) => Resp::error(502, &e),
+    }
+}
+
+/// A scan streams updates per access point: keep the last row for each address, in first-seen order.
+fn latest(rows: Vec<Row>) -> Vec<Row> {
+    let mut out: Vec<Row> = vec![];
+    for r in rows.into_iter().take(2000) {
+        match out.iter().position(|o| o.get("address").is_some() && o.get("address") == r.get("address")) {
+            Some(n) => out[n] = r,
+            None if out.len() < 200 => out.push(r),
+            None => {}
+        }
+    }
+    out
 }
 
 fn run(app: &Arc<App>, req: &Req, s: &Session, tool: &str) -> Resp {
@@ -189,5 +254,26 @@ mod tests {
         assert_eq!(call("/api/v1/tools/traceroute", r#"{"host":"example.com"}"#), 429);
         assert_eq!(handle(&app, with_session(req("GET", "/api/v1/tools/ping", ""), &c, &csrf)).status, 405);
         assert_eq!(handle(&app, req("POST", "/api/v1/tools/ping", r#"{"host":"192.0.2.1"}"#)).status, 401);
+    }
+
+    #[test]
+    fn wifi_scan_needs_confirm_a_short_duration_and_write_access() {
+        let app = Arc::new(app_with_router("read,api,test", Mode::ReadOnly));
+        let (c, csrf) = admin_session(&app);
+        let call = |b: &str| handle(&app, with_session(req("POST", "/api/v1/tools/wifi-scan", b), &c, &csrf)).status;
+        assert_eq!(call(r#"{"package":"wireless","interface":"wlan1","confirm":false}"#), 400);
+        assert_eq!(call(r#"{"package":"wireless","interface":"wlan1","duration":60,"confirm":true}"#), 400);
+        assert_eq!(call(r#"{"package":"wireless","interface":"wlan1\"; /system/reboot","confirm":true}"#), 400);
+        assert_eq!(call(r#"{"package":"other","interface":"wlan1","confirm":true}"#), 400);
+        // read-only mode: refused before anything reaches the router
+        assert_eq!(call(r#"{"package":"wireless","interface":"wlan1","confirm":true}"#), 403);
+    }
+
+    #[test]
+    fn scan_rows_keep_the_latest_per_access_point() {
+        let r = |a: &str, s: &str| -> Row { [("address".to_string(), a.to_string()), ("signal".to_string(), s.to_string())].into_iter().collect() };
+        let out = latest(vec![r("02:00:00:AA:BB:01", "-70"), r("02:00:00:AA:BB:02", "-60"), r("02:00:00:AA:BB:01", "-65")]);
+        assert_eq!(out.len(), 2);
+        assert_eq!(out[0].get("signal").unwrap(), "-65");
     }
 }
