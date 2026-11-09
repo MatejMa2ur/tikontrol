@@ -68,7 +68,12 @@ const QUERIES: &[Q] = &[
     q("addresses", "/ip/address/print", &["address", "interface", "comment"]),
     q("linkQuality", "/interface/wireless/registration-table/print", &["mac-address", "tx-ccq", "p-throughput"]),
     // ponytail: dotted proplist names are unverified over the API (docs/NEXT_STEPS.md)
-    q("wifiNew", "/interface/wifi/print", &["name", "channel.band", "channel.width", "configuration.ssid", "running", "disabled", "master-interface", "configuration.hide-ssid", "datapath.client-isolation", "security.authentication-types", "comment"]).arrays(&["security.authentication-types"]),
+    q("wifiNew", "/interface/wifi/print", &["name", "channel.band", "channel.width", "configuration.ssid", "running", "disabled", "master-interface", "configuration.hide-ssid", "datapath.client-isolation", "security.authentication-types", "security.ft", "steering.rrm", "steering.wnm", "interworking", "comment"]).arrays(&["security.authentication-types"]),
+    // Wi-Fi 7: MLO lives on /interface/wifi/network; a radio that can do it reports an ml-group
+    q("wifiNetworks", "/interface/wifi/network/print", &["name", "ssid", "mlo", "disabled"]),
+    q("wifiRadios", "/interface/wifi/radio/print", &["name", "ml-group"]),
+    // no passphrase: private PSKs are never read
+    q("accessListNew", "/interface/wifi/access-list/print", &["mac-address", "interface", "signal-range", "action", "vlan-id", "comment"]),
     q("stationsNew", "/interface/wifi/registration-table/print", &["interface", "mac-address", "signal", "tx-rate", "rx-rate", "uptime", "bytes", "last-ip", "band", "ssid"]),
     q("wireguard", "/interface/wireguard/print", &["name", "listen-port", "mtu", "running", "disabled", "comment", "public-key"]),
     q("wgPeers", "/interface/wireguard/peers/print", &["interface", "name", "allowed-address", "endpoint-address", "endpoint-port", "last-handshake", "rx", "tx", "comment", "disabled", "public-key"]).arrays(&["allowed-address"]),
@@ -118,7 +123,7 @@ const QUERIES: &[Q] = &[
     q("neighbors", "/ip/neighbor/print", &["interface", "address", "mac-address", "identity", "platform", "board", "version"]),
     // no wpa/wpa2 pre-shared keys
     q("secProfiles", "/interface/wireless/security-profiles/print", &["name", "mode", "authentication-types", "management-protection"]).arrays(&["authentication-types"]),
-    q("accessList", "/interface/wireless/access-list/print", &["mac-address", "interface", "signal-range", "authentication", "forwarding", "comment"]),
+    q("accessList", "/interface/wireless/access-list/print", &["mac-address", "interface", "signal-range", "authentication", "forwarding", "vlan-id", "comment"]),
     // optional: boards without sensors return nothing (or an error) for this key
     q("health", "/system/health/print", &["name", "value", "type"]),
     one("trafficFlow", "/ip/traffic-flow/print", &["enabled"]),

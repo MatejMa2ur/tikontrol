@@ -5,7 +5,7 @@
 //! restore an old one. A passphrase change is still armed, but its inverse restores only the non-secret
 //! fields, and the plan says so. Secrets never reach the inverse, the revert script or the CLI text.
 
-use crate::apply::{norm_mac, plan, ros_name, yn, Op, Plan, Risk, SECRET_KEYS};
+use crate::apply::{dns_name, norm_mac, plan, ros_name, yn, Op, Plan, Risk, SECRET_KEYS};
 use crate::ros::cmd::{valid_value, Cmd};
 use crate::ros::conn::{Router, Row};
 use serde::Deserialize;
@@ -20,7 +20,7 @@ pub enum Pkg {
 }
 
 impl Pkg {
-    fn path(self) -> &'static str {
+    pub fn path(self) -> &'static str {
         match self {
             Pkg::Wireless => "/interface/wireless",
             Pkg::Wifi => "/interface/wifi",
@@ -127,18 +127,29 @@ enum W {
     /// Put one Wi-Fi client on another VLAN (per-client access-list entry). Package detected on the router.
     WifiClientVlan { mac: String, vlan_id: u16 },
     RemoveWifiClientVlan { mac: String },
+    /// Private PSK: this client joins with its own password (access-list entry). Package detected.
+    WifiPrivatePsk { mac: String, passphrase: String },
+    RemoveWifiPrivatePsk { mac: String },
+    /// Fast roaming (802.11r) and steering hints (802.11k neighbour reports + 802.11v), new wifi package only.
+    WifiRoaming { interfaces: Vec<String>, ft: Option<bool>, steering: Option<bool> },
+    /// Multi-Link Operation on one `/interface/wifi/network` (Wi-Fi 7 radios).
+    WifiMlo { network: String, enabled: bool },
+    /// Hotspot 2.0 / Passpoint: a tagged interworking profile attached to one interface.
+    WifiPasspoint { interface: String, domain: String, realm_method: String, network_type: String, internet: bool },
+    RemoveWifiPasspoint { interface: String },
 }
 
-const KINDS: &[&str] = &["wifi-network", "wifi-radio", "wifi-radio-enabled", "wifi-guest", "remove-wifi-guest", "wifi-access-list", "remove-wifi-access-list", "wifi-signal-range", "remove-wifi-signal-range", "wifi-schedule", "remove-wifi-schedule", "wifi-client-vlan", "remove-wifi-client-vlan"];
+const KINDS: &[&str] = &["wifi-network", "wifi-radio", "wifi-radio-enabled", "wifi-guest", "remove-wifi-guest", "wifi-access-list", "remove-wifi-access-list", "wifi-signal-range", "remove-wifi-signal-range", "wifi-schedule", "remove-wifi-schedule", "wifi-client-vlan", "remove-wifi-client-vlan", "wifi-private-psk", "remove-wifi-private-psk", "wifi-roaming", "wifi-mlo", "wifi-passpoint", "remove-wifi-passpoint"];
 
-/// Which Wi-Fi package this router runs: the legacy `wireless` menu answers, else the new `wifi` one.
+/// Which Wi-Fi package this router runs: the one whose menu lists at least one interface. An empty menu
+/// isn't enough: RouterOS 7.25 has `/interface/wifi` even on a CHR with no radio at all.
 fn detect(r: &mut dyn Router) -> Result<Pkg, String> {
     for p in [Pkg::Wireless, Pkg::Wifi] {
-        if r.run(&Cmd::new(&format!("{}/print", p.path())).proplist(&["name"])).is_ok() {
+        if r.run(&Cmd::new(&format!("{}/print", p.path())).proplist(&["name"])).is_ok_and(|rows| !rows.is_empty()) {
             return Ok(p);
         }
     }
-    Err("this router has no Wi-Fi".into())
+    Err("this router has no Wi-Fi interfaces".into())
 }
 
 pub fn compile(v: &Value, r: &mut dyn Router) -> Option<Result<Plan, String>> {
@@ -219,7 +230,7 @@ fn is_true(v: &str) -> bool {
 }
 
 /// Booleans come back as true/false over the API; write them back as yes/no.
-const BOOL_KEYS: &[&str] = &["hide-ssid", "configuration.hide-ssid", "default-forwarding", "datapath.client-isolation", "disabled"];
+const BOOL_KEYS: &[&str] = &["hide-ssid", "configuration.hide-ssid", "default-forwarding", "datapath.client-isolation", "disabled", "security.ft", "security.ft-over-ds", "steering.rrm", "steering.wnm", "mlo", "hotspot20", "internet"];
 
 /// `set` (Some) / `unset` (None) for fields of the row named `name`, with the inverse read from the router.
 /// Secret fields are written but never read or restored.
@@ -640,8 +651,152 @@ fn build(w: W, r: &mut dyn Router) -> Result<Plan, String> {
             }
             Ok(plan(format!("Remove the Wi-Fi schedule for {i}"), Risk::Low, vec![Op::on(SCHED, "remove", "comment", &c, vec![])], readd(SCHED, &SCHED_KEYS, &old)))
         }
+        W::WifiPrivatePsk { mac, passphrase: pass } => {
+            let (mac, pass) = (norm_mac(&mac)?, passphrase(&pass)?);
+            let pkg = detect(r)?;
+            // first match wins: a second tikontrol entry for the same device would hide this one (or be hidden)
+            for (tag, what) in [("vlan", "a VLAN override"), ("acl", "an allow/deny rule")] {
+                if !r.run(&Cmd::new(&format!("{}/print", pkg.acl())).proplist(&["comment"]).query("comment", &format!("tik:{tag}:{mac}")))?.is_empty() {
+                    return Err(format!("{mac} already has {what} from tikontrol: remove it first (the router only uses the first matching access-list entry)"));
+                }
+            }
+            let c = format!("tik:ppsk:{mac}");
+            let had = !r.run(&Cmd::new(&format!("{}/print", pkg.acl())).proplist(&["comment"]).query("comment", &c))?.is_empty();
+            let mut args = vec![("mac-address", mac.clone())];
+            match pkg {
+                Pkg::Wireless => args.extend([("authentication", "yes".into()), ("forwarding", "yes".into()), ("private-pre-shared-key", pass)]),
+                Pkg::Wifi => args.extend([("action", "accept".into()), ("passphrase", pass)]),
+            }
+            args.push(("comment", c.clone()));
+            if let Some(id) = first_id(r, pkg.acl())? {
+                args.push(("place-before", id));
+            }
+            let ops = vec![Op::on(pkg.acl(), "remove", "comment", &c, vec![]), Op::add(pkg.acl(), args)];
+            let mut p = plan(format!("Own Wi-Fi password for {mac}"), Risk::Medium, ops, vec![Op::on(pkg.acl(), "remove", "comment", &c, vec![])]);
+            p.warnings.push("The device disconnects and must join again with its own password; the network's shared password stops working for it. Other devices are not affected.".into());
+            if had {
+                p.warnings.push("This device already had its own password. An automatic revert can't bring the old one back (tikontrol never reads passwords): the device falls back to the network's shared password.".into());
+            }
+            Ok(p)
+        }
+        W::RemoveWifiPrivatePsk { mac } => {
+            let mac = norm_mac(&mac)?;
+            let pkg = detect(r)?;
+            let c = format!("tik:ppsk:{mac}");
+            if r.run(&Cmd::new(&format!("{}/print", pkg.acl())).proplist(&["comment"]).query("comment", &c))?.is_empty() {
+                return Err(format!("{mac} has no own password set by tikontrol"));
+            }
+            Ok(Plan {
+                title: format!("Remove the own Wi-Fi password for {mac}"),
+                risk: Risk::Medium,
+                warnings: vec!["The device must join with the network's shared password. This can't be undone automatically: tikontrol never reads passwords, set it again to bring it back.".into()],
+                ops: vec![Op::on(pkg.acl(), "remove", "comment", &c, vec![])],
+                undo: vec![],
+                revertible: false,
+            })
+        }
+        W::WifiRoaming { interfaces, ft, steering } => {
+            if interfaces.is_empty() || interfaces.len() > 8 {
+                return Err("pick 1-8 Wi-Fi interfaces".into());
+            }
+            let ifs = interfaces.iter().map(|i| ifname(i)).collect::<Result<Vec<_>, _>>()?;
+            if ft.is_none() && steering.is_none() {
+                return Err("nothing to change".into());
+            }
+            if detect(r)? != Pkg::Wifi {
+                return Err(format!("802.11r/k/v {NEW_PKG_ONLY}"));
+            }
+            let (mut ops, mut undo) = (vec![], vec![]);
+            for i in &ifs {
+                let mut f: Vec<(&'static str, Option<String>)> = vec![];
+                if let Some(v) = ft {
+                    f.extend([("security.ft", Some(yn(v))), ("security.ft-over-ds", Some(yn(v)))]);
+                }
+                if let Some(v) = steering {
+                    f.extend([("steering.rrm", Some(yn(v))), ("steering.wnm", Some(yn(v)))]);
+                }
+                let (o, u) = set_fields(r, Pkg::Wifi.path(), i, f)?;
+                ops.extend(o);
+                undo.splice(0..0, u);
+            }
+            let mut p = plan(format!("Roaming settings on {}", ifs.join(", ")), Risk::Medium, ops, undo);
+            p.warnings.push("Clients on these interfaces reconnect.".into());
+            if ft == Some(true) {
+                p.warnings.push("A few older devices can't join a network with fast roaming (802.11r) on; turn it off again if one stops connecting. It needs the same SSID and security on every interface, and doesn't work with OWE.".into());
+            }
+            if steering == Some(true) {
+                p.warnings.push("Steering only suggests: the client still decides. Interfaces only point clients at each other when they share the SSID and security (same neighbour group).".into());
+            }
+            Ok(p)
+        }
+        W::WifiMlo { network, enabled } => {
+            let n = ros_name(&network)?;
+            if detect(r)? != Pkg::Wifi {
+                return Err(format!("MLO {NEW_PKG_ONLY}, on Wi-Fi 7 hardware"));
+            }
+            let radios = r.run(&Cmd::new("/interface/wifi/radio/print").proplist(&["ml-group"])).map_err(|_| "this RouterOS can't list Wi-Fi radios (/interface/wifi/radio): MLO needs a newer RouterOS")?;
+            if !radios.iter().any(|x| x.get("ml-group").is_some_and(|v| !v.is_empty())) {
+                return Err("no radio on this router can do multi-link (none reports an ml-group): MLO needs Wi-Fi 7 radios (wifi-qcom-be or wifi-mediatek driver)".into());
+            }
+            r.run(&Cmd::new(&format!("{WNET}/print")).proplist(&["name"])).map_err(|_| "this RouterOS has no /interface/wifi/network menu: MLO needs a newer RouterOS")?;
+            let (ops, undo) = set_fields(r, WNET, &n, vec![("mlo", Some(yn(enabled)))])?;
+            let mut p = plan(format!("{} MLO on {n}", if enabled { "Enable" } else { "Disable" }), Risk::Medium, ops, undo);
+            p.warnings.push("Every client of this network reconnects.".into());
+            if enabled {
+                p.warnings.push("Some devices without Wi-Fi 7 have been reported to drop and reconnect repeatedly with MLO on; turn it off again if older devices misbehave.".into());
+            }
+            Ok(p)
+        }
+        W::WifiPasspoint { interface, domain, realm_method, network_type, internet } => {
+            let (i, d) = (ifname(&interface)?, dns_name(&domain)?);
+            if !EAP_METHODS.contains(&realm_method.as_str()) {
+                return Err(format!("realm method must be one of {}", EAP_METHODS.join(", ")));
+            }
+            if !NET_TYPES.contains(&network_type.as_str()) {
+                return Err(format!("network type must be one of {}", NET_TYPES.join(", ")));
+            }
+            if detect(r)? != Pkg::Wifi {
+                return Err(format!("Hotspot 2.0 / Passpoint {NEW_PKG_ONLY}"));
+            }
+            let c = format!("tik:passpoint:{i}");
+            let had = r.run(&Cmd::new(&format!("{IW}/print")).proplist(&["name"]).query("comment", &c)).map_err(|_| "this RouterOS has no /interface/wifi/interworking menu")?;
+            if !had.is_empty() {
+                return Err(format!("{i} already has Passpoint from tikontrol: remove it first"));
+            }
+            let name = format!("tik-passpoint-{i}");
+            let add = Op::add(IW, vec![("name", name.clone()), ("hotspot20", "yes".into()), ("domain-names", d.clone()), ("realms", format!("{d}:{realm_method}")), ("network-type", network_type), ("internet", yn(internet)), ("comment", c.clone())]);
+            let (set, back) = set_fields(r, Pkg::Wifi.path(), &i, vec![("interworking", Some(name))])?;
+            let mut ops = vec![add];
+            ops.extend(set);
+            let mut undo = back;
+            undo.push(Op::on(IW, "remove", "comment", &c, vec![]));
+            let mut p = plan(format!("Passpoint on {i} for {d}"), Risk::Medium, ops, undo);
+            p.warnings.push("Passpoint only works on a WPA2/WPA3-Enterprise interface (802.1X with a RADIUS server, usually over RadSec), and phones need a Passpoint profile for this domain. tikontrol doesn't set those up.".into());
+            p.warnings.push("Clients on this interface reconnect.".into());
+            Ok(p)
+        }
+        W::RemoveWifiPasspoint { interface } => {
+            let i = ifname(&interface)?;
+            let c = format!("tik:passpoint:{i}");
+            let old = r.run(&Cmd::new(&format!("{IW}/print")).proplist(&IW_KEYS).query("comment", &c)).map_err(|_| "this router has no Wi-Fi interworking menu")?;
+            if old.is_empty() {
+                return Err("only Passpoint set up by tikontrol can be removed here".into());
+            }
+            let (mut ops, back) = set_fields(r, Pkg::Wifi.path(), &i, vec![("interworking", None)])?;
+            ops.push(Op::on(IW, "remove", "comment", &c, vec![]));
+            let mut undo = readd(IW, &IW_KEYS, &old);
+            undo.extend(back);
+            Ok(plan(format!("Remove Passpoint on {i}"), Risk::Low, ops, undo))
+        }
     }
 }
+
+const NEW_PKG_ONLY: &str = "needs the new wifi package (hAP ax and newer); the legacy wireless package doesn't have it";
+const WNET: &str = "/interface/wifi/network";
+const IW: &str = "/interface/wifi/interworking";
+const IW_KEYS: [&str; 7] = ["name", "hotspot20", "domain-names", "realms", "network-type", "internet", "comment"];
+const EAP_METHODS: &[&str] = &["eap-tls", "eap-sim", "eap-aka", "not-specified"];
+const NET_TYPES: &[&str] = &["private", "private-with-guest", "public-free", "public-chargeable", "personal-device", "emergency-only", "test", "wildcard"];
 
 const EU_POWER: &str = "Range trade-off (EU): channels 36-48 allow 200 mW EIRP, channels 100-140 (DFS) allow 1 W, so leaving DFS can shorten 5 GHz range. Check your country's rules.";
 
@@ -672,17 +827,114 @@ mod tests {
         compile_value(&v, f)
     }
 
+    /// An AP on the legacy wireless package (hAP ac²).
+    fn legacy() -> Fake {
+        let mut f = Fake::default();
+        f.answers.insert("/interface/wireless/print".into(), Ok(vec![row(&[("name", "wlan1")])]));
+        f
+    }
+
+    /// An AP that only has the new wifi package.
+    fn new_pkg() -> Fake {
+        let mut f = Fake::default();
+        f.answers.insert("/interface/wireless/print".into(), Err("no such command prefix".into()));
+        f.answers.insert("/interface/wifi/print".into(), Ok(vec![row(&[("name", "wifi1")])]));
+        f
+    }
+
+    /// CHR 7.25 as seen on a real VM: no wireless menu, an empty wifi menu.
+    fn no_wifi() -> Fake {
+        let mut f = Fake::default();
+        f.answers.insert("/interface/wireless/print".into(), Err("no such command prefix".into()));
+        f
+    }
+
     #[test]
     fn client_vlan_on_both_packages() {
         let v = json!({"kind": "wifi-client-vlan", "mac": "aa:bb:cc:dd:ee:ff", "vlan_id": 30});
-        let p = go(v.clone(), &mut Fake::default()).unwrap();
+        let p = go(v.clone(), &mut legacy()).unwrap();
         assert!(p.cli()[1].starts_with("/interface/wireless/access-list/add mac-address=AA:BB:CC:DD:EE:FF authentication=yes forwarding=yes vlan-mode=use-tag vlan-id=30"), "{:?}", p.cli());
-        let mut f = Fake::default();
-        f.answers.insert("/interface/wireless/print".into(), Err("no such command prefix".into()));
-        let p = go(v, &mut f).unwrap();
+        let p = go(v.clone(), &mut new_pkg()).unwrap();
         assert!(p.cli()[1].starts_with("/interface/wifi/access-list/add mac-address=AA:BB:CC:DD:EE:FF action=accept vlan-id=30"), "{:?}", p.cli());
-        assert!(go(json!({"kind": "wifi-client-vlan", "mac": "aa:bb:cc:dd:ee:ff", "vlan_id": 0}), &mut Fake::default()).is_err());
-        assert!(go(json!({"kind": "remove-wifi-client-vlan", "mac": "aa:bb:cc:dd:ee:ff"}), &mut Fake::default()).unwrap_err().contains("no VLAN override"));
+        assert!(go(v, &mut no_wifi()).unwrap_err().contains("no Wi-Fi"));
+        assert!(go(json!({"kind": "wifi-client-vlan", "mac": "aa:bb:cc:dd:ee:ff", "vlan_id": 0}), &mut legacy()).is_err());
+        assert!(go(json!({"kind": "remove-wifi-client-vlan", "mac": "aa:bb:cc:dd:ee:ff"}), &mut legacy()).unwrap_err().contains("no VLAN override"));
+    }
+
+    #[test]
+    fn private_psk_on_both_packages_never_leaks_the_password() {
+        let v = json!({"kind": "wifi-private-psk", "mac": "02:00:00:aa:bb:01", "passphrase": "own secret 123"});
+        let p = go(v.clone(), &mut legacy()).unwrap();
+        assert_eq!(p.cli()[1], r#"/interface/wireless/access-list/add mac-address=02:00:00:AA:BB:01 authentication=yes forwarding=yes private-pre-shared-key="********" comment=tik:ppsk:02:00:00:AA:BB:01"#);
+        assert_eq!(p.undo_cli(), [r#"/interface/wireless/access-list/remove [find comment="tik:ppsk:02:00:00:AA:BB:01"]"#]);
+        assert!(!revert_script("p", &p).unwrap().contains("own secret"));
+        let p = go(v.clone(), &mut new_pkg()).unwrap();
+        assert!(p.cli()[1].starts_with(r#"/interface/wifi/access-list/add mac-address=02:00:00:AA:BB:01 action=accept passphrase="********""#), "{:?}", p.cli());
+        assert!(p.ops[1].args.iter().any(|(_, v)| v == "own secret 123"));
+        // an existing tikontrol entry for the device (Fake answers every comment query) blocks it
+        let mut f = legacy();
+        f.answers.insert("/interface/wireless/access-list/print".into(), Ok(vec![row(&[("comment", "tik:vlan:02:00:00:AA:BB:01")])]));
+        assert!(go(v.clone(), &mut f).unwrap_err().contains("remove it first"));
+        assert!(go(json!({"kind": "wifi-private-psk", "mac": "02:00:00:aa:bb:01", "passphrase": "short"}), &mut legacy()).is_err());
+        assert!(go(v, &mut no_wifi()).unwrap_err().contains("no Wi-Fi"));
+        assert!(go(json!({"kind": "remove-wifi-private-psk", "mac": "02:00:00:aa:bb:01"}), &mut legacy()).is_err());
+        let p = go(json!({"kind": "remove-wifi-private-psk", "mac": "02:00:00:aa:bb:01"}), &mut f).unwrap();
+        assert!(!p.revertible);
+    }
+
+    #[test]
+    fn roaming_sets_ft_and_steering_with_undo_only_on_new_package() {
+        let mut f = new_pkg();
+        f.answers.insert("/interface/wifi/print".into(), Ok(vec![row(&[("name", "wifi1"), ("security.ft", "false"), ("steering.rrm", "true")])]));
+        let p = go(json!({"kind": "wifi-roaming", "interfaces": ["wifi1"], "ft": true, "steering": true}), &mut f).unwrap();
+        assert_eq!(p.cli(), [r#"/interface/wifi/set [find name="wifi1"] security.ft=yes security.ft-over-ds=yes steering.rrm=yes steering.wnm=yes"#]);
+        assert_eq!(p.undo_cli(), [
+            r#"/interface/wifi/set [find name="wifi1"] security.ft=no steering.rrm=yes"#,
+            r#"/interface/wifi/unset [find name="wifi1"] value-name=security.ft-over-ds"#,
+            r#"/interface/wifi/unset [find name="wifi1"] value-name=steering.wnm"#,
+        ]);
+        assert!(go(json!({"kind": "wifi-roaming", "interfaces": ["wlan1"], "ft": true}), &mut legacy()).unwrap_err().contains("new wifi package"));
+        assert!(go(json!({"kind": "wifi-roaming", "interfaces": ["wifi1"]}), &mut f).is_err());
+        assert!(go(json!({"kind": "wifi-roaming", "interfaces": ["wifi1"], "ft": true}), &mut no_wifi()).unwrap_err().contains("no Wi-Fi"));
+    }
+
+    #[test]
+    fn mlo_needs_wifi7_radios_and_the_network_menu() {
+        let v = json!({"kind": "wifi-mlo", "network": "home", "enabled": true});
+        let mut f = new_pkg();
+        assert!(go(v.clone(), &mut f).unwrap_err().contains("ml-group"));
+        f.answers.insert("/interface/wifi/radio/print".into(), Ok(vec![row(&[("ml-group", "02:00:00:AA:BB:10")])]));
+        f.answers.insert("/interface/wifi/network/print".into(), Ok(vec![row(&[("name", "home"), ("mlo", "false")])]));
+        let p = go(v.clone(), &mut f).unwrap();
+        assert_eq!(p.cli(), [r#"/interface/wifi/network/set [find name="home"] mlo=yes"#]);
+        assert_eq!(p.undo_cli(), [r#"/interface/wifi/network/set [find name="home"] mlo=no"#]);
+        f.answers.insert("/interface/wifi/network/print".into(), Err("no such command prefix".into()));
+        assert!(go(v.clone(), &mut f).unwrap_err().contains("/interface/wifi/network"));
+        assert!(go(v, &mut legacy()).unwrap_err().contains("new wifi package"));
+    }
+
+    #[test]
+    fn passpoint_adds_a_tagged_profile_and_undo_detaches_it() {
+        let v = json!({"kind": "wifi-passpoint", "interface": "wifi1", "domain": "example.com", "realm_method": "eap-tls", "network_type": "private", "internet": true});
+        let mut f = new_pkg();
+        f.answers.insert("/interface/wifi/print".into(), Ok(vec![row(&[("name", "wifi1")])]));
+        let p = go(v.clone(), &mut f).unwrap();
+        assert_eq!(p.cli(), [
+            "/interface/wifi/interworking/add name=tik-passpoint-wifi1 hotspot20=yes domain-names=example.com realms=example.com:eap-tls network-type=private internet=yes comment=tik:passpoint:wifi1",
+            r#"/interface/wifi/set [find name="wifi1"] interworking=tik-passpoint-wifi1"#,
+        ]);
+        assert_eq!(p.undo_cli(), [r#"/interface/wifi/unset [find name="wifi1"] value-name=interworking"#, r#"/interface/wifi/interworking/remove [find comment="tik:passpoint:wifi1"]"#]);
+        for bad in [json!({"kind": "wifi-passpoint", "interface": "wifi1", "domain": "a b", "realm_method": "eap-tls", "network_type": "private", "internet": true}), json!({"kind": "wifi-passpoint", "interface": "wifi1", "domain": "example.com", "realm_method": "eap-md5", "network_type": "private", "internet": true}), json!({"kind": "wifi-passpoint", "interface": "wifi1", "domain": "example.com", "realm_method": "eap-tls", "network_type": "home", "internet": true})] {
+            assert!(go(bad.clone(), &mut f).is_err(), "{bad}");
+        }
+        assert!(go(v.clone(), &mut legacy()).unwrap_err().contains("new wifi package"));
+        assert!(go(v, &mut no_wifi()).unwrap_err().contains("no Wi-Fi"));
+        assert!(go(json!({"kind": "remove-wifi-passpoint", "interface": "wifi1"}), &mut f).is_err());
+        f.answers.insert("/interface/wifi/interworking/print".into(), Ok(vec![row(&[("name", "tik-passpoint-wifi1"), ("hotspot20", "true"), ("domain-names", "example.com"), ("comment", "tik:passpoint:wifi1")])]));
+        f.answers.insert("/interface/wifi/print".into(), Ok(vec![row(&[("interworking", "tik-passpoint-wifi1")])]));
+        let p = go(json!({"kind": "remove-wifi-passpoint", "interface": "wifi1"}), &mut f).unwrap();
+        assert_eq!(p.undo_cli()[0], "/interface/wifi/interworking/add name=tik-passpoint-wifi1 hotspot20=yes domain-names=example.com comment=tik:passpoint:wifi1");
+        assert_eq!(p.undo_cli()[1], r#"/interface/wifi/set [find name="wifi1"] interworking=tik-passpoint-wifi1"#);
     }
 
     #[test]

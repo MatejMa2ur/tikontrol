@@ -87,7 +87,7 @@ impl Op {
 }
 
 /// Argument names whose values are secrets: masked in every CLI rendering and never allowed in an inverse.
-pub const SECRET_KEYS: &[&str] = &["password", "secret", "wpa-pre-shared-key", "wpa2-pre-shared-key", "wpa3-pre-shared-key", "security.passphrase", "passphrase", "private-key", "preshared-key", "ipsec-secret"];
+pub const SECRET_KEYS: &[&str] = &["password", "secret", "wpa-pre-shared-key", "wpa2-pre-shared-key", "wpa3-pre-shared-key", "private-pre-shared-key", "security.passphrase", "passphrase", "private-key", "preshared-key", "ipsec-secret"];
 
 /// Always-quoted string for `[find k="v"]`, escaping like `cli_quote`.
 fn quoted(v: &str) -> String {
