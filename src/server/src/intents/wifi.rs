@@ -124,9 +124,22 @@ enum W {
     RemoveWifiSchedule {
         interface: String,
     },
+    /// Put one Wi-Fi client on another VLAN (per-client access-list entry). Package detected on the router.
+    WifiClientVlan { mac: String, vlan_id: u16 },
+    RemoveWifiClientVlan { mac: String },
 }
 
-const KINDS: &[&str] = &["wifi-network", "wifi-radio", "wifi-radio-enabled", "wifi-guest", "remove-wifi-guest", "wifi-access-list", "remove-wifi-access-list", "wifi-signal-range", "remove-wifi-signal-range", "wifi-schedule", "remove-wifi-schedule"];
+const KINDS: &[&str] = &["wifi-network", "wifi-radio", "wifi-radio-enabled", "wifi-guest", "remove-wifi-guest", "wifi-access-list", "remove-wifi-access-list", "wifi-signal-range", "remove-wifi-signal-range", "wifi-schedule", "remove-wifi-schedule", "wifi-client-vlan", "remove-wifi-client-vlan"];
+
+/// Which Wi-Fi package this router runs: the legacy `wireless` menu answers, else the new `wifi` one.
+fn detect(r: &mut dyn Router) -> Result<Pkg, String> {
+    for p in [Pkg::Wireless, Pkg::Wifi] {
+        if r.run(&Cmd::new(&format!("{}/print", p.path())).proplist(&["name"])).is_ok() {
+            return Ok(p);
+        }
+    }
+    Err("this router has no Wi-Fi".into())
+}
 
 pub fn compile(v: &Value, r: &mut dyn Router) -> Option<Result<Plan, String>> {
     let kind = v.get("kind")?.as_str()?;
@@ -487,6 +500,46 @@ fn build(w: W, r: &mut dyn Router) -> Result<Plan, String> {
                 revertible: false,
             })
         }
+        W::WifiClientVlan { mac, vlan_id } => {
+            let mac = norm_mac(&mac)?;
+            if !(1..=4094).contains(&vlan_id) {
+                return Err("VLAN ID must be 1-4094".into());
+            }
+            let pkg = detect(r)?;
+            let c = format!("tik:vlan:{mac}");
+            let mut keys = acl_keys(pkg);
+            keys.extend(["vlan-mode", "vlan-id"]);
+            keys.retain(|k| pkg == Pkg::Wireless || *k != "vlan-mode");
+            let old = r.run(&Cmd::new(&format!("{}/print", pkg.acl())).proplist(&keys).query("comment", &c))?;
+            let mut args = vec![("mac-address", mac.clone())];
+            match pkg {
+                Pkg::Wireless => args.extend([("authentication", "yes".into()), ("forwarding", "yes".into()), ("vlan-mode", "use-tag".into())]),
+                Pkg::Wifi => args.push(("action", "accept".into())),
+            }
+            args.extend([("vlan-id", vlan_id.to_string()), ("comment", c.clone())]);
+            if let Some(id) = first_id(r, pkg.acl())? {
+                args.push(("place-before", id));
+            }
+            let ops = vec![Op::on(pkg.acl(), "remove", "comment", &c, vec![]), Op::add(pkg.acl(), args)];
+            let mut undo = vec![Op::on(pkg.acl(), "remove", "comment", &c, vec![])];
+            undo.extend(readd(pkg.acl(), &keys, &old));
+            let mut p = plan(format!("Put {mac} on VLAN {vlan_id}"), Risk::Medium, ops, undo);
+            p.warnings.push(format!("The client reconnects. It only gets a working network if VLAN {vlan_id} exists on the bridge and is tagged on the Wi-Fi interface (bridge VLAN filtering), with its own DHCP server."));
+            Ok(p)
+        }
+        W::RemoveWifiClientVlan { mac } => {
+            let mac = norm_mac(&mac)?;
+            let pkg = detect(r)?;
+            let c = format!("tik:vlan:{mac}");
+            let mut keys = acl_keys(pkg);
+            keys.extend(["vlan-mode", "vlan-id"]);
+            keys.retain(|k| pkg == Pkg::Wireless || *k != "vlan-mode");
+            let old = r.run(&Cmd::new(&format!("{}/print", pkg.acl())).proplist(&keys).query("comment", &c))?;
+            if old.is_empty() {
+                return Err(format!("{mac} has no VLAN override set by tikontrol"));
+            }
+            Ok(plan(format!("Remove the VLAN override for {mac}"), Risk::Low, vec![Op::on(pkg.acl(), "remove", "comment", &c, vec![])], readd(pkg.acl(), &keys, &old)))
+        }
         W::WifiAccessList { package: pkg, mac, allow, interface } => {
             let mac = norm_mac(&mac)?;
             let ifn = interface.as_deref().filter(|i| !i.is_empty()).map(ifname).transpose()?;
@@ -617,6 +670,19 @@ mod tests {
 
     fn go(v: Value, f: &mut Fake) -> Result<Plan, String> {
         compile_value(&v, f)
+    }
+
+    #[test]
+    fn client_vlan_on_both_packages() {
+        let v = json!({"kind": "wifi-client-vlan", "mac": "aa:bb:cc:dd:ee:ff", "vlan_id": 30});
+        let p = go(v.clone(), &mut Fake::default()).unwrap();
+        assert!(p.cli()[1].starts_with("/interface/wireless/access-list/add mac-address=AA:BB:CC:DD:EE:FF authentication=yes forwarding=yes vlan-mode=use-tag vlan-id=30"), "{:?}", p.cli());
+        let mut f = Fake::default();
+        f.answers.insert("/interface/wireless/print".into(), Err("no such command prefix".into()));
+        let p = go(v, &mut f).unwrap();
+        assert!(p.cli()[1].starts_with("/interface/wifi/access-list/add mac-address=AA:BB:CC:DD:EE:FF action=accept vlan-id=30"), "{:?}", p.cli());
+        assert!(go(json!({"kind": "wifi-client-vlan", "mac": "aa:bb:cc:dd:ee:ff", "vlan_id": 0}), &mut Fake::default()).is_err());
+        assert!(go(json!({"kind": "remove-wifi-client-vlan", "mac": "aa:bb:cc:dd:ee:ff"}), &mut Fake::default()).unwrap_err().contains("no VLAN override"));
     }
 
     #[test]

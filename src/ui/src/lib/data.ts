@@ -175,6 +175,7 @@ const router = {
   model: raw.routerboard?.model,
   version: res.version,
   channel: raw.update?.channel,
+  latest: raw.update?.['latest-version'] as string | undefined,
   firmware: raw.routerboard?.['current-firmware'],
   firmwareUpgrade: raw.routerboard?.['upgrade-firmware'],
   cpuCount: res['cpu-count'],

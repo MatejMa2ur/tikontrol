@@ -33,8 +33,8 @@ components:
     Intent:
       type: object
       required: [kind]
-      description: A Safe apply intent. `kind` selects the change; see src/server/src/apply.rs and src/server/src/intents/.
-      properties: { kind: { type: string, examples: [block-client, dns-record, port-forward, traffic-rule, set-port-mirror, create-bond] } }
+      description: A Safe apply intent. `kind` selects the change; see src/server/src/apply.rs and src/server/src/intents/. `batch` groups up to 8 intents (`title`, `intents`) into one change, undone in reverse order.
+      properties: { kind: { type: string, examples: [block-client, dns-record, port-forward, traffic-rule, set-port-mirror, create-bond, batch] } }
       additionalProperties: true
     Preview:
       type: object
@@ -184,7 +184,7 @@ paths:
     get: { summary: Shared names, icons, notes, groups and hidden clients, responses: { '200': { description: ok } } }
     put: { security: [{ session: [], csrf: [] }], summary: Replace prefs (size-capped), responses: { '200': { description: ok }, '413': { description: too large } } }
   /api/v1/router:
-    get: { summary: Router connection (no passwords) and detected policies, responses: { '200': { description: ok } } }
+    get: { summary: Router connection (no passwords) and detected policies; selfAddress is tikontrol's own address toward the router (target for flows and syslog), responses: { '200': { description: ok } } }
     post:
       security: [{ session: [], csrf: [] }]
       summary: Connect a router (admin). Logs in, checks real group policies, refuses an over-privileged reader

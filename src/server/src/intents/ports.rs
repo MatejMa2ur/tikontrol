@@ -185,7 +185,10 @@ fn build(i: &P, r: &mut dyn Router) -> Result<Plan, String> {
             if !STP_MODES.contains(&protocol_mode.as_str()) {
                 return Err(format!("protocol_mode must be one of {}", STP_MODES.join(", ")));
             }
-            let was = print(r, BRIDGE, &["protocol-mode"], Some(("name", &bridge)))?.into_iter().next().ok_or("no such bridge")?;
+            let was = print(r, BRIDGE, &["protocol-mode", "vlan-filtering"], Some(("name", &bridge)))?.into_iter().next().ok_or("no such bridge")?;
+            if protocol_mode == "mstp" && !was.get("vlan-filtering").is_some_and(|v| v == "true" || v == "yes") {
+                return Err("MSTP needs VLAN filtering on the bridge: turn that on first (Networks), or use RSTP".into());
+            }
             let was = was.get("protocol-mode").cloned().unwrap_or_else(|| "rstp".into());
             let mut p = plan(format!("Bridge {bridge}: loop protection {protocol_mode}"), Risk::High, vec![set_on(BRIDGE, "name", &bridge, vec![("protocol-mode", protocol_mode.clone())])], vec![set_on(BRIDGE, "name", &bridge, vec![("protocol-mode", was)])]);
             p.warnings.push("All bridge ports re-converge: traffic can pause for a few seconds (up to 30 s with classic STP).".into());

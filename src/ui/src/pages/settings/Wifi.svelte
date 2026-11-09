@@ -122,7 +122,7 @@
       <button class="btn small" onclick={() => review(`${r.on ? 'Turn off' : 'Turn on'} ${r.name}`, [`${pkgPath}/${r.on ? 'disable' : 'enable'} [find name="${r.name}"]`], { kind: 'wifi-radio-enabled', package: pkg, interface: r.name, enabled: !r.on })}>{r.on ? 'Turn off' : 'Turn on'}</button>
     </Field>
   {/each}
-  <div class="r"><button class="btn" onclick={() => review('Radio settings', rf.map(radioCli))}>Show all as commands</button></div>
+  <div class="r"><button class="btn" disabled={!rf.length} onclick={() => review('Radio settings', rf.map(radioCli), rf.length === 1 ? radioIntent(rf[0]) : { kind: 'batch', title: 'Radio settings', intents: rf.slice(0, 8).map(radioIntent) })}>Apply all radios</button></div>
 </Section>
 
 {#if edit}

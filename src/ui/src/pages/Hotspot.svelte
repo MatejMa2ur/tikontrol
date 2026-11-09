@@ -86,7 +86,7 @@
           <div class="voucher" class:used={v.used}><span class="muted small">Wi-Fi voucher · {v.duration}</span><b class="mono">{v.code}</b><span class="muted tiny">{ssids[0]?.ssid ?? ''} guest</span></div>
         {:else}<div class="muted small">No vouchers yet.</div>{/each}
       </div>
-      {#if vouchers.length}{@const b = batch(vouchers)}<div class="r"><button class="btn primary" onclick={() => review(`Create ${b.length} vouchers`, b.map((v) => `/ip/hotspot/user/add name=${v.code} limit-uptime=${v.duration} shared-users=${v.uses} comment=tik:voucher:${b[0].code}`), { kind: 'hotspot-vouchers', codes: b.map((v) => v.code), uptime: b[0].duration, shared_users: b[0].uses })}>Save latest batch to router</button></div>{/if}
+      {#if vouchers.length}{@const b = batch(vouchers)}<div class="r"><button class="btn primary" onclick={() => review(`Create ${b.length} vouchers`, b.map((v) => `/ip/hotspot/user/add name=${v.code} limit-uptime=${v.duration} comment=tik:voucher:${b[0].code}`), { kind: 'hotspot-vouchers', codes: b.map((v) => v.code), uptime: b[0].duration, shared_users: b[0].uses })}>Save latest batch to router</button></div>{/if}
     </Section>
   {:else if tab === 'guests'}
     <Section title="Guest sessions" desc="Who's logged in to the portal right now." ros="/ip/hotspot/active/print">

@@ -1,6 +1,6 @@
 <script lang="ts">
   import { ports, clients, raw, bytes, router } from '../lib/data'
-  import { displayName } from '../lib/live.svelte'
+  import { displayName, prefs } from '../lib/live.svelte'
   import { review, type Intent } from '../lib/apply.svelte'
   import Icon from '../lib/Icon.svelte'
   import DeviceFace from '../lib/DeviceFace.svelte'
@@ -21,27 +21,29 @@
   // port editor
   let edit = $state<string | null>(null)
   let f = $state({ enabled: true, profile: 'all', pvid: 1, tagged: '', speed: 'auto', poe: false })
+  const eth = (p: string): any => (Array.isArray(raw.ethernet) ? raw.ethernet : []).find((e: any) => e.name === p) ?? {}
+  const speedOf = (p: string) => (eth(p)['auto-negotiation'] === false ? String(eth(p).speed ?? 'auto') : 'auto')
+  let start = { enabled: true, profile: 'all', pvid: 1, tagged: '', speed: 'auto' }
   function open(p: string) {
     const bp = bports.find((b) => b.interface === p)
-    f = { enabled: true, profile: bp ? (bp['frame-types'] === 'admit-only-vlan-tagged' ? 'trunk' : 'all') : 'wan', pvid: bp?.pvid ?? 1, tagged: '', speed: 'auto', poe: false }
+    f = { enabled: !eth(p).disabled, profile: bp ? (bp['frame-types'] === 'admit-only-vlan-tagged' ? 'trunk' : 'all') : 'wan', pvid: bp?.pvid ?? 1, tagged: '', speed: speedOf(p), poe: false }
+    start = { enabled: f.enabled, profile: f.profile, pvid: f.pvid, tagged: f.tagged, speed: f.speed }
     const others = ports.map((x) => x.name).filter((n) => n !== p)
     a = { mirrorTo: sw['mirror-target'] && sw['mirror-target'] !== 'none' ? sw['mirror-target'] : others.at(-1) ?? '', bondWith: others[0] ?? '', bondMode: '802.3ad', edge: bp?.edge ?? 'auto', bpduGuard: !!bp?.['bpdu-guard'], storm: swp(p)?.['storm-rate'] ?? 100 }
     edit = p
   }
   function save() {
     const p = edit!
-    const cmds = [`/interface/ethernet/set ${p} disabled=${!f.enabled}${f.speed !== 'auto' ? ` auto-negotiation=no speed=${f.speed}` : ''}`]
-    if (f.profile === 'access') cmds.push(`/interface/bridge/port/set [find interface=${p}] pvid=${f.pvid} frame-types=admit-only-untagged-and-priority-tagged`)
-    if (f.profile === 'trunk') cmds.push(`/interface/bridge/port/set [find interface=${p}] frame-types=admit-only-vlan-tagged`, `/interface/bridge/vlan/add bridge=bridge vlan-ids=${f.tagged || '10,20'} tagged=bridge,${p}`)
-    // one change the server can compile → send it as an intent; mixed changes stay commands to copy
     const bp = bports.find((b) => b.interface === p)
-    const extras = f.speed !== 'auto'
-    const enabledChanged = f.enabled === false
-    let intent: Intent | undefined
-    if (!extras && enabledChanged && f.profile === 'all') intent = { kind: 'set-port-enabled', interface: p, enabled: false }
-    else if (!extras && !enabledChanged && f.profile === 'access' && bp) intent = { kind: 'set-bridge-port', interface: p, pvid: f.pvid, frame_types: 'admit-only-untagged-and-priority-tagged' }
-    else if (!extras && !enabledChanged && f.profile === 'trunk' && bp) intent = { kind: 'port-profile', interface: p, pvid: 1, tagged: (f.tagged || '').split(',').map((v) => Number(v.trim())).filter((v) => v > 0) }
-    review(`Port ${p}`, cmds, intent)
+    // only what changed; one part goes as is, several as one batch (one Review & apply, undone together)
+    const parts: Intent[] = []
+    if (f.enabled !== start.enabled) parts.push({ kind: 'set-port-enabled', interface: p, enabled: f.enabled })
+    if (f.speed !== start.speed) parts.push({ kind: 'set-port-speed', interface: p, speed: f.speed })
+    if (bp && f.profile === 'access' && (start.profile !== 'access' || f.pvid !== start.pvid)) parts.push({ kind: 'set-bridge-port', interface: p, pvid: f.pvid, frame_types: 'admit-only-untagged-and-priority-tagged' })
+    if (bp && f.profile === 'trunk' && (start.profile !== 'trunk' || f.tagged !== start.tagged || f.pvid !== start.pvid)) parts.push({ kind: 'port-profile', interface: p, pvid: f.pvid, tagged: (f.tagged || '').split(',').map((v) => Number(v.trim())).filter((v) => v > 0) })
+    if (bp && f.profile === 'all' && start.profile !== 'all') parts.push({ kind: 'set-bridge-port', interface: p, pvid: 1, frame_types: 'admit-all' })
+    if (!parts.length) { edit = null; return }
+    review(`Port ${p}`, parts.map((i) => `# ${i.kind}`), parts.length === 1 ? parts[0] : { kind: 'batch', title: `Port ${p}`, intents: parts })
     edit = null
   }
 
@@ -102,9 +104,10 @@
     <Field label="Enabled"><Toggle bind:checked={f.enabled} label="Enabled" /></Field>
     <Field label="Port profile" help="Access = one untagged VLAN · Trunk = tagged VLANs">
       <div class="seg">{#each [['all', 'Allow all'], ['access', 'Access'], ['trunk', 'Trunk']] as [v, l]}<button class:on={f.profile === v} onclick={() => (f.profile = v)}>{l}</button>{/each}</div>
+      {#if prefs.portProfiles.length}<select aria-label="Use a saved port profile" onchange={(e) => { const pp = prefs.portProfiles.find((x) => x.name === (e.target as HTMLSelectElement).value); if (pp) { f.pvid = pp.native; f.tagged = pp.tagged.join(','); f.profile = pp.tagged.length ? 'trunk' : 'access' } }}><option value="">Saved profile…</option>{#each prefs.portProfiles as pp}<option>{pp.name}</option>{/each}</select>{/if}
     </Field>
     {#if f.profile === 'access'}<Field label="VLAN ID"><input type="number" bind:value={f.pvid} min="1" max="4094" /></Field>{/if}
-    {#if f.profile === 'trunk'}<Field label="Tagged VLANs" help="Comma separated"><input type="text" bind:value={f.tagged} placeholder="10,20,30" /></Field>{/if}
+    {#if f.profile === 'trunk'}<Field label="Native VLAN" help="Untagged traffic on this port"><input type="number" bind:value={f.pvid} min="1" max="4094" /></Field><Field label="Tagged VLANs" help="Comma separated"><input type="text" bind:value={f.tagged} placeholder="10,20,30" /></Field>{/if}
     <Field label="Link speed"><select bind:value={f.speed}><option value="auto">Auto</option><option>1G-baseT-full</option><option>100M-baseT-full</option><option>10M-baseT-full</option></select></Field>
     <details><summary class="small">Advanced</summary>
       <p class="tiny warn">{UPLINK}</p>

@@ -153,19 +153,23 @@
 </Section>
 
 <Section title="Backups" desc="A readable export without passwords and keys, saved on the router. Download it with WinBox or WebFig Files." ros="/file/print where type=backup">
-  {#snippet actions()}<button class="btn primary" onclick={() => review('Back up now', [`/export file=tik-${today()}`], { kind: 'export-config', name: today() })}>Back up now</button>{/snippet}
+  {#snippet actions()}<button class="btn primary" onclick={() => review('Back up now', [`/export file=tik-${today()}`], { kind: 'export-config', name: today() })}>Back up now</button>
+    <button class="btn" title="Binary backup with passwords and keys, for restoring this same router" onclick={() => review('Full backup', [`/system/backup/save name=tik-${today()} dont-encrypt=yes`], { kind: 'save-backup', name: today() })}>Full backup</button>{/snippet}
   <table><thead><tr><th>File</th><th>Date</th><th class="r">Size</th><th></th></tr></thead>
     <tbody>{#each backups as b}<tr class="nohover"><td class="mono small">{b.name}</td><td>{b['last-modified']}</td><td class="r">{(b.size / 1024).toFixed(1)} KB</td>
-      <td class="r"><button class="btn small" onclick={() => review(`Restore ${b.name}`, [`/system/backup/load name=${b.name}`])}>Restore</button>
+      <td class="r">{#if b.name.endsWith('.backup')}<button class="btn small" onclick={() => review(`Restore ${b.name}`, [`/system/backup/load name=${b.name}`], { kind: 'restore-backup', name: b.name })}>Restore</button>
+        {:else}<button class="btn small" title="A script export is restored by hand on a reset router: tikontrol won't import a whole configuration over a running one" onclick={() => review(`Restore ${b.name}`, [`# on a router reset without defaults:`, `/import file-name=${b.name}`])}>How to restore</button>{/if}
         {#if ownFile(b.name)}<button class="btn small" onclick={() => review(`Delete ${b.name}`, [`/file/remove [find name="${b.name}"]`], { kind: 'remove-backup-file', name: b.name })}>Delete</button>{/if}</td></tr>{/each}</tbody></table>
-  <div class="row muted small sched">Automatic: <button class="btn small" onclick={() => review('Weekly backups', ['/system/scheduler/add name=tik-backup interval=7d on-event="/export file=tik-auto"'])}>Weekly backups</button></div>
+  <div class="row muted small sched">Automatic: <button class="btn small" onclick={() => review('Weekly backups', ['/system/scheduler/add name=tik-backup interval=7d on-event="/export file=tik-auto"'], { kind: 'backup-schedule', enabled: true, interval: '7d' })}>Weekly backups</button></div>
 </Section>
 
 <Section title="Updates" desc="RouterOS version and channel. Picking a channel downloads nothing." ros="/system/package/update/print">
   <Field label="Version"><span>{router.version}</span></Field>
   <Field label="Channel"><select bind:value={channel} aria-label="Update channel"><option>stable</option><option>long-term</option><option>testing</option><option>development</option></select>
     <button class="btn" disabled={channel === router.channel} onclick={() => review(`Update channel: ${channel}`, [`/system/package/update/set channel=${channel}`], { kind: 'set-update-channel', channel })}>Review & apply</button></Field>
-  <a class="btn" href="#/devices/updates">Manage updates…</a>
+  <div class="row"><button class="btn" onclick={() => review('Check for updates', ['/system/package/update/check-for-updates'], { kind: 'check-updates' })}>Check for updates</button>
+    {#if router.latest && router.latest !== router.version}<button class="btn primary" onclick={() => review(`Install RouterOS ${router.latest}`, ['/system/package/update/install'], { kind: 'install-update' })}>Install {router.latest}</button>{/if}
+    <a class="btn" href="#/devices/updates">Manage updates…</a></div>
 </Section>
 
 <Section title="API keys" desc="For Home Assistant and scripts: read-only access to tikontrol's GET API with Authorization: Bearer <key>. Keys belong to tikontrol, not the router.">

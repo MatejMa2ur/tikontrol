@@ -53,7 +53,20 @@ pub enum SystemIntent {
     Locate { interface: String },
     ExportConfig { name: String },
     RemoveBackupFile { name: String },
+    CheckUpdates {},
+    InstallUpdate {},
+    BackupSchedule { enabled: bool, #[serde(default = "week")] interval: String },
+    SaveBackup { name: String },
+    RestoreBackup { name: String },
 }
+
+fn week() -> String {
+    "7d".into()
+}
+
+/// tikontrol's scheduled export: a readable script without secrets, overwritten each run.
+pub const BACKUP_JOB: &str = "tik-backup";
+const INTERVALS: &[&str] = &["1d", "7d", "30d"];
 
 fn syslog_port() -> u16 {
     514
@@ -78,11 +91,16 @@ pub const KINDS: &[&str] = &[
     "locate",
     "export-config",
     "remove-backup-file",
+    "check-updates",
+    "install-update",
+    "backup-schedule",
+    "save-backup",
+    "restore-backup",
 ];
 
 /// Logging action (and rule `action=`) that marks our remote syslog. Logging menus don't all take
 /// comments, so the action name is the tag.
-pub const SYSLOG_ACTION: &str = "tik-remote";
+pub const SYSLOG_ACTION: &str = "tikremote"; // RouterOS: letters and digits only
 const TOPICS: &[&str] = &["info", "warning", "error", "critical", "account", "system", "firewall", "dhcp", "wireless", "wifi", "interface", "script"];
 const CHANNELS: &[&str] = &["stable", "long-term", "testing", "development"];
 const LEDS: &[&str] = &["never", "immediate", "after-1min", "after-1h"];
@@ -265,9 +283,12 @@ fn build(i: &SystemIntent, r: &mut dyn Router) -> Result<Plan, String> {
                 if !matches!(version.as_str(), "5" | "9" | "ipfix") {
                     return Err("version must be 5, 9 or ipfix".into());
                 }
-                let c = format!("tik:flow:{ip}:{port}");
-                ops.push(Op::add("/ip/traffic-flow/target", vec![("dst-address", ip.to_string()), ("port", port.to_string()), ("version", version.clone()), ("comment", c.clone())]));
-                undo.insert(0, Op::on("/ip/traffic-flow/target", "remove", "comment", &c, vec![]));
+                // targets take no comment: the collector address is the key, so one target per address
+                if !r.run(&Cmd::new("/ip/traffic-flow/target/print").proplist(&["port"]).query("dst-address", &ip.to_string()))?.is_empty() {
+                    return Err(format!("{ip} is already a traffic-flow collector"));
+                }
+                ops.push(Op::add("/ip/traffic-flow/target", vec![("dst-address", ip.to_string()), ("port", port.to_string()), ("version", version.clone())]));
+                undo.insert(0, Op::on("/ip/traffic-flow/target", "remove", "dst-address", &ip.to_string(), vec![]));
                 title.push_str(&format!(" to {ip}:{port}"));
             }
             let mut p = plan(title, Risk::Low, ops, undo);
@@ -317,7 +338,7 @@ fn build(i: &SystemIntent, r: &mut dyn Router) -> Result<Plan, String> {
         ),
         Locate { interface } => {
             let ifn = ros_name(interface)?;
-            one_shot(format!("Blink the {ifn} port LED"), Risk::Low, vec![Op::on("/interface/ethernet", "blink", "name", &ifn, vec![("duration", "10s".into())])], vec!["Blinks for 10 seconds; nothing is changed.".into()])
+            one_shot(format!("Blink the {ifn} port LED"), Risk::Low, vec![Op::on("/interface/ethernet", "blink", "name", &ifn, vec![])], vec!["Blinks the port LED for a few seconds; nothing is changed.".into()])
         }
         ExportConfig { name } => {
             let file = format!("tik-{}", file_stem(name)?);
@@ -327,6 +348,75 @@ fn build(i: &SystemIntent, r: &mut dyn Router) -> Result<Plan, String> {
                 Risk::Low,
                 vec![cmd("", "export", vec![("file", file)])],
                 vec!["Saved on the router's storage as a readable script, without passwords and keys: a restore needs them entered again. Download it with WinBox or WebFig Files to keep a copy off the router.".into()],
+            )
+        }
+        CheckUpdates {} => one_shot(
+            "Check for RouterOS updates".into(),
+            Risk::Low,
+            vec![cmd("/system/package/update", "check-for-updates", vec![])],
+            vec!["Asks MikroTik's update server for the newest version on the selected channel. Nothing is installed.".into()],
+        ),
+        InstallUpdate {} => {
+            let u = first(r, "/system/package/update", &["installed-version", "latest-version", "status"])?;
+            let (have, new) = (u.get("installed-version").cloned().unwrap_or_default(), u.get("latest-version").cloned().unwrap_or_default());
+            if new.is_empty() || new == have {
+                return Err("no newer RouterOS version is known: check for updates first".into());
+            }
+            one_shot(
+                format!("Install RouterOS {new}"),
+                Risk::High,
+                vec![cmd("/system/package/update", "install", vec![])],
+                vec![
+                    format!("High risk: downloads RouterOS {new} (now {have}) and restarts the router to install it. Internet, Wi-Fi and tikontrol drop for a few minutes."),
+                    "This cannot be reverted automatically. Going back needs a manual downgrade.".into(),
+                    "Save a backup first, and don't cut power while it installs.".into(),
+                ],
+            )
+        }
+        BackupSchedule { enabled, interval } => {
+            if !INTERVALS.contains(&interval.as_str()) {
+                return Err(format!("interval must be one of {}", INTERVALS.join(", ")));
+            }
+            let path = "/system/scheduler";
+            let have = r.run(&Cmd::new("/system/scheduler/print").proplist(&["interval"]).query("name", BACKUP_JOB))?;
+            let job = |iv: &str| Op::add(path, vec![("name", BACKUP_JOB.into()), ("interval", iv.to_string()), ("on-event", "/export file=tik-auto".into()), ("policy", "read,write,test".into()), ("comment", "tik: scheduled backup".into())]);
+            let remove = Op::on(path, "remove", "name", BACKUP_JOB, vec![]);
+            let was = have.first().map(|row| row.get("interval").cloned().unwrap_or_else(|| "7d".into()));
+            match (enabled, was) {
+                (true, None) => plan(format!("Back up every {interval}"), Risk::Low, vec![job(interval)], vec![remove]),
+                (true, Some(iv)) => plan(format!("Back up every {interval}"), Risk::Low, vec![Op::on(path, "set", "name", BACKUP_JOB, vec![("interval", interval.clone())])], vec![Op::on(path, "set", "name", BACKUP_JOB, vec![("interval", iv)])]),
+                (false, Some(iv)) => plan("Stop scheduled backups".into(), Risk::Low, vec![remove], vec![job(&iv)]),
+                (false, None) => return Err("scheduled backups are already off".into()),
+            }
+        }
+        SaveBackup { name } => {
+            let file = format!("tik-{}", file_stem(name)?);
+            one_shot(
+                format!("Save a full backup as {file}.backup"),
+                Risk::Low,
+                vec![cmd("/system/backup", "save", vec![("name", file), ("dont-encrypt", "yes".into())])],
+                vec![
+                    "A full binary backup, for restoring this same router. It includes passwords and keys, so it stays on the router's storage: download it only to a place you trust.".into(),
+                    "For moving settings to another router, use Save configuration (a readable script) instead.".into(),
+                ],
+            )
+        }
+        RestoreBackup { name } => {
+            let n = name.trim();
+            if n.is_empty() || n.len() > 80 || !n.ends_with(".backup") || !valid_value(n) || n.contains(['"', '\\']) {
+                return Err("pick a .backup file stored on the router".into());
+            }
+            if r.run(&Cmd::new("/file/print").proplist(&["name"]).query("name", n))?.is_empty() {
+                return Err("no such file".into());
+            }
+            one_shot(
+                format!("Restore {n}"),
+                Risk::High,
+                vec![cmd("/system/backup", "load", vec![("name", n.to_string()), ("password", String::new())])],
+                vec![
+                    "High risk: replaces the whole configuration with the backup and restarts the router. Everything changed since the backup is lost.".into(),
+                    "This cannot be reverted automatically. A backup from another router model can leave this one unreachable.".into(),
+                ],
             )
         }
         RemoveBackupFile { name } => {
@@ -407,24 +497,24 @@ mod tests {
     #[test]
     fn remote_syslog_is_tagged_and_removable() {
         let p = go(json!({"kind":"remote-syslog","address":"192.0.2.50","topics":["info","error"]}), &mut Fake::default()).unwrap();
-        assert_eq!(p.cli()[0], "/system/logging/action/add name=tik-remote target=remote remote=192.0.2.50 remote-port=514");
-        assert_eq!(p.cli()[2], "/system/logging/add topics=error action=tik-remote");
-        assert_eq!(p.undo_cli(), [r#"/system/logging/remove [find action="tik-remote"]"#, r#"/system/logging/action/remove [find name="tik-remote"]"#]);
+        assert_eq!(p.cli()[0], "/system/logging/action/add name=tikremote target=remote remote=192.0.2.50 remote-port=514");
+        assert_eq!(p.cli()[2], "/system/logging/add topics=error action=tikremote");
+        assert_eq!(p.undo_cli(), [r#"/system/logging/remove [find action="tikremote"]"#, r#"/system/logging/action/remove [find name="tikremote"]"#]);
         let mut f = Fake::default();
-        f.answers.insert("/system/logging/action/print".into(), Ok(vec![row(&[("name", "tik-remote")])]));
+        f.answers.insert("/system/logging/action/print".into(), Ok(vec![row(&[("name", "tikremote")])]));
         assert!(go(json!({"kind":"remote-syslog","address":"192.0.2.50","topics":["info"]}), &mut f).unwrap_err().contains("already"));
         f.answers.insert("/system/logging/action/print".into(), Ok(vec![row(&[("remote", "192.0.2.50"), ("remote-port", "514")])]));
         f.answers.insert("/system/logging/print".into(), Ok(vec![row(&[("topics", "info")])]));
         let p = go(json!({"kind":"remove-remote-syslog"}), &mut f).unwrap();
-        assert_eq!(p.undo_cli()[1], "/system/logging/add topics=info action=tik-remote");
+        assert_eq!(p.undo_cli()[1], "/system/logging/add topics=info action=tikremote");
         assert!(go(json!({"kind":"remove-remote-syslog"}), &mut Fake::default()).is_err());
     }
 
     #[test]
     fn traffic_flow_target_has_an_inverse() {
         let p = go(json!({"kind":"set-traffic-flow","enabled":true,"address":"192.0.2.60","version":"ipfix"}), &mut Fake::default()).unwrap();
-        assert_eq!(p.cli(), ["/ip/traffic-flow/set enabled=yes", "/ip/traffic-flow/target/add dst-address=192.0.2.60 port=2055 version=ipfix comment=tik:flow:192.0.2.60:2055"]);
-        assert_eq!(p.undo_cli(), [r#"/ip/traffic-flow/target/remove [find comment="tik:flow:192.0.2.60:2055"]"#, "/ip/traffic-flow/set enabled=no"]);
+        assert_eq!(p.cli(), ["/ip/traffic-flow/set enabled=yes", "/ip/traffic-flow/target/add dst-address=192.0.2.60 port=2055 version=ipfix"]);
+        assert_eq!(p.undo_cli(), [r#"/ip/traffic-flow/target/remove [find dst-address="192.0.2.60"]"#, "/ip/traffic-flow/set enabled=no"]);
     }
 
     #[test]
@@ -445,7 +535,7 @@ mod tests {
         for (v, risk, cli) in [
             (json!({"kind":"reboot"}), Risk::High, "/system/reboot"),
             (json!({"kind":"routerboot-upgrade"}), Risk::High, "/system/routerboard/upgrade"),
-            (json!({"kind":"locate","interface":"ether1"}), Risk::Low, r#"/interface/ethernet/blink [find name="ether1"] duration=10s"#),
+            (json!({"kind":"locate","interface":"ether1"}), Risk::Low, r#"/interface/ethernet/blink [find name="ether1"]"#),
             (json!({"kind":"export-config","name":"2026-01-15"}), Risk::Low, "/export file=tik-2026-01-15"),
         ] {
             let p = go(v.clone(), &mut Fake::default()).unwrap();

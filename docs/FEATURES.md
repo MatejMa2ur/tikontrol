@@ -11,7 +11,7 @@ Clean-room: we copy the behaviour, never the assets.
 **Backing:** `ROS` = RouterOS API on the router · `CMR` = MikroTik CMR server · `tik` = our own logic/DB · `✗` = nothing can back it
 
 <!-- progress:start -->
-**Progress:** 20 ✅ · 184 🟨 · 17 🎨 · 5 ⬜ · 8 ➖ (234 items, 9% done)
+**Progress:** 65 ✅ · 139 🟨 · 17 🎨 · 5 ⬜ · 8 ➖ (234 items, 29% done)
 <!-- progress:end -->
 
 ---
@@ -100,11 +100,11 @@ Clean-room: we copy the behaviour, never the assets.
 | Per-client traffic history | tik SQLite | 2 | 🟨 |
 | Per-client apps / domains (flow destinations per client, named from the DNS cache; the cache itself has no client field) | tik flows + DNS cache (CMR is per-device) | 3 | 🟨 |
 | Rename / alias, custom icon, notes | tik | 1 | 🟨 |
-| Fixed IP (reservation) | ROS lease make-static | 2 | 🟨 |
+| Fixed IP (reservation) | ROS lease make-static | 2 | ✅ |
 | Local DNS record for client | ROS `/ip/dns/static` | 2 | ✅ |
 | Block / unblock | ROS address-list + filter | 2 | ✅ |
-| Pause internet / schedules | ROS kid-control | 2 | 🟨 |
-| Speed limit (client groups) | ROS simple queues | 2 | 🟨 |
+| Pause internet / schedules | ROS kid-control | 2 | ✅ |
+| Speed limit (client groups) | ROS simple queues | 2 | ✅ |
 | "Why is this client on 2.4 GHz?": reasons, band history from the log, Safe apply fixes (channel 36, 40 MHz, own 5 GHz SSID, signal-range access list) | tik from log + monitor · ROS wireless/wifi | 3 | 🟨 |
 | Kick / reconnect wireless client | ROS reg-table remove | 2 | 🟨 |
 | Override network/VLAN for client | ROS (MAC-based VLAN / access list) | 4 |🎨 |
@@ -120,13 +120,13 @@ Clean-room: we copy the behaviour, never the assets.
 | Which client is on which port | ROS bridge host | 2 | 🟨 |
 | Per-port traffic / errors | ROS | 2 | 🟨 |
 | PoE status / power cycle | ROS `/interface/ethernet/poe` (hw dependent) | 3 | 🟨 |
-| Port profile (VLAN access/trunk, native VLAN) | ROS bridge VLAN · CMR vlan | 3 | 🟨 |
-| Port disable / enable | ROS | 2 | 🟨 |
+| Port profile (VLAN access/trunk, native VLAN) | ROS bridge VLAN · CMR vlan | 3 | ✅ |
+| Port disable / enable | ROS | 2 | ✅ |
 | Port mirroring | ROS switch mirror | 4 | 🟨 |
-| Link aggregation | ROS bonding | 4 | 🟨 |
-| STP / loop protection settings | ROS bridge protocol-mode | 4 | 🟨 |
+| Link aggregation | ROS bonding | 4 | ✅ |
+| STP / loop protection settings | ROS bridge protocol-mode | 4 | ✅ |
 | Storm control | ROS switch (hw dependent) | 4 | 🟨 |
-| 802.1X port auth | ROS dot1x | 4 | 🟨 |
+| 802.1X port auth | ROS dot1x | 4 | ✅ |
 | LLDP-MED / voice VLAN | ROS lldp | 4 | 🟨 |
 
 ## Radios / WiFi monitoring
@@ -167,7 +167,7 @@ Clean-room: we copy the behaviour, never the assets.
 | Categories: clients, devices, admin activity, security, updates | tik (topic mapping) | 1 | 🟨 |
 | Derived events (client joined/left, WAN flap) | tik | 2 | 🟨 |
 | Search / filter / export CSV | tik | 2 | 🟨 |
-| Remote syslog / SIEM forwarding | ROS logging action | 3 | 🟨 |
+| Remote syslog / SIEM forwarding | ROS logging action | 3 | ✅ |
 
 ## WiFi settings
 | Feature | Backing | Phase | Status |
@@ -192,27 +192,27 @@ Clean-room: we copy the behaviour, never the assets.
 ## Networks
 | Feature | Backing | Phase | Status |
 |---|---|---|---|
-| Create network: name, VLAN, subnet, DHCP in one form | ROS composite (Safe apply) | 3 | 🟨 |
-| DHCP range, lease time, DNS, gateway | ROS dhcp-server | 3 | 🟨 |
-| DHCP options (custom) | ROS dhcp option | 4 | 🟨 |
-| Network isolation | ROS firewall | 3 | 🟨 |
+| Create network: name, VLAN, subnet, DHCP in one form | ROS composite (Safe apply) | 3 | ✅ |
+| DHCP range, lease time, DNS, gateway | ROS dhcp-server | 3 | ✅ |
+| DHCP options (custom) | ROS dhcp option | 4 | ✅ |
+| Network isolation | ROS firewall | 3 | ✅ |
 | IPv6 (prefix delegation, SLAAC; DHCPv6 server not yet) | ROS ipv6 | 4 |🟨 |
-| IGMP snooping / multicast | ROS bridge igmp-snooping | 4 | 🟨 |
-| mDNS reflector across networks | ROS `/ip/dns mdns-repeat-ifaces` | 3 | 🟨 |
+| IGMP snooping / multicast | ROS bridge igmp-snooping | 4 | ✅ |
+| mDNS reflector across networks | ROS `/ip/dns mdns-repeat-ifaces` | 3 | ✅ |
 | Content filtering per network (DHCP DNS: family-safe resolver or router ad list; bypassable) | ROS DNS / adlist per network (limited) | 4 |🟨 |
 | Domain name / local DNS | ROS dhcp network domain + dns static | 3 |🟨 |
 
 ## Internet (WAN)
 | Feature | Backing | Phase | Status |
 |---|---|---|---|
-| WAN type: DHCP / static / PPPoE | ROS | 3 | 🟨 |
-| VLAN tagged WAN | ROS | 3 | 🟨 |
-| Multi-WAN failover | ROS routes + check-gateway / netwatch | 3 | 🟨 |
+| WAN type: DHCP / static / PPPoE | ROS | 3 | ✅ |
+| VLAN tagged WAN | ROS | 3 | ✅ |
+| Multi-WAN failover | ROS routes + check-gateway / netwatch | 3 | ✅ |
 | Load balancing (ECMP second default route) | ROS PCC / ECMP | 4 |🟨 |
-| Smart Queues (bufferbloat / CAKE / fq_codel) | ROS queue types | 3 | 🟨 |
-| DNS servers / DoH (encrypted DNS) | ROS `/ip/dns` use-doh-server | 2 | 🟨 |
-| Dynamic DNS | ROS `/ip/cloud` ddns | 2 | 🟨 |
-| IPv6 WAN | ROS | 4 | 🟨 |
+| Smart Queues (bufferbloat / CAKE / fq_codel) | ROS queue types | 3 | ✅ |
+| DNS servers / DoH (encrypted DNS) | ROS `/ip/dns` use-doh-server | 2 | ✅ |
+| Dynamic DNS | ROS `/ip/cloud` ddns | 2 | ✅ |
+| IPv6 WAN | ROS | 4 | ✅ |
 | ISP status / outage history | tik | 2 | 🟨 |
 
 ## VPN
@@ -221,27 +221,27 @@ Clean-room: we copy the behaviour, never the assets.
 | WireGuard server + peers + QR | ROS `/interface/wireguard` | 2 |🟨 |
 | OpenVPN server | ROS ovpn-server | 4 |🟨 |
 | L2TP/IPsec server | ROS | 4 |🟨 |
-| VPN client (to a provider) | ROS wg / ovpn client | 3 | 🟨 |
-| Site-to-site (WireGuard / IPsec) | ROS | 3 | 🟨 |
-| Teleport (one-click remote access) | ROS Back To Home (`/ip/cloud`) | 2 | 🟨 |
-| Policy-based routing through VPN | ROS routing rules / mangle | 3 | 🟨 |
+| VPN client (to a provider) | ROS wg / ovpn client | 3 | ✅ |
+| Site-to-site (WireGuard / IPsec) | ROS | 3 | ✅ |
+| Teleport (one-click remote access) | ROS Back To Home (`/ip/cloud`) | 2 | ✅ |
+| Policy-based routing through VPN | ROS routing rules / mangle | 3 | ✅ |
 | Connected VPN users view | ROS | 2 | 🟨 |
 
 ## Security / CyberSecure
 | Feature | Backing | Phase | Status |
 |---|---|---|---|
-| Zone-based firewall (zone matrix) | ROS interface-lists → filter rules | 3 | 🟨 |
-| Firewall policies (custom rules) | ROS filter | 3 | 🟨 |
+| Zone-based firewall (zone matrix) | ROS interface-lists → filter rules | 3 | ✅ |
+| Firewall policies (custom rules) | ROS filter | 3 | ✅ |
 | Simple app blocking | ROS tls-host + DNS · CMR app classes | 3 | 🟨 |
-| Traffic rules (block/limit by client, app, time) | ROS filter + queues + scheduler | 3 | 🟨 |
-| Ad blocking | ROS `/ip/dns/adlist` | 2 | 🟨 |
+| Traffic rules (block/limit by client, app, time) | ROS filter + queues + scheduler | 3 | ✅ |
+| Ad blocking | ROS `/ip/dns/adlist` | 2 | ✅ |
 | Content filtering (family, adult) | ROS adlist / DNS | 2 | 🟨 |
-| Region (country) blocking | ROS address-lists + tik feed | 4 | 🟨 |
-| IP groups / port groups | ROS address-lists | 3 | 🟨 |
-| Device isolation (per client) | ROS bridge filter | 4 | 🟨 |
+| Region (country) blocking | ROS address-lists + tik feed | 4 | ✅ |
+| IP groups / port groups | ROS address-lists | 3 | ✅ |
+| Device isolation (per client) | ROS bridge filter | 4 | ✅ |
 | IDS/IPS (signature-based) | ✗ | – | ➖ |
 | Honeypot | ✗ | – | ➖ |
-| Threat intelligence feeds (CyberSecure) | tik blocklist into address-list (partial) | 4 | 🟨 |
+| Threat intelligence feeds (CyberSecure) | tik blocklist into address-list (partial) | 4 | ✅ |
 | Security audit (telnet/ftp/http on, default creds) | tik | 2 | 🟨 |
 
 ## Routing
@@ -249,7 +249,7 @@ Clean-room: we copy the behaviour, never the assets.
 |---|---|---|---|
 | Port forwarding | ROS NAT dst-nat | 2 | ✅ |
 | Static routes | ROS `/ip/route` | 2 | ✅ |
-| Policy-based routes | ROS routing rules | 3 | 🟨 |
+| Policy-based routes | ROS routing rules | 3 | ✅ |
 | UPnP / NAT-PMP | ROS `/ip/upnp` | 2 | ✅ |
 | Local DNS records | ROS dns static | 2 | ✅ |
 | Dynamic routing (OSPF / BGP) | ROS (advanced: show only) | 4 | 🟨 |
@@ -257,17 +257,17 @@ Clean-room: we copy the behaviour, never the assets.
 ## Profiles
 | Feature | Backing | Phase | Status |
 |---|---|---|---|
-| Speed limit profiles (client groups) | ROS queues | 3 | 🟨 |
-| Port profiles | ROS bridge VLAN | 3 | 🟨 |
-| RADIUS profiles | ROS `/radius` | 4 | 🟨 |
-| QoS / DSCP rules | ROS mangle + queue tree | 4 | 🟨 |
+| Speed limit profiles (client groups) | ROS queues | 3 | ✅ |
+| Port profiles | ROS bridge VLAN | 3 | ✅ |
+| RADIUS profiles | ROS `/radius` | 4 | ✅ |
+| QoS / DSCP rules | ROS mangle + queue tree | 4 | ✅ |
 
 ## Hotspot / Guest portal
 | Feature | Backing | Phase | Status |
 |---|---|---|---|
 | Captive portal (branded) | ROS `/ip/hotspot` + custom html | 4 | 🟨 |
-| Vouchers (create, print, expiry) | ROS User Manager | 4 | 🟨 |
-| Terms acceptance / password portal | ROS hotspot | 4 | 🟨 |
+| Vouchers (create, print, expiry) | ROS User Manager | 4 | ✅ |
+| Terms acceptance / password portal | ROS hotspot | 4 | ✅ |
 | Payments (Stripe etc.) | ✗ out of scope | – | ➖ |
 | Guest session overview | ROS hotspot active | 4 | 🟨 |
 
@@ -281,12 +281,12 @@ Clean-room: we copy the behaviour, never the assets.
 | Firmware/app updates (channel, auto-update window) | ROS / CMR | 2 | 🟨 |
 | Integrations / local API (+ API keys) | tik REST | 4 | 🟨 |
 | Console (terminal in browser) | ROS (SSH/API terminal) | 3 | 🟨 |
-| Site settings (name, country, timezone, NTP) | ROS `/system/clock`, ntp | 2 | 🟨 |
-| SNMP | ROS `/snmp` | 3 | 🟨 |
-| Remote logging / NetFlow export settings | ROS | 3 | 🟨 |
+| Site settings (name, country, timezone, NTP) | ROS `/system/clock`, ntp | 2 | ✅ |
+| SNMP | ROS `/snmp` | 3 | ✅ |
+| Remote logging / NetFlow export settings | ROS | 3 | ✅ |
 | Data retention settings | tik | 2 | 🟨 |
 | Trusted HTTPS: local CA (name-constrained) signs a 397-day server cert, auto-renewed; CA download + per-device trust steps | tik `/api/v1/ca.crt` | 2 | ✅ |
-| Device auth / SSH settings, service hardening | ROS `/ip/service` | 2 | 🟨 |
+| Device auth / SSH settings, service hardening | ROS `/ip/service` | 2 | ✅ |
 | Debug tools: ping, traceroute, packet capture | ROS `/ping`, `/tool/traceroute`, sniffer | 3 | 🟨 |
 | Safe apply (auto-revert) | tik + ROS scheduler | 3 | ✅ |
 | "Show in RouterOS" for every object | tik | 2 | 🟨 |

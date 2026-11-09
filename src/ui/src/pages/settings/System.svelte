@@ -18,7 +18,7 @@
   // ponytail: dedupe by name, the router lists ssh/resolver/detnet several times
   const services = [...new Map((raw.services ?? []).filter((s: any) => !s.name.startsWith('detnet')).map((s: any) => [s.name, s])).values()] as any[]
   let svc = $state(Object.fromEntries(services.map((s) => [s.name, !s.disabled])))
-  const ourSyslog = (raw.loggingRules ?? []).some((r: any) => r.action === 'tik-remote')
+  const ourSyslog = (raw.loggingRules ?? []).some((r: any) => r.action === 'tikremote')
 
   const servers = (Array.isArray(ntp.servers) ? ntp.servers : []).join(', ')
   let site = $state({ name: router.identity, tz: clock['time-zone-name'] ?? 'UTC', ntp: !!ntp.enabled, servers: servers || 'pool.ntp.org' })
@@ -53,7 +53,7 @@
   function syslogReview() {
     const [addr, port] = mon.syslog.split(':')
     const topics = list(mon.topics)
-    review('Remote syslog', [`/system/logging/action/add name=tik-remote target=remote remote=${addr} remote-port=${port || 514}`, ...topics.map((t) => `/system/logging/add topics=${t} action=tik-remote`)],
+    review('Remote syslog', [`/system/logging/action/add name=tikremote target=remote remote=${addr} remote-port=${port || 514}`, ...topics.map((t) => `/system/logging/add topics=${t} action=tikremote`)],
       { kind: 'remote-syslog', address: addr, port: +(port || 514), topics })
   }
   function flowReview() {
@@ -74,6 +74,8 @@
     } catch (e) { diagErr = (e as Error).message } finally { busy = false }
   }
   const cols = $derived(out ? [...new Set(out.rows.flatMap((r) => Object.keys(r)))] : [])
+  // every switched service as its own set-service (api-ssl, tikontrol's own link, is refused by the server)
+  const serviceIntents = () => services.filter((s) => svc[s.name] === !!s.disabled).slice(0, 8).map((s) => ({ kind: 'set-service', name: s.name as string, enabled: !!svc[s.name] }))
 </script>
 
 <Section title="Site" ros="/system/identity/print; /system/clock/print; /system/ntp/client/print">
@@ -86,7 +88,7 @@
 
 <Section title="Router services" desc="Turn off what you don't use. Red ones send passwords unencrypted." ros="/ip/service/print">
   <div class="svc">{#each services as s}<label class="row" class:bad={INSECURE.includes(s.name) && svc[s.name]}><Toggle bind:checked={svc[s.name]} label={s.name} /><span>{s.name}</span><span class="muted mono small">:{s.port}</span></label>{/each}</div>
-  <div class="r"><button class="btn primary" onclick={() => review('Router services', services.filter((s) => svc[s.name] === !!s.disabled).map((s) => `/ip/service/set ${s.name} disabled=${svc[s.name] ? 'no' : 'yes'}`), (() => { const off = services.filter((s) => !svc[s.name] && !s.disabled).map((s) => s.name as string); return off.length && off.every((n) => ['telnet', 'ftp', 'www', 'api'].includes(n)) && services.every((s) => svc[s.name] !== !!s.disabled || !svc[s.name]) ? { kind: 'disable-services', names: off } : undefined })())}>Review & apply</button></div>
+  <div class="r"><button class="btn primary" disabled={!serviceIntents().length} onclick={() => { const parts = serviceIntents(); review('Router services', services.filter((s) => svc[s.name] === !!s.disabled).map((s) => `/ip/service/set ${s.name} disabled=${svc[s.name] ? 'no' : 'yes'}`), parts.length === 1 ? parts[0] : { kind: 'batch', title: 'Router services', intents: parts }) }}>Review & apply</button></div>
 </Section>
 
 <Section title="SNMP" desc="tikontrol never reads or sets SNMP communities: change the default community in WinBox." ros="/snmp/print">
@@ -98,7 +100,7 @@
 
 <Section title="Remote logging" ros="/system/logging/action/print; /ip/traffic-flow/print">
   {#if ourSyslog}
-    <Field label="Remote syslog" help="Set up by tikontrol"><button class="btn" onclick={() => review('Stop remote syslog', ['/system/logging/remove [find action=tik-remote]', '/system/logging/action/remove [find name=tik-remote]'], { kind: 'remove-remote-syslog' })}>Remove</button></Field>
+    <Field label="Remote syslog" help="Set up by tikontrol"><button class="btn" onclick={() => review('Stop remote syslog', ['/system/logging/remove [find action=tikremote]', '/system/logging/action/remove [find name=tikremote]'], { kind: 'remove-remote-syslog' })}>Remove</button></Field>
   {:else}
     <Field label="Remote syslog" help="Server address, optional :port"><input type="text" bind:value={mon.syslog} placeholder="192.0.2.50:514" aria-label="Syslog server" /></Field>
     <Field label="Topics" help="Comma separated"><input type="text" bind:value={mon.topics} aria-label="Syslog topics" /></Field>

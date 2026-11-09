@@ -22,6 +22,9 @@
   const desc = (r: any) => [r.protocol, r['dst-port'] && `port ${r['dst-port']}`, r['connection-state'], r['in-interface-list'] && `from ${r['in-interface-list']}`].filter(Boolean).join(' · ') || 'any'
   let rule = $state({ name: '', action: 'drop', src: '', dst: '', port: '', proto: 'tcp' })
   let geo = $state({ countries: '' })
+  // one intent per country (a batch holds at most 8); the server checks the codes again
+  const geoIntents = () => [...new Set(geo.countries.split(',').map((c) => c.trim().toUpperCase()).filter((c) => /^[A-Z]{2}$/.test(c)))].slice(0, 8)
+    .map((c) => ({ kind: 'region-block', country: c, url: `https://www.ipdeny.com/ipblocks/data/aggregated/${c.toLowerCase()}-aggregated.zone` }))
   let group = $state({ name: '', items: '' })
   let apps = $state<Record<string, boolean>>({ 'TikTok': false, 'Facebook': false, 'Steam': false, 'Netflix': false })
   const APPDOM: Record<string, string> = { TikTok: 'tiktok.com', Facebook: 'facebook.com', Steam: 'steampowered.com', Netflix: 'netflix.com' }
@@ -145,7 +148,7 @@
 
 <Section title="Region blocking" desc="Drop traffic from countries. Uses address lists filled from a GeoIP feed.">
   <Field label="Countries" help="ISO codes, comma separated"><input type="text" bind:value={geo.countries} placeholder="e.g. KP, IR" /></Field>
-  <div class="r"><button class="btn primary" disabled={!geo.countries} onclick={() => review('Region blocking', geo.countries.split(',').map((c) => c.trim().toUpperCase()).flatMap((c) => [`/tool/fetch url="https://www.ipdeny.com/ipblocks/data/aggregated/${c.toLowerCase()}-aggregated.zone" dst-path=tik-geo-${c}.txt`, `/ip/firewall/raw/add chain=prerouting in-interface-list=WAN src-address-list=tik-geo-${c} action=drop comment="tik:geo ${c}"`]))}>Review & apply</button></div>
+  <div class="r"><button class="btn primary" disabled={!geoIntents().length} onclick={() => { const parts = geoIntents(); review('Region blocking', parts.map((i) => `# block ${i.country} from ${i.url}`), parts.length === 1 ? parts[0] : { kind: 'batch', title: 'Region blocking', intents: parts }) }}>Review & apply</button></div>
 </Section>
 
 <Section title="IP & port groups" desc="Reusable lists for rules." ros="/ip/firewall/address-list/print">
@@ -158,7 +161,7 @@
 <Section title="Threat management">
   <Field label="IDS / IPS" na="Not available in RouterOS (no Suricata on this hardware)"><span></span></Field>
   <Field label="Honeypot" na="Not available in RouterOS"><span></span></Field>
-  <Field label="Threat feeds" help="Drop known-bad IPs (Spamhaus DROP)"><button class="btn" onclick={() => review('Threat feed', ['/system/script/add name=tik-feeds source=":do {/tool/fetch url=https://www.spamhaus.org/drop/drop.txt dst-path=drop.txt} on-error={}"', '/system/scheduler/add name=tik-feeds interval=1d on-event=tik-feeds', '/ip/firewall/raw/add chain=prerouting src-address-list=tik-drop action=drop comment="tik:threat feed"'])}>Enable</button></Field>
+  <Field label="Threat feeds" help="Drop known-bad IPs (Spamhaus DROP)"><button class="btn" onclick={() => review('Threat feed', ['# Spamhaus DROP list, refreshed daily'], { kind: 'threat-feed', name: 'spamhaus-drop', url: 'https://www.spamhaus.org/drop/drop.txt' })}>Enable</button></Field>
 </Section>
 
 <style>

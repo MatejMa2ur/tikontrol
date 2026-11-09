@@ -91,7 +91,7 @@
         <tbody><tr>
           <td><b>{identity}</b></td><td>{router.version}</td><td>{router.channel}</td>
           <td>{router.firmware}{#if router.firmware !== router.firmwareUpgrade} → <b>{router.firmwareUpgrade}</b>{/if}</td>
-          <td class="r"><button class="btn small" onclick={() => review('Check for updates', '/system/package/update/check-for-updates')}>Check</button>
+          <td class="r"><button class="btn small" onclick={() => review('Check for updates', '/system/package/update/check-for-updates', { kind: 'check-updates' })}>Check</button>
             {#if router.firmware !== router.firmwareUpgrade}<button class="btn primary small" onclick={() => review('Upgrade RouterBOOT', ['/system/routerboard/upgrade'], { kind: 'routerboot-upgrade' })}>Upgrade firmware</button>{/if}</td>
         </tr></tbody>
       </table>
@@ -155,7 +155,7 @@
       {/if}
       <div class="actions">
         <select bind:value={blinkPort} aria-label="Port to blink">{#each (raw.ethernet ?? [{ name: firstPort }]) as e}<option>{e.name}</option>{/each}</select>
-        <button class="btn" onclick={() => review('Locate device', [`/interface/ethernet/blink [find name=${q(blinkPort)}] duration=10s`], { kind: 'locate', interface: blinkPort })}>Locate (blink)</button>
+        <button class="btn" onclick={() => review('Locate device', [`/interface/ethernet/blink [find name=${q(blinkPort)}]`], { kind: 'locate', interface: blinkPort })}>Locate (blink)</button>
         <button class="btn" onclick={() => review('Restart device', ['/system/reboot'], { kind: 'reboot' })}>Restart</button>
       </div>
     {:else if dtab === 'ports'}
@@ -164,7 +164,7 @@
       <Field label="Name"><input type="text" bind:value={identity} aria-label="Device name" /><button class="btn small" onclick={() => review('Device name', [`/system/identity/set name=${q(identity)}`], { kind: 'site-settings', identity })}>Save</button></Field>
       <Field label="LEDs"><Toggle bind:checked={led} label="LEDs" /><button class="btn small" onclick={() => review(led ? 'Turn the LEDs on' : 'Turn the LEDs off', [`/system/leds/settings/set all-leds-off=${led ? 'never' : 'immediate'}`], { kind: 'set-leds', all_leds_off: led ? 'never' : 'immediate' })}>Save</button></Field>
       <Field label="Device SSH" help="Key-based SSH for admins"><Toggle bind:checked={ssh} label="SSH" /></Field>
-      <div class="r"><button class="btn" onclick={() => review('Device SSH', [`/ip/service/set ssh disabled=${ssh ? 'no' : 'yes'}`])}>Show SSH command</button></div>
+      <div class="r"><button class="btn" onclick={() => review('Device SSH', [`/ip/service/set ssh disabled=${ssh ? 'no' : 'yes'}`], { kind: 'set-service', name: 'ssh', enabled: ssh })}>Review & apply</button></div>
     {/if}
   </aside>
 {/if}

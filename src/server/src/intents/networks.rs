@@ -88,6 +88,7 @@ enum N {
     SetMdnsRepeat { interfaces: Vec<String> },
     SetIgmpSnooping { bridge: String, enabled: bool },
     SetPortEnabled { interface: String, enabled: bool },
+    SetPortSpeed { interface: String, speed: String },
     SetBridgePort { interface: String, pvid: u16, frame_types: String },
     PortProfile {
         interface: String,
@@ -119,6 +120,7 @@ const KINDS: &[&str] = &[
     "set-mdns-repeat",
     "set-igmp-snooping",
     "set-port-enabled",
+    "set-port-speed",
     "set-bridge-port",
     "port-profile",
     "set-poe",
@@ -558,6 +560,27 @@ fn build(i: &N, r: &mut dyn Router) -> Result<Plan, String> {
             if !enabled {
                 p.warnings.push(format!("Everything on {ifn} goes offline. If this browser reaches the router through {ifn}, you will be cut off until it reverts in 5 minutes."));
             }
+            p
+        }
+        SetPortSpeed { interface, speed } => {
+            const SPEEDS: &[&str] = &["auto", "10M-baseT-full", "100M-baseT-full", "1G-baseT-full", "2.5G-baseT", "10G-baseT"];
+            if !SPEEDS.contains(&speed.as_str()) {
+                return Err(format!("speed must be one of {}", SPEEDS.join(", ")));
+            }
+            let ifn = ifname(interface)?;
+            let rows = print(r, "/interface/ethernet", &["auto-negotiation", "speed"], Some(("name", &ifn)))?;
+            let row = rows.first().ok_or("no such ethernet port")?;
+            let auto = truthy(row.get("auto-negotiation"));
+            let args = |auto: bool, sp: Option<&String>| {
+                let mut a = vec![("auto-negotiation", yn(auto))];
+                if let Some(sp) = sp.filter(|_| !auto) {
+                    a.push(("speed", sp.clone()));
+                }
+                a
+            };
+            let new = if speed == "auto" { args(true, None) } else { args(false, Some(speed)) };
+            let mut p = plan(format!("Port {ifn}: {}", if speed == "auto" { "auto speed" } else { speed.as_str() }), Risk::Medium, vec![Op::on("/interface/ethernet", "set", "name", &ifn, new)], vec![Op::on("/interface/ethernet", "set", "name", &ifn, args(auto, row.get("speed")))]);
+            p.warnings.push(format!("{ifn} drops its link while it renegotiates. A fixed speed must match the other end, or the link stays down until it reverts."));
             p
         }
         SetBridgePort { interface, pvid, frame_types } => {

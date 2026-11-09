@@ -142,6 +142,8 @@ pub struct Prefs {
     /// dashboard layout: card ids in display order, and the hidden ones
     pub card_order: Vec<String>,
     pub hidden_cards: Vec<String>,
+    /// named port templates (name, native VLAN, tagged VLANs) applied per port from the Ports page
+    pub port_profiles: Vec<serde_json::Value>,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, Default)]

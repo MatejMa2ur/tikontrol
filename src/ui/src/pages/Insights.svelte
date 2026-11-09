@@ -12,6 +12,9 @@
 
   let { tab = 'apps' }: { tab?: string } = $props()
   const flowOn = !!raw.trafficFlow?.enabled
+  // the router sends flows to tikontrol's own address (the server reports it)
+  let selfIp = $state('')
+  $effect(() => { if (isBackend && !flowOn) api<{ selfAddress?: string }>('/router').then((r) => (selfIp = r.selfAddress ?? '')).catch(() => {}) })
 
   // Traffic by client
   const byClient = [...clients].map((c) => ({ c, total: c.bytesDown + c.bytesUp })).sort((a, b) => b.total - a.total)
@@ -92,7 +95,7 @@
           <Icon name="route" size={28} />
           <b>Traffic Flow is off on the router</b>
           <p class="muted small">Turning it on costs some CPU on the {router.board}. tikontrol would collect flows on port 2055 and keep a day of history.</p>
-          <button class="btn primary" onclick={() => review('Enable Traffic Flow', ['/ip/traffic-flow/set enabled=yes interfaces=WAN active-flow-timeout=1m', '/ip/traffic-flow/target/add dst-address=<tikontrol-ip> port=2055 version=5'])}>Enable flows</button>
+          <button class="btn primary" onclick={() => review('Enable Traffic Flow', ['/ip/traffic-flow/set enabled=yes', `/ip/traffic-flow/target/add dst-address=${selfIp || '<tikontrol-ip>'} port=2055 version=9`], selfIp ? { kind: 'set-traffic-flow', enabled: true, address: selfIp } : undefined)}>Enable flows</button>
           <p class="muted small">tikontrol's collector is off by default: start the server with <code>TIK_FLOWS=0.0.0.0:2055</code>.</p>
         </div>
       {/if}

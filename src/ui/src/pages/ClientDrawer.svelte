@@ -53,6 +53,16 @@
     ...stored.map((e) => ({ time: hhmm(e.t), text: e.text })),
   ].slice(-12).reverse())
   const hourMax = $derived(Math.max(...hours.map(([, d, u]) => d + u), 1))
+  // one Review & apply for the whole form: the server compiles each part and undoes them together
+  const pauseRule = () => `pause-${c.mac.replaceAll(':', '').toLowerCase()}`
+  function settingsIntents(): Intent[] {
+    const out: Intent[] = []
+    if (s.fixedIp && (!c.fixedIp || s.fixedIp !== c.ip)) out.push({ kind: 'fixed-ip', mac: c.mac, address: s.fixedIp })
+    if (s.dns.trim()) out.push({ kind: 'dns-record', name: `${s.dns.trim()}.lan`, address: s.fixedIp || c.ip })
+    if (s.vlan.trim() && !c.wired) out.push({ kind: 'wifi-client-vlan', mac: c.mac, vlan_id: Number(s.vlan) })
+    if (s.pause) out.push({ kind: 'traffic-rule', name: pauseRule(), target: 'mac', value: c.mac, action: 'block', from: s.from, to: s.to })
+    return out
+  }
   const limitIntent = () => { const [down, up] = s.limit.split('/').map((x) => x.trim()); return { kind: 'limit-client', mac: c.mac, ip: c.ip, down: down ?? '', up: up ?? down ?? '' } }
   // "Why is this client on 2.4 GHz?" and the Safe apply fixes for it
   const why = $derived(whyBand(c))
@@ -191,18 +201,13 @@
     <Field label="Notes"><input type="text" value={prefs.notes[c.mac] ?? ''} oninput={(e) => (prefs.notes[c.mac] = (e.target as HTMLInputElement).value)} placeholder="e.g. Living room TV" /></Field>
     <Field label="Fixed IP"><input type="text" bind:value={s.fixedIp} /></Field>
     <Field label="Local DNS name" help="Reach it as name.lan"><input type="text" bind:value={s.dns} placeholder="tv" /></Field>
-    <Field label="Network override" help="Put this device on another VLAN"><input type="text" bind:value={s.vlan} placeholder="VLAN ID (none)" /></Field>
+    <Field label="Network override" help={c.wired ? 'Wi-Fi clients only: this router\'s switch chip has no per-device VLAN for wired ports (use a port profile instead)' : 'Put this Wi-Fi device on another VLAN'}><input type="text" inputmode="numeric" bind:value={s.vlan} placeholder="VLAN ID (none)" disabled={c.wired} /></Field>
     <Field label="Speed limit" help="Download/upload, e.g. 20M/5M"><input type="text" bind:value={s.limit} placeholder="Unlimited" />
       <button class="btn" disabled={!s.limit} onclick={() => { const i = limitIntent(); review(`Limit ${displayName(c)}`, [`/queue/simple/add name=tik-limit-${c.mac.replaceAll(':', '')} target=${c.ip}/32 max-limit=${i.up}/${i.down} comment=tik:limit:${c.mac}`], i) }}>Apply limit</button>
       <button class="btn ghost" onclick={() => review(`Remove limit for ${displayName(c)}`, [`/queue/simple/remove [find comment="tik:limit:${c.mac}"]`], { kind: 'unlimit-client', mac: c.mac })}>Remove</button></Field>
     <Field label="Scheduled pause"><Toggle bind:checked={s.pause} label="Scheduled pause" /></Field>
     {#if s.pause}<Field label="Pause between"><input type="text" bind:value={s.from} /><input type="text" bind:value={s.to} /></Field>{/if}
-    <div class="save"><button class="btn primary" onclick={() => review(`Settings for ${displayName(c)}`, [
-      ...(s.fixedIp !== c.ip || !c.fixedIp ? [`/ip/dhcp-server/lease/make-static [find mac-address=${c.mac}]`, `/ip/dhcp-server/lease/set [find mac-address=${c.mac}] address=${s.fixedIp}`] : []),
-      ...(s.dns ? [`/ip/dns/static/add name=${s.dns}.lan address=${s.fixedIp} comment=tik:${c.mac}`] : []),
-      ...(s.vlan ? [`/interface/bridge/port/set [find interface=${c.port}] pvid=${s.vlan}`] : []),
-      ...(s.pause ? [`/ip/kid-control/add name="tik-${c.mac}" mon=${s.to}-${s.from} tue=${s.to}-${s.from} wed=${s.to}-${s.from} thu=${s.to}-${s.from} fri=${s.to}-${s.from} sat=${s.to}-${s.from} sun=${s.to}-${s.from}`, `/ip/kid-control/device/add mac-address=${c.mac} user="tik-${c.mac}"`] : []),
-    ])}>Review & apply</button></div>
+    <div class="save"><button class="btn primary" disabled={!settingsIntents().length} onclick={() => { const parts = settingsIntents(); review(`Settings for ${displayName(c)}`, parts.map((i) => `# ${i.kind}`), parts.length === 1 ? parts[0] : { kind: 'batch', title: `Settings for ${displayName(c)}`, intents: parts }) }}>Review & apply</button></div>
   {/if}
   <Ros cmd={`/ip/dhcp-server/lease/print where mac-address=${c.mac}; /interface/wireless/registration-table/print where mac-address=${c.mac}`} />
 </aside>

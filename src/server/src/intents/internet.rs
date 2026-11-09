@@ -317,7 +317,15 @@ fn build(i: I, r: &mut dyn Router) -> Result<Plan, String> {
             if undo.is_empty() {
                 return Err("Smart Queues aren't set up by tikontrol".into());
             }
-            plan("Turn off Smart Queues".into(), Risk::Low, vec![rm(SQ, "comment", c)], undo)
+            // the CAKE queue type was created with it: remove it too (undo puts it back first)
+            let mut ops = vec![rm(SQ, "comment", c)];
+            let mut full = vec![];
+            if !rows(r, "/queue/type", &[".id"], "name", "tik-cake")?.is_empty() {
+                ops.push(rm("/queue/type", "name", "tik-cake"));
+                full.push(Op::add("/queue/type", vec![("name", "tik-cake".into()), ("kind", "cake".into()), ("cake-diffserv", "diffserv4".into()), ("cake-nat", "yes".into())]));
+            }
+            full.extend(undo);
+            plan("Turn off Smart Queues".into(), Risk::Low, ops, full)
         }
         Ipv6Wan { interface, lan, prefix_len } => {
             let (ifn, lan) = (ros_name(&interface)?, ros_name(&lan)?);

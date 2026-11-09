@@ -535,7 +535,7 @@ fn prefs_ok(p: &Prefs) -> bool {
     let small = |m: &std::collections::BTreeMap<String, String>| m.len() <= 2000 && m.iter().all(|(k, v)| k.len() <= 64 && v.len() <= 500);
     // card ids are short slugs; the UI ignores ids it doesn't know
     let ids = |v: &[String]| v.len() <= 32 && v.iter().all(|i| !i.is_empty() && i.len() <= 32 && i.bytes().all(|b| b.is_ascii_lowercase() || b == b'-'));
-    small(&p.aliases) && small(&p.icons) && small(&p.notes) && p.groups.len() <= 100 && p.hidden.len() <= 2000 && ids(&p.card_order) && ids(&p.hidden_cards)
+    small(&p.aliases) && small(&p.icons) && small(&p.notes) && p.groups.len() <= 100 && p.port_profiles.len() <= 50 && serde_json::to_string(&p.port_profiles).is_ok_and(|j| j.len() <= 20_000) && p.hidden.len() <= 2000 && ids(&p.card_order) && ids(&p.hidden_cards)
 }
 
 fn router_info(app: &App) -> Resp {
@@ -551,6 +551,8 @@ fn router_info(app: &App) -> Resp {
                 "policies": snap.policies, "error": snap.error, "lastPoll": snap.at,
                 "readOnlyViolations": snap.policies.as_ref().map(|p| p.read_only_violations()),
                 "unneeded": snap.policies.as_ref().map(|p| p.extra()),
+                // where the router can send flows/syslog to this tikontrol (behind NAT: the mapped host address instead)
+                "selfAddress": own_ip_toward(&r.host, r.port).map(|i| i.to_string()),
             }),
         ),
     }

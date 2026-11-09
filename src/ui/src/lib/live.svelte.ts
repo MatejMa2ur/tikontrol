@@ -75,11 +75,12 @@ export const prefs = $state({
   // dashboard layout: card ids in order, and the hidden ones (pages/Dashboard.svelte)
   cardOrder: load<string[]>('tik.cardOrder', []),
   hiddenCards: load<string[]>('tik.hiddenCards', []),
+  portProfiles: load<{ name: string; native: number; tagged: number[] }[]>('tik.portProfiles', []),
 })
 // Names, icons, notes, groups, hidden clients and the dashboard layout live on the server when there is one (shared by every
 // browser and by MCP); the theme (mode, palette, design) and "show RouterOS" stay per browser, which is
 // per user as long as people don't share a browser profile.
-const SHARED = ['aliases', 'icons', 'notes', 'groups', 'hidden', 'cardOrder', 'hiddenCards'] as const
+const SHARED = ['aliases', 'icons', 'notes', 'groups', 'hidden', 'cardOrder', 'hiddenCards', 'portProfiles'] as const
 let loaded = !isBackend
 if (isBackend) api('/prefs').then((p) => { for (const k of SHARED) if (p?.[k]) (prefs as any)[k] = p[k]; loaded = true }).catch(() => (loaded = true))
 const dark = matchMedia('(prefers-color-scheme: dark)')

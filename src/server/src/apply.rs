@@ -78,7 +78,9 @@ impl Op {
                     return Ok(0);
                 }
                 let list = ids.iter().map(|s| s.as_str()).collect::<Vec<_>>().join(",");
-                r.run(&with_args(Cmd::new(&full).arg("numbers", &list))).map(|_| ids.len())
+                // `run` (scripts) names its target `number`; every other verb takes `numbers`
+                let key = if self.verb == "run" { "number" } else { "numbers" };
+                r.run(&with_args(Cmd::new(&full).arg(key, &list))).map(|_| ids.len())
             }
         }
     }
@@ -93,7 +95,7 @@ fn quoted(v: &str) -> String {
     if q.starts_with('"') { q } else { format!("\"{q}\"") }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize)]
 #[serde(rename_all = "lowercase")]
 pub enum Risk {
     Low,
@@ -131,7 +133,9 @@ pub enum Intent {
     ResumeClient { mac: String },
     LimitClient { mac: String, ip: String, down: String, up: String },
     UnlimitClient { mac: String },
-    FixedIp { mac: String },
+    FixedIp { mac: String, #[serde(default)] address: String },
+    ForgetClient { mac: String },
+    SetService { name: String, enabled: bool },
     KickWifi { mac: String },
     DnsRecord { name: String, address: String },
     RemoveDnsRecord { name: String },
@@ -253,7 +257,7 @@ pub fn compile(i: &Intent, current: &mut dyn Router) -> Result<Plan, String> {
             let undo = rows.iter().map(|r| Op::add("/queue/simple", vec![("name", r.get("name").cloned().unwrap_or_default()), ("target", r.get("target").cloned().unwrap_or_default()), ("max-limit", r.get("max-limit").cloned().unwrap_or_default()), ("comment", c.clone())])).collect();
             p(format!("Remove the speed limit for {mac}"), Risk::Low, vec![Op::on("/queue/simple", "remove", "comment", &c, vec![])], undo)
         }
-        FixedIp { mac } => {
+        FixedIp { mac, address } => {
             let mac = norm_mac(mac)?;
             let lease = "/ip/dhcp-server/lease";
             // `find` matching nothing would "succeed" without a change, and the undo removes the lease,
@@ -266,9 +270,49 @@ pub fn compile(i: &Intent, current: &mut dyn Router) -> Result<Plan, String> {
                 return Err(format!("{mac} already has a fixed IP"));
             }
             let c = format!("tik:fixed:{mac}");
-            let ops = vec![Op::on(lease, "make-static", "mac-address", &mac, vec![]), Op::on(lease, "set", "mac-address", &mac, vec![("comment", c.clone())])];
+            let mut set = vec![("comment", c.clone())];
+            if !address.trim().is_empty() {
+                set.push(("address", ipv4(address)?.to_string()));
+            }
+            let ops = vec![Op::on(lease, "make-static", "mac-address", &mac, vec![]), Op::on(lease, "set", "mac-address", &mac, set)];
             // removing the static lease lets the client get a dynamic one again
             p(format!("Give {mac} a fixed IP"), Risk::Low, ops, vec![Op::on(lease, "remove", "comment", &c, vec![])])
+        }
+        ForgetClient { mac } => {
+            let mac = norm_mac(mac)?;
+            // only what the router learned by itself: a fixed IP or static ARP entry is the user's own config
+            let leases = current.run(&Cmd::new("/ip/dhcp-server/lease/print").proplist(&["dynamic"]).query("mac-address", &mac))?;
+            let arp = current.run(&Cmd::new("/ip/arp/print").proplist(&["dynamic"]).query("mac-address", &mac))?;
+            if leases.iter().chain(&arp).any(|r| r.get("dynamic").map(String::as_str) != Some("true")) {
+                return Err(format!("{mac} has a fixed IP or a static ARP entry: remove those first"));
+            }
+            if leases.is_empty() && arp.is_empty() {
+                return Err(format!("the router has nothing remembered for {mac}"));
+            }
+            let mut ops = vec![];
+            if !arp.is_empty() {
+                ops.push(Op::on("/ip/arp", "remove", "mac-address", &mac, vec![]));
+            }
+            if !leases.is_empty() {
+                ops.push(Op::on("/ip/dhcp-server/lease", "remove", "mac-address", &mac, vec![]));
+            }
+            Plan { title: format!("Forget {mac}"), risk: Risk::Low, warnings: vec!["The device gets a new address the next time it connects.".into()], ops, undo: vec![], revertible: false }
+        }
+        SetService { name, enabled } => {
+            // api-ssl is tikontrol's own connection; switching it off here would cut tikontrol off mid-change
+            const ALLOWED: &[&str] = &["telnet", "ftp", "www", "www-ssl", "ssh", "winbox", "api"];
+            if !ALLOWED.contains(&name.as_str()) {
+                return Err(format!("only {} can be switched here", ALLOWED.join(", ")));
+            }
+            let rows = current.run(&Cmd::new("/ip/service/print").proplist(&["disabled"]).query("name", name))?;
+            let was = rows.first().ok_or("no such service")?.get("disabled").is_some_and(|v| v == "true" || v == "yes");
+            let op = |off: bool| Op::on("/ip/service", "set", "name", name, vec![("disabled", yn(off))]);
+            let mut pl = p(format!("{} {name}", if *enabled { "Enable" } else { "Disable" }), Risk::High, vec![op(!enabled)], vec![op(was)]);
+            pl.warnings.push("High risk: changes management access (/ip/service). Make sure you can still reach the router another way before keeping it.".into());
+            if *enabled && matches!(name.as_str(), "telnet" | "ftp" | "www" | "api") {
+                pl.warnings.push(format!("{name} sends passwords unencrypted. Limit it with available-from, or prefer an encrypted service."));
+            }
+            pl
         }
         KickWifi { mac } => {
             let mac = norm_mac(mac)?;
@@ -417,23 +461,73 @@ pub const AREAS: &[Area] = &[
     crate::intents::routing::compile,
 ];
 
-/// Entry point for the API: core intents first, then the areas. Unknown kinds are rejected.
+/// Entry point for the API: a batch, the areas, then the core intents. Unknown kinds are rejected.
+/// Every plan, whatever compiled it, passes the same final checks.
 pub fn compile_value(v: &serde_json::Value, r: &mut dyn Router) -> Result<Plan, String> {
+    let p = compile_one(v, r, true)?;
+    if !p.ops.iter().chain(&p.undo).all(Op::valid) {
+        return Err("a value contains characters RouterOS commands can't carry".into());
+    }
+    if p.undo.iter().any(Op::has_secret) {
+        return Err("internal: an inverse must not carry a secret".into());
+    }
+    Ok(p)
+}
+
+/// Most intents one batch may hold: one form's worth (client settings), not a whole config.
+pub const BATCH_MAX: usize = 8;
+
+fn compile_one(v: &serde_json::Value, r: &mut dyn Router, top: bool) -> Result<Plan, String> {
     let kind = v.get("kind").and_then(|k| k.as_str()).ok_or("intent needs a kind")?;
+    if kind == "batch" {
+        return batch(v, r, top);
+    }
     for area in AREAS {
         if let Some(p) = area(v, r) {
-            let p = p?;
-            if !p.ops.iter().chain(&p.undo).all(Op::valid) {
-                return Err("a value contains characters RouterOS commands can't carry".into());
-            }
-            if p.undo.iter().any(Op::has_secret) {
-                return Err("internal: an inverse must not carry a secret".into());
-            }
-            return Ok(p);
+            return p;
         }
     }
     let i: Intent = serde_json::from_value(v.clone()).map_err(|e| format!("invalid {kind} intent: {e}"))?;
     compile(&i, r)
+}
+
+/// Several intents applied as one change: ops in order, undo in reverse (the last change is undone first).
+/// Revertible only if every part is; risk and warnings are the highest and the union of the parts.
+fn batch(v: &serde_json::Value, r: &mut dyn Router, top: bool) -> Result<Plan, String> {
+    #[derive(Deserialize)]
+    #[serde(deny_unknown_fields)]
+    struct B {
+        #[allow(dead_code)]
+        kind: String,
+        title: String,
+        intents: Vec<serde_json::Value>,
+    }
+    if !top {
+        return Err("a batch can't contain another batch".into());
+    }
+    let b: B = serde_json::from_value(v.clone()).map_err(|e| format!("invalid batch: {e}"))?;
+    if b.intents.is_empty() || b.intents.len() > BATCH_MAX {
+        return Err(format!("a batch holds 1-{BATCH_MAX} changes"));
+    }
+    let title = b.title.trim();
+    if title.is_empty() || title.len() > 120 || title.chars().any(char::is_control) {
+        return Err("invalid batch title".into());
+    }
+    let parts = b.intents.iter().map(|i| compile_one(i, r, false)).collect::<Result<Vec<_>, _>>()?;
+    let mut plan = Plan { title: title.to_string(), risk: Risk::Low, warnings: vec![], ops: vec![], undo: vec![], revertible: true };
+    for p in &parts {
+        plan.risk = plan.risk.max(p.risk);
+        plan.revertible &= p.revertible;
+        plan.ops.extend(p.ops.iter().cloned());
+        plan.warnings.extend(p.warnings.iter().filter(|w| !plan.warnings.contains(w)).cloned().collect::<Vec<_>>());
+    }
+    for p in parts.iter().rev() {
+        plan.undo.extend(p.undo.iter().cloned());
+    }
+    if !plan.revertible {
+        plan.undo.clear();
+    }
+    Ok(plan)
 }
 
 /// Shorthand for areas.
@@ -555,18 +649,75 @@ mod tests {
     }
 
     #[test]
+    fn forget_and_services_protect_user_config() {
+        let m = "AA:BB:CC:DD:EE:FF";
+        let mut f = Fake::default();
+        assert!(compile(&Intent::ForgetClient { mac: m.into() }, &mut f).unwrap_err().contains("nothing remembered"));
+        f.answers.insert("/ip/arp/print".into(), Ok(vec![row(&[("dynamic", "false")])]));
+        assert!(compile(&Intent::ForgetClient { mac: m.into() }, &mut f).unwrap_err().contains("static ARP"));
+        f.answers.insert("/ip/arp/print".into(), Ok(vec![row(&[("dynamic", "true")])]));
+        let p = compile(&Intent::ForgetClient { mac: m.into() }, &mut f).unwrap();
+        assert_eq!(p.cli(), [format!("/ip/arp/remove [find mac-address=\"{m}\"]")]);
+        assert!(!p.revertible);
+        let off = |n: &str| compile(&Intent::SetService { name: n.into(), enabled: false }, &mut Fake::default());
+        assert!(off("api-ssl").is_err(), "tikontrol's own link");
+        let mut f = Fake::default();
+        f.answers.insert("/ip/service/print".into(), Ok(vec![row(&[("disabled", "true")])]));
+        let p = compile(&Intent::SetService { name: "ssh".into(), enabled: true }, &mut f).unwrap();
+        assert_eq!((p.cli()[0].as_str(), p.undo_cli()[0].as_str()), (r#"/ip/service/set [find name="ssh"] disabled=no"#, r#"/ip/service/set [find name="ssh"] disabled=yes"#));
+    }
+
+    #[test]
+    fn update_and_backup_intents() {
+        let c = |v: serde_json::Value, f: &mut Fake| compile_value(&v, f);
+        let mut f = Fake::default();
+        assert!(c(serde_json::json!({"kind": "install-update"}), &mut f).unwrap_err().contains("check for updates first"));
+        f.answers.insert("/system/package/update/print".into(), Ok(vec![row(&[("installed-version", "7.25"), ("latest-version", "7.25.1")])]));
+        let p = c(serde_json::json!({"kind": "install-update"}), &mut f).unwrap();
+        assert_eq!((p.risk, p.revertible), (Risk::High, false));
+        let p = c(serde_json::json!({"kind": "backup-schedule", "enabled": true}), &mut Fake::default()).unwrap();
+        assert!(p.cli()[0].starts_with("/system/scheduler/add name=tik-backup interval=7d"));
+        assert_eq!(p.undo_cli(), [r#"/system/scheduler/remove [find name="tik-backup"]"#]);
+        let mut f = Fake::default();
+        f.answers.insert("/system/scheduler/print".into(), Ok(vec![row(&[("interval", "1d")])]));
+        let p = c(serde_json::json!({"kind": "backup-schedule", "enabled": false}), &mut f).unwrap();
+        assert!(p.undo_cli()[0].contains("interval=1d"), "turning it off can be undone with the same interval");
+        assert!(c(serde_json::json!({"kind": "backup-schedule", "enabled": true, "interval": "5m"}), &mut Fake::default()).is_err());
+        assert!(c(serde_json::json!({"kind": "restore-backup", "name": "x.rsc"}), &mut Fake::default()).is_err());
+        assert!(c(serde_json::json!({"kind": "restore-backup", "name": "x.backup"}), &mut Fake::default()).unwrap_err().contains("no such file"));
+    }
+
+    #[test]
+    fn a_batch_applies_in_order_and_undoes_in_reverse() {
+        let v = serde_json::json!({ "kind": "batch", "title": "Settings for TV", "intents": [
+            { "kind": "dns-record", "name": "tv.lan", "address": "10.0.0.5" },
+            { "kind": "block-client", "mac": "AA:BB:CC:DD:EE:FF" },
+        ]});
+        let p = compile_value(&v, &mut Fake::default()).unwrap();
+        assert_eq!(p.title, "Settings for TV");
+        assert!(p.cli()[0].starts_with("/ip/dns/static/add") && p.cli()[1].starts_with("/ip/firewall/filter/add"));
+        assert!(p.undo_cli()[0].starts_with("/ip/firewall/filter/remove") && p.undo_cli()[1].starts_with("/ip/dns/static/remove"));
+        let nested = serde_json::json!({ "kind": "batch", "title": "x", "intents": [v] });
+        assert!(compile_value(&nested, &mut Fake::default()).unwrap_err().contains("another batch"));
+        let empty = serde_json::json!({ "kind": "batch", "title": "x", "intents": [] });
+        assert!(compile_value(&empty, &mut Fake::default()).is_err());
+        let bad = serde_json::json!({ "kind": "batch", "title": "x", "intents": [{ "kind": "dns-record", "name": "a b", "address": "10.0.0.5" }] });
+        assert!(compile_value(&bad, &mut Fake::default()).is_err(), "each part is validated");
+    }
+
+    #[test]
     fn client_actions_need_the_client_on_the_router() {
         let m = "AA:BB:CC:DD:EE:FF";
         // found on CHR: with no lease / no Wi-Fi registration these used to "succeed" without a change
-        assert!(compile(&Intent::FixedIp { mac: m.into() }, &mut Fake::default()).unwrap_err().contains("no DHCP lease"));
+        assert!(compile(&Intent::FixedIp { mac: m.into(), address: String::new() }, &mut Fake::default()).unwrap_err().contains("no DHCP lease"));
         assert!(compile(&Intent::KickWifi { mac: m.into() }, &mut Fake::default()).unwrap_err().contains("not connected over Wi-Fi"));
         let mut f = Fake::default();
         f.answers.insert("/ip/dhcp-server/lease/print".into(), Ok(vec![row(&[("dynamic", "false")])]));
-        assert!(compile(&Intent::FixedIp { mac: m.into() }, &mut f).unwrap_err().contains("already has a fixed IP"), "undo would delete a static lease");
+        assert!(compile(&Intent::FixedIp { mac: m.into(), address: String::new() }, &mut f).unwrap_err().contains("already has a fixed IP"), "undo would delete a static lease");
         f.answers.insert("/ip/dhcp-server/lease/print".into(), Ok(vec![row(&[("dynamic", "true")])]));
         f.answers.insert("/interface/wireless/registration-table/print".into(), Err("no such command prefix".into()));
         f.answers.insert("/interface/wifi/registration-table/print".into(), Ok(vec![row(&[("mac-address", m)])]));
-        assert!(compile(&Intent::FixedIp { mac: m.into() }, &mut f).unwrap().cli()[0].starts_with("/ip/dhcp-server/lease/make-static"));
+        assert!(compile(&Intent::FixedIp { mac: m.into(), address: String::new() }, &mut f).unwrap().cli()[0].starts_with("/ip/dhcp-server/lease/make-static"));
         assert!(compile(&Intent::KickWifi { mac: m.into() }, &mut f).unwrap().cli()[0].starts_with("/interface/wifi/registration-table/remove"));
     }
 

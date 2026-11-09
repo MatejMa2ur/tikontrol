@@ -38,9 +38,11 @@
     <button class="btn" disabled={!sp.name} onclick={() => review(`Remove speed profile ${sp.name}`, [`/queue/tree/remove [find comment="tik:profile:${sp.name}"]`, `/ip/firewall/mangle/remove [find comment="tik:profile:${sp.name}"]`], { kind: 'remove-group-limit', group: sp.name })}>Remove</button></div>
 </Section>
 
-<Section title="Port profiles" desc="Which VLANs a switch port carries." ros="/interface/bridge/vlan/print">
-  <div class="add"><input type="text" bind:value={port.name} placeholder="Name" /><input type="number" bind:value={port.native} title="Native VLAN" style="width:90px" /><input type="text" bind:value={port.tagged} placeholder="Tagged VLANs: 20,30" />
-    <button class="btn primary" disabled={!port.name} onclick={() => review(`Port profile ${port.name}`, [`# stored in tikontrol; applied per port as /interface/bridge/port/set pvid=${port.native} + /interface/bridge/vlan tagged=`])}><Icon name="plus" size={14} /> Add</button></div>
+<Section title="Port profiles" desc="Named VLAN templates. Pick one when you edit a port under Devices · Ports: it fills in the native and tagged VLANs." ros="/interface/bridge/vlan/print">
+  {#each prefs.portProfiles as pp, i}<div class="row between small"><span><b>{pp.name}</b> · native {pp.native}{pp.tagged.length ? ` · tagged ${pp.tagged.join(', ')}` : ''}</span><button class="btn small ghost" onclick={() => prefs.portProfiles.splice(i, 1)} aria-label={`Delete ${pp.name}`}>Delete</button></div>
+  {:else}<div class="muted small">No port profiles yet.</div>{/each}
+  <div class="add"><input type="text" bind:value={port.name} placeholder="Name" aria-label="Profile name" /><input type="number" min="1" max="4094" bind:value={port.native} title="Native VLAN" aria-label="Native VLAN" style="width:90px" /><input type="text" bind:value={port.tagged} placeholder="Tagged VLANs: 20,30" aria-label="Tagged VLANs" />
+    <button class="btn primary" disabled={!port.name.trim() || !(port.native >= 1 && port.native <= 4094) || prefs.portProfiles.some((x) => x.name === port.name.trim())} onclick={() => { prefs.portProfiles.push({ name: port.name.trim(), native: port.native, tagged: port.tagged.split(',').map((v) => Number(v.trim())).filter((v) => v >= 1 && v <= 4094) }); port = { name: '', native: 1, tagged: '' } }}><Icon name="plus" size={14} /> Add</button></div>
 </Section>
 
 <Section title="RADIUS" desc="For WPA-Enterprise Wi-Fi and 802.1X ports." ros="/radius/print">

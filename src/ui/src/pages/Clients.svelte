@@ -145,7 +145,7 @@
         <tbody>
           {#each offlineRows as o}
             <tr class="nohover"><td class="row"><span class="icon-box"><Icon name="unknown" /></span><span class="mono">{o.mac}</span></td><td class="mono">{o.ip}</td><td class="muted">{o.seen}</td>
-              <td class="r"><button class="btn" onclick={() => review('Forget device', [`/ip/arp/remove [find mac-address=${o.mac}]`, `/ip/dhcp-server/lease/remove [find mac-address=${o.mac} dynamic]`])}>Forget</button></td></tr>
+              <td class="r"><button class="btn" onclick={() => review('Forget device', [`/ip/arp/remove [find mac-address=${o.mac}]`, `/ip/dhcp-server/lease/remove [find mac-address=${o.mac} dynamic]`], { kind: 'forget-client', mac: o.mac })}>Forget</button></td></tr>
           {:else}<tr><td colspan="4" class="muted">Nobody offline.</td></tr>{/each}
         </tbody>
       </table>
