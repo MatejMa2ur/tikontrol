@@ -118,7 +118,7 @@
     <tbody>
       {#each list as s, i}
         <tr onclick={() => open(i)}>
-          <td><span class="row"><Icon name="wifi" size={15} /><b>{s.name}</b>{#if s.hidden}<span class="pill">hidden</span>{/if}{#if s.guest}<span class="pill">guest</span>{/if}</span></td>
+          <td><span class="row"><Icon name="wifi" size={15} /><button class="plain" onclick={(e) => { e.stopPropagation(); open(i) }}><b>{s.name}</b></button>{#if s.hidden}<span class="pill">hidden</span>{/if}{#if s.guest}<span class="pill">guest</span>{/if}</span></td>
           <td>{s.security === 'wpa2' ? 'WPA2' : s.security === 'wpa3' ? 'WPA3' : s.security === 'open' ? 'Open' : 'WPA2/WPA3'}</td>
           <td>{s.bands.join(' + ')}</td>
           <td>{netName(s.network)}</td>

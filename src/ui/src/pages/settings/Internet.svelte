@@ -22,7 +22,8 @@
   let sq = $state({ on: !!sqRow, down: mbps(String(sqRow?.['max-limit'] ?? '').split('/')[1]) || 500, up: mbps(String(sqRow?.['max-limit'] ?? '').split('/')[0]) || 50 })
   const servers = Array.isArray(dns.servers) ? dns.servers : String(dns.servers ?? '').split(',').filter(Boolean)
   let d = $state({ servers: servers.join(', '), doh: dns['use-doh-server'] ?? '', ddns: cloud['ddns-enabled'] === true || cloud['ddns-enabled'] === 'yes' || !!cloud['dns-name'] })
-  let v6 = $state({ on: (raw.ipv6Pools ?? []).some((p: any) => p.name === 'tik-v6'), pd: 56 })
+  const v6Was = (raw.ipv6Pools ?? []).some((p: any) => p.name === 'tik-v6')
+  let v6 = $state({ on: v6Was, pd: 56 })
 
   // the interface the connection type applies to: the tagged VLAN when one is set
   const wanIf = $derived(wan.vlan ? `wan-vlan${wan.vlan}` : internet.wanIf)
@@ -79,7 +80,7 @@
   {#if sq.on}<Field label="Download / upload (Mbps)"><input type="number" bind:value={sq.down} /><input type="number" bind:value={sq.up} /></Field>{/if}
   <div class="r">
     {#if sq.on}<button class="btn primary" disabled={!(sq.down > 0 && sq.up > 0)} onclick={() => review('Smart Queues', ['/queue/type/add name=tik-cake kind=cake cake-diffserv=diffserv4 cake-nat=yes', `/queue/simple/add name=tik-smartqueue target=${internet.wanIf} max-limit=${sq.up}M/${sq.down}M queue=tik-cake/tik-cake comment=tik:smartqueue`], { kind: 'smart-queue', interface: internet.wanIf, down: `${sq.down}M`, up: `${sq.up}M` })}>Review & apply</button>
-    {:else}<button class="btn" onclick={() => review('Turn off Smart Queues', ['/queue/simple/remove [find comment="tik:smartqueue"]'], { kind: 'remove-smart-queue' })}>Turn off</button>{/if}
+    {:else if sqRow}<button class="btn" onclick={() => review('Turn off Smart Queues', ['/queue/simple/remove [find comment="tik:smartqueue"]'], { kind: 'remove-smart-queue' })}>Turn off</button>{/if}
   </div>
 </Section>
 
@@ -99,7 +100,7 @@
   <Field label="IPv6 on WAN"><Toggle bind:checked={v6.on} label="IPv6" /></Field>
   {#if v6.on}<Field label="Prefix delegation size"><select bind:value={v6.pd}><option value={48}>/48</option><option value={56}>/56</option><option value={60}>/60</option><option value={64}>/64</option></select></Field>
     <div class="r"><button class="btn primary" onclick={() => review('IPv6 WAN', [`/ipv6/dhcp-client/add interface=${internet.wanIf} request=prefix pool-name=tik-v6 pool-prefix-length=64 prefix-hint=::/${v6.pd} add-default-route=yes use-peer-dns=yes comment=tik:v6wan`, '/ipv6/address/add interface=bridge from-pool=tik-v6 advertise=yes comment=tik:v6wan'], { kind: 'ipv6-wan', interface: internet.wanIf, lan: 'bridge', prefix_len: +v6.pd })}>Review & apply</button></div>
-  {:else}<div class="r"><button class="btn" onclick={() => review('Turn off IPv6 WAN', ['/ipv6/address/remove [find comment="tik:v6wan"]', '/ipv6/dhcp-client/remove [find comment="tik:v6wan"]'], { kind: 'remove-ipv6-wan' })}>Turn off</button></div>{/if}
+  {:else if v6Was}<div class="r"><button class="btn" onclick={() => review('Turn off IPv6 WAN', ['/ipv6/address/remove [find comment="tik:v6wan"]', '/ipv6/dhcp-client/remove [find comment="tik:v6wan"]'], { kind: 'remove-ipv6-wan' })}>Turn off</button></div>{/if}
 </Section>
 
 <Section title="ISP status" desc="Outages and latency history are recorded once tikontrol runs continuously.">
@@ -108,6 +109,7 @@
 
 <style>
   .kv { display: grid; grid-template-columns: 110px 1fr 110px 1fr; gap: 6px 12px; margin-bottom: 12px; }
+  @media (max-width: 760px) { .kv { grid-template-columns: 90px 1fr; } }
   .warnbox { display: flex; gap: 8px; align-items: center; padding: 8px 10px; border-radius: 8px; background: color-mix(in srgb, var(--warn) 14%, transparent); color: var(--warn); margin: 8px 0; }
   .r { text-align: right; margin-top: 10px; }
   .small { font-size: 12px; }

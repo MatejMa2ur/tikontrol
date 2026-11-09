@@ -74,13 +74,15 @@
         {#each ports as p}
           {@const bp = bports.find((b) => b.interface === p.name)}
           <tr onclick={() => open(p.name)}>
-            <td class="row"><Icon name="ports" size={14} /> <b>{p.name}</b></td>
+            <td class="row"><Icon name="ports" size={14} /> <button class="plain" onclick={(e) => { e.stopPropagation(); open(p.name) }}><b>{p.name}</b></button></td>
             <td><span class="pill {p.up ? 'ok' : ''}">{p.up ? 'Link up' : 'No link'}</span></td>
-            <td>{p.up ? `${m(p.name).rate}${m(p.name)['full-duplex'] ? ' FD' : ' HD'}` : '—'}</td>
+            <!-- virtual NICs (CHR) report no rate or duplex -->
+            <td>{p.up && m(p.name).rate ? `${m(p.name).rate}${m(p.name)['full-duplex'] ? ' FD' : ' HD'}` : p.up ? 'Unknown' : '—'}</td>
             {#if !compact}
-              <td class="muted">{p.wan ? 'Internet (WAN)' : 'LAN (bridge)'}</td>
-              <td class="muted">{bp ? `All · native VLAN ${bp.pvid}` : 'WAN'}</td>
-              <td class="r mono">{bytes(st(p.name)['tx-byte'] ?? 0)} / {bytes(st(p.name)['rx-byte'] ?? 0)}</td>
+              <td class="muted">{p.wan ? 'Internet (WAN)' : bp ? `LAN (${bp.bridge})` : 'Not in a bridge'}</td>
+              <td class="muted">{bp ? `All · native VLAN ${bp.pvid}` : p.wan ? 'WAN' : '—'}</td>
+              <!-- download is what the router sends to the port, except on the WAN where it is what arrives -->
+              <td class="r mono">{bytes(st(p.name)[p.wan ? 'rx-byte' : 'tx-byte'] ?? 0)} / {bytes(st(p.name)[p.wan ? 'tx-byte' : 'rx-byte'] ?? 0)}</td>
               <td class="r {(st(p.name)['rx-error'] ?? 0) + (st(p.name)['tx-error'] ?? 0) ? 'bad' : 'muted'}">{(st(p.name)['rx-error'] ?? 0) + (st(p.name)['tx-error'] ?? 0)}</td>
             {/if}
             <td>

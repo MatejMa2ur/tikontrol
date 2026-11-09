@@ -204,7 +204,7 @@
           <tbody>
             {#each traffic as c, i}
               <tr onclick={() => (location.hash = `#/clients/${c.mac}`)}>
-                <td><span class="row"><i class="sw" style="background:{COLORS[i]}"></i><Icon name={c.kind} size={13} /><span class="ell">{displayName(c)}</span></span></td>
+                <td><span class="row"><i class="sw" style="background:{COLORS[i]}"></i><Icon name={c.kind} size={13} /><a class="ell plain" href="#/clients/{c.mac}">{displayName(c)}</a></span></td>
                 <td class="r down">{bytes(c.bytesDown)}</td><td class="r up">{bytes(c.bytesUp)}</td><td class="r">{bytes(c.bytesDown + c.bytesUp)}</td>
               </tr>
             {/each}
@@ -226,7 +226,7 @@
             {#each wifiTech as g, i}
               {@const e = expOf(g.clients)}
               <tr onclick={() => (location.hash = '#/clients')}>
-                <td><span class="row"><i class="sw" style="background:{COLORS[i]}"></i>{g.type} <span class="muted">|</span> {g.band}</span></td>
+                <td><a class="row plain" href="#/clients"><i class="sw" style="background:{COLORS[i]}"></i>{g.type} <span class="muted">|</span> {g.band}</a></td>
                 <td><div class="act"><i style="width:{(techActivity[i] / techMax) * 100}%"></i></div></td>
                 <td class={e.level === 'ok' ? 'good' : e.level}>{e.label}</td>
                 <td class="r">{g.clients.length}</td>
@@ -265,9 +265,9 @@
 
 {#snippet activityCard()}
     <section class="card">
-      <header class="row between">
+      <header class="row between wrap">
         <h3>Internet Activity</h3>
-        <div class="row small">
+        <div class="row small wrap">
           <div class="seg">
             <button class:on={mode === 'all'} onclick={() => (mode = 'all')}>All</button>
             <button class:on={mode === 'down'} onclick={() => (mode = 'down')}>Download</button>

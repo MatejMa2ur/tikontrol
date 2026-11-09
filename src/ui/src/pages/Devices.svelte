@@ -61,7 +61,7 @@
         <thead><tr><th>Name</th><th>Model</th><th>IP address</th><th>Version</th><th>Uptime</th><th>CPU</th><th>Memory</th><th>Clients</th><th>Status</th></tr></thead>
         <tbody>
           <tr onclick={() => { drawer = true; dtab = 'overview' }}>
-            <td><span class="row"><span class="icon-box"><Icon name="devices" /></span><span><b>{identity}</b><div class="muted small">Gateway · AP</div></span></span></td>
+            <td><span class="row"><span class="icon-box"><Icon name="devices" /></span><span><button class="plain" onclick={(e) => { e.stopPropagation(); drawer = true; dtab = 'overview' }}><b>{identity}</b></button><div class="muted small">Gateway · AP</div></span></span></td>
             <td>{router.board}<div class="muted small mono">{router.model}</div></td>
             <td class="mono">{internet.gatewayIp}</td>
             <td>{router.version}{#if router.firmware !== router.firmwareUpgrade}<div><span class="pill warn">firmware upgrade</span></div>{/if}</td>
@@ -133,11 +133,11 @@
         <dt>Hardware</dt><dd>{hw.specs}</dd>
         <dt>IP address</dt><dd class="mono">{internet.gatewayIp}</dd>
         <dt>Uptime</dt><dd>{dur(router.uptimeS)}</dd>
-        <dt>CPU</dt><dd>{router.cpuCount} cores · {live.cpu}%</dd>
+        <dt>CPU</dt><dd>{router.cpuCount} {router.cpuCount === 1 ? 'core' : 'cores'} · {live.cpu}%</dd>
         <dt>Memory</dt><dd>{bytes(router.memFree)} free of {bytes(router.memTotal)}</dd>
         <dt>Storage</dt><dd>{bytes(router.hddFree)} free of {bytes(router.hddTotal)}</dd>
         <dt>Temperature</dt>{#if temp != null}<dd>{temp} °C</dd>{:else}<dd class="muted">No sensor on this model</dd>{/if}
-        <dt>Firmware</dt><dd>{router.firmware}{router.firmware !== router.firmwareUpgrade ? ` → ${router.firmwareUpgrade} pending` : ''}</dd>
+        <dt>Firmware</dt><dd>{router.firmware || 'No RouterBOOT (virtual router)'}{router.firmware && router.firmware !== router.firmwareUpgrade ? ` → ${router.firmwareUpgrade} pending` : ''}</dd>
       </dl>
       <h3 class="small">Last 24 hours</h3>
       {#if !isBackend}

@@ -26,8 +26,10 @@
     traffic: (c) => live.rate[c.mac]?.rx ?? 0,
     uptime: (c) => c.uptimeS ?? 0,
   }
+  // a static lease or ARP entry alone is no proof the device is there: those are in Offline
+  const online = $derived(clients.filter((c) => c.online))
   const rows = $derived(
-    clients
+    online
       .filter((c) => filter === 'all' || (filter === 'wifi') === !c.wired)
       .filter((c) => !q || `${displayName(c)} ${c.ip} ${c.mac} ${c.vendor ?? ''} ${c.type ?? ''} ${c.os ?? ''} ${c.hostname ?? ''}`.toLowerCase().includes(q.toLowerCase()))
       .sort((a, b) => (keyOf[sort.key](a) > keyOf[sort.key](b) ? 1 : -1) * sort.dir),
@@ -69,16 +71,16 @@
     try { await api('/discovery', { method: 'PUT', body: { auto } }) } catch (e) { discErr = (e as Error).message }
     await loadDiscovery()
   }
-  const counts = { all: clients.length, wifi: clients.filter((c) => !c.wired).length, wired: clients.filter((c) => c.wired).length }
+  const counts = $derived({ all: online.length, wifi: online.filter((c) => !c.wired).length, wired: online.filter((c) => c.wired).length })
   $effect(() => { keep('clients.filter', filter); keep('clients.sort', sort); keep('clients.q', q) })
 </script>
 
 <div class="grid">
-  <Tabs base="clients" active={tab} tabs={[{ id: 'online', label: 'Online', count: clients.length }, { id: 'offline', label: 'Offline', count: offlineRows.length }, { id: 'groups', label: 'Groups', count: prefs.groups.length }]} />
+  <Tabs base="clients" active={tab} tabs={[{ id: 'online', label: 'Online', count: online.length }, { id: 'offline', label: 'Offline', count: offlineRows.length }, { id: 'groups', label: 'Groups', count: prefs.groups.length }]} />
   {#if tab === 'online'}
   <div class="row between wrap">
     <h1>Clients <span class="muted">{rows.length}</span></h1>
-    <div class="row">
+    <div class="row wrap">
       <div class="seg" role="tablist">
         {#each ['all', 'wifi', 'wired'] as const as f}
           <button class:on={filter === f} onclick={() => (filter = f)}>{f === 'all' ? 'All' : f === 'wifi' ? 'WiFi' : 'Wired'} {counts[f]}</button>
@@ -93,12 +95,12 @@
     <table>
       <thead>
         <tr>
-          <th onclick={() => sortBy('name')}>Name {arrow('name')}</th>
-          <th onclick={() => sortBy('ip')}>IP address {arrow('ip')}</th>
-          <th onclick={() => sortBy('conn')}>Connection {arrow('conn')}</th>
-          <th onclick={() => sortBy('signal')}>Experience {arrow('signal')}</th>
-          <th onclick={() => sortBy('traffic')} class="num">Down / Up {arrow('traffic')}</th>
-          <th onclick={() => sortBy('uptime')} class="num">Connected {arrow('uptime')}</th>
+          <th><button class="plain" onclick={() => sortBy('name')}>Name {arrow('name')}</button></th>
+          <th><button class="plain" onclick={() => sortBy('ip')}>IP address {arrow('ip')}</button></th>
+          <th><button class="plain" onclick={() => sortBy('conn')}>Connection {arrow('conn')}</button></th>
+          <th><button class="plain" onclick={() => sortBy('signal')}>Experience {arrow('signal')}</button></th>
+          <th class="num"><button class="plain" onclick={() => sortBy('traffic')}>Down / Up {arrow('traffic')}</button></th>
+          <th class="num"><button class="plain" onclick={() => sortBy('uptime')}>Connected {arrow('uptime')}</button></th>
         </tr>
       </thead>
       <tbody>
@@ -110,7 +112,7 @@
               <div class="row">
                 <div class="icon-box"><Icon name={iconOf(id)} /></div>
                 <div>
-                  <div class="name">{displayName(c)}</div>
+                  <a class="name plain" href="#/clients/{c.mac}">{displayName(c)}</a>
                   <div class="muted small">{subtitle(id, displayName(c))}</div>
                 </div>
               </div>
@@ -129,6 +131,8 @@
             <td class="num mono">{bps(live.rate[c.mac]?.rx ?? 0)} <span class="muted">/ {bps(live.rate[c.mac]?.tx ?? 0)}</span></td>
             <td class="num muted">{dur(c.uptimeS)}</td>
           </tr>
+        {:else}
+          <tr class="nohover"><td colspan="6" class="muted">{q || filter !== 'all' ? 'No client matches.' : 'No clients online right now. Devices seen before are under Offline.'}</td></tr>
         {/each}
       </tbody>
     </table>

@@ -142,7 +142,7 @@
       {#if c.ccq != null}<dt>Link quality</dt><dd>{c.ccq}% CCQ</dd>{/if}
       <dt>IP address</dt><dd class="mono">{c.ip} {c.fixedIp ? '(fixed)' : '(DHCP)'}</dd>
       <dt>MAC address</dt><dd class="mono">{c.mac}</dd>
-      <dt>Maker</dt><dd>{me.vendor ?? (c.privateMac ? 'Private Wi-Fi address' : 'Unknown')}{#if c.privateMac && !me.vendor}<div class="tiny muted">The device made up this address for privacy, so it can't name its maker.</div>{/if}</dd>
+      <dt>Maker</dt><dd>{me.vendor ?? (c.privateMac ? (c.wired ? 'Private address' : 'Private Wi-Fi address') : 'Unknown')}{#if c.privateMac && !me.vendor}<div class="tiny muted">The device made up this address for privacy, so it can't name its maker.</div>{/if}</dd>
       {#if me.model}<dt>Model</dt><dd>{me.model}</dd>{/if}
       {#if me.type || me.os}<dt>Type</dt><dd>{[me.type, me.os].filter(Boolean).join(' · ')} <span class="pill tiny" title="Guessed from the name, DHCP vendor class and MAC maker">guess</span></dd>{/if}
       {#if c.hostname && c.hostname !== displayName(c)}<dt>Hostname</dt><dd class="mono">{c.hostname}</dd>{/if}

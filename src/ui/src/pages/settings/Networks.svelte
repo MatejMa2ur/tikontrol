@@ -85,7 +85,7 @@
   <table>
     <thead><tr><th>Name</th><th>VLAN</th><th>Subnet</th><th>Gateway</th><th>DHCP range</th><th>Lease</th><th>Domain</th><th>Filter</th><th>IPv6</th></tr></thead>
     <tbody>
-      {#each existing as e}<tr onclick={() => (ed = { ...e, dnsText: e.filter === 'none' ? e.dns : '' })}><td><b>{e.name}</b> <span class="muted small">{e.iface}</span></td><td>{e.vlan}</td><td class="mono">{e.subnet}</td><td class="mono">{e.gateway}</td><td class="mono small">{e.dhcp}</td><td>{e.lease ?? '—'}</td><td class="mono small">{e.domain || '—'}</td><td>{e.filter === 'family' ? 'Family-safe' : e.filter === 'ads' ? 'Ad-block' : '—'}</td><td class="mono small">{e.v6 || 'Off'}</td></tr>{/each}
+      {#each existing as e}<tr onclick={() => (ed = { ...e, dnsText: e.filter === 'none' ? e.dns : '' })}><td><button class="plain" onclick={(ev) => { ev.stopPropagation(); ed = { ...e, dnsText: e.filter === 'none' ? e.dns : '' } }}><b>{e.name}</b></button> <span class="muted small">{e.iface}</span></td><td>{e.vlan}</td><td class="mono">{e.subnet}</td><td class="mono">{e.gateway}</td><td class="mono small">{e.dhcp}</td><td>{e.lease ?? '—'}</td><td class="mono small">{e.domain || '—'}</td><td>{e.filter === 'family' ? 'Family-safe' : e.filter === 'ads' ? 'Ad-block' : '—'}</td><td class="mono small">{e.v6 || 'Off'}</td></tr>{/each}
     </tbody>
   </table>
 </Section>

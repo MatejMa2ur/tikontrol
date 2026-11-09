@@ -47,7 +47,8 @@ h2 { font-size: 13px; font-weight: 600; margin: 0 0 12px; color: var(--muted); }
 .btn.ghost:hover { color: var(--text); background: var(--panel2); }
 .btn:disabled { opacity: .5; cursor: not-allowed; }
 
-/* tables */
+/* tables: a row's onclick is for the mouse; its first cell holds a .plain link or button for the keyboard */
+.plain { color: inherit; text-decoration: none; background: none; border: 0; padding: 0; font: inherit; cursor: pointer; text-align: left; }
 table { width: 100%; border-collapse: collapse; }
 th { text-align: left; font-weight: 550; color: var(--muted); font-size: 12px; padding: 8px 10px; border-bottom: 1px solid var(--line); white-space: nowrap; cursor: pointer; user-select: none; }
 td { padding: var(--cell) 10px; border-bottom: 1px solid var(--line); white-space: nowrap; }
@@ -68,7 +69,11 @@ input:focus { border-color: var(--accent); }
 .icon-box { width: 30px; height: 30px; border-radius: var(--radius-sm); display: grid; place-items: center; background: var(--panel2); color: var(--muted); flex: none; }
 
 :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
-@media (max-width: 760px) { .hide-sm { display: none !important; } }
+@media (max-width: 760px) {
+  .hide-sm { display: none !important; }
+  /* wide tables scroll inside their card instead of pushing the whole page sideways */
+  table { display: block; overflow-x: auto; }
+}
 @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
 select { background: var(--panel2); color: var(--text); border: 1px solid var(--line); border-radius: var(--radius-sm); padding: 6px 8px; font: inherit; }
 input[type='number'], input[type='password'], input[type='time'] { background: var(--panel2); border: 1px solid var(--line); color: var(--text); border-radius: var(--radius-sm); padding: 6px 10px; font: inherit; }

@@ -141,7 +141,8 @@
   .fgrid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 16px; }
   .empty p { max-width: 520px; margin: 0; }
   .cats { display: flex; flex-wrap: wrap; gap: 6px; justify-content: center; margin: 6px 0; }
-  .bar-row { display: grid; grid-template-columns: 200px 1fr 80px 80px; gap: 12px; align-items: center; padding: 6px 0; color: var(--text); }
+  .bar-row { display: grid; grid-template-columns: minmax(0, 200px) 1fr 64px 72px; gap: 12px; align-items: center; padding: 6px 0; color: var(--text); }
+  @media (max-width: 760px) { .bar-row { grid-template-columns: minmax(0, 1fr) 56px 64px; } .bar-row .track { display: none; } }
   .who { overflow: hidden; white-space: nowrap; }
   .track { display: flex; height: 8px; background: var(--panel2); border-radius: 4px; overflow: hidden; }
   .track i { display: block; height: 100%; }

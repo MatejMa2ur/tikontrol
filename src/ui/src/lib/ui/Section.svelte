@@ -5,9 +5,9 @@
 </script>
 
 <section class="card sec" {id}>
-  <header class="row between">
+  <header class="row between wrap">
     <div><h3>{title}</h3>{#if desc}<p class="muted small">{desc}</p>{/if}</div>
-    {#if actions}<div class="row">{@render actions()}</div>{/if}
+    {#if actions}<div class="row wrap">{@render actions()}</div>{/if}
   </header>
   {@render children?.()}
   {#if ros}<Ros cmd={ros} />{/if}
@@ -16,6 +16,7 @@
 <style>
   .sec { padding: var(--pad) calc(var(--pad) + 2px); }
   header { margin-bottom: 12px; gap: 12px; align-items: flex-start; }
+  header > div:first-child { flex: 1 1 240px; } /* text shrinks first; actions wrap below only on narrow screens */
   h3 { margin: 0; font-size: 13.5px; font-weight: 650; }
   p { margin: 3px 0 0; max-width: 70ch; }
 </style>

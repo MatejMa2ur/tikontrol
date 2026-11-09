@@ -20,7 +20,7 @@
         width: el.clientWidth, height,
         legend: { show: false },
         cursor: { y: false, points: { show: false } },
-        scales: { x: { time: true }, c: { range: (_u, _min, max) => [0, Math.max(5, Math.ceil(max * 1.6 / 5) * 5)] }, b: { range: (_u, _min, max) => [0, max * 1.1 || 1] } },
+        scales: { x: { time: true }, c: { range: (_u, _min, max) => [0, Math.max(5, Math.ceil(max * 1.6 / 5) * 5)] }, b: { range: (_u, _min, max) => [0, Math.max(max * 1.1, 1000)] } },
         axes: [
           { stroke: css('--muted'), grid: { show: false }, ticks: { show: false }, font },
           { scale: 'c', stroke: css('--muted'), grid: { stroke: css('--line'), width: 1 }, ticks: { show: false }, font, size: 40, label: 'Clients', labelSize: 16, labelFont: font },
