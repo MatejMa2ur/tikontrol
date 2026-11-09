@@ -25,6 +25,7 @@ export function normalizeWifi(raw: any) {
       'default-forwarding': w['datapath.client-isolation'] == null ? undefined : !w['datapath.client-isolation'],
       auth: w['security.authentication-types'] == null ? undefined : list(w['security.authentication-types']),
       comment: w.comment,
+      ft: w['security.ft'], steering: w['steering.rrm'], interworking: w.interworking,
     }))
   return {
     ...raw,
@@ -34,7 +35,9 @@ export function normalizeWifi(raw: any) {
     radios: legacy.length ? list(raw.radios) : list(raw.radiosNew),
     linkQuality: list(raw.linkQuality),
     secProfiles: list(raw.secProfiles),
-    accessList: list(raw.accessList),
+    accessList: legacy.length ? list(raw.accessList) : list(raw.accessListNew),
+    wifiNetworks: list(raw.wifiNetworks),
+    wifiRadios: list(raw.wifiRadios),
   }
 }
 

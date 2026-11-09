@@ -7,6 +7,20 @@ import { bandLabel, detectHardware, faceOf, normalizeWifi, parseChannel, standar
 
 const sample = JSON.parse(readFileSync(new URL('../src/ui/src/lib/sample.json', import.meta.url), 'utf8'))
 
+test('the wifi package reads its own access list and roaming state', () => {
+  const raw = normalizeWifi({
+    wifiNew: [{ name: 'wifi1', 'channel.band': '5ghz-ax', 'configuration.ssid': 'Example', 'security.ft': true, 'steering.rrm': false, interworking: 'tik-passpoint-wifi1' }],
+    accessList: 'no such command prefix',
+    accessListNew: [{ 'mac-address': '02:00:00:AA:BB:01', 'vlan-id': 30, comment: 'tik:vlan:02:00:00:AA:BB:01' }],
+    wifiRadios: [{ name: 'radio1', 'ml-group': '02:00:00:AA:BB:10' }],
+  })
+  assert.equal(raw.accessList[0]['vlan-id'], 30)
+  assert.equal(raw.wifi[0].ft, true)
+  assert.equal(raw.wifi[0].steering, false)
+  assert.equal(raw.wifi[0].interworking, 'tik-passpoint-wifi1')
+  assert.equal(raw.wifiRadios.length, 1)
+})
+
 test('recognises the hAP ac² from its own data', () => {
   const hw = detectHardware(normalizeWifi(sample))
   assert.equal(hw.make, 'MikroTik')

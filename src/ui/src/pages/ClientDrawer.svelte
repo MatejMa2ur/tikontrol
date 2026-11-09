@@ -1,7 +1,7 @@
 <script lang="ts">
   import { keep, kept } from '../lib/keep'
   import { untrack } from 'svelte'
-  import { subtitle, signalQuality, bps, bytes, dur, events, isBackend, whyBand, type Client } from '../lib/data'
+  import { subtitle, signalQuality, bps, bytes, dur, events, isBackend, whyBand, raw, type Client } from '../lib/data'
   import type { Intent } from '../lib/apply.svelte'
   import { api } from '../lib/backend'
   import { live, prefs, displayName, iconOf } from '../lib/live.svelte'
@@ -28,6 +28,11 @@
 
   // settings form (seeded from the client)
   let s = $state({ fixedIp: untrack(() => c.ip), dns: '', vlan: '', limit: '', pause: false, days: 'Mon-Sun', from: '22:00', to: '07:00' })
+  // this device's tikontrol access-list entries (VLAN override, own password); the password itself is never read
+  const acl = (tag: string) => (raw.accessList ?? []).find((a: any) => a.comment === `tik:${tag}:${c.mac.toUpperCase()}`)
+  const vlanNow = $derived(acl('vlan')?.['vlan-id'] as number | undefined)
+  const ppskNow = $derived(!!acl('ppsk'))
+  let psk = $state('')
   const KINDS = ['phone', 'computer', 'server', 'vm', 'speaker', 'iot', 'devices', 'unknown']
 
   // 24h per-client traffic (synthetic, seeded by MAC) until history is stored
@@ -201,7 +206,14 @@
     <Field label="Notes"><input type="text" value={prefs.notes[c.mac] ?? ''} oninput={(e) => (prefs.notes[c.mac] = (e.target as HTMLInputElement).value)} placeholder="e.g. Living room TV" /></Field>
     <Field label="Fixed IP"><input type="text" bind:value={s.fixedIp} /></Field>
     <Field label="Local DNS name" help="Reach it as name.lan"><input type="text" bind:value={s.dns} placeholder="tv" /></Field>
-    <Field label="Network override" help={c.wired ? 'Wi-Fi clients only: this router\'s switch chip has no per-device VLAN for wired ports (use a port profile instead)' : 'Put this Wi-Fi device on another VLAN'}><input type="text" inputmode="numeric" bind:value={s.vlan} placeholder="VLAN ID (none)" disabled={c.wired} /></Field>
+    <Field label="Network override" help={c.wired ? 'Wi-Fi clients only: this router\'s switch chip has no per-device VLAN for wired ports (use a port profile instead)' : 'Put this Wi-Fi device on another VLAN'}><input type="text" inputmode="numeric" bind:value={s.vlan} placeholder={vlanNow ? `VLAN ${vlanNow} now` : 'VLAN ID (none)'} disabled={c.wired} />
+      {#if vlanNow}<button class="btn ghost" onclick={() => review(`Remove VLAN override for ${displayName(c)}`, [`# remove-wifi-client-vlan ${c.mac}`], { kind: 'remove-wifi-client-vlan', mac: c.mac })}>Remove</button>{/if}</Field>
+    {#if !c.wired}
+      <Field label="Own Wi-Fi password" help={ppskNow ? 'Set: this device joins with its own password (never shown)' : 'Private PSK: this device joins with its own password instead of the shared one'}>
+        <input type="password" bind:value={psk} autocomplete="new-password" placeholder="8-63 characters" />
+        <button class="btn" disabled={psk.length < 8} onclick={() => { review(`Own Wi-Fi password for ${displayName(c)}`, [`# wifi-private-psk ${c.mac} (password not shown)`], { kind: 'wifi-private-psk', mac: c.mac, passphrase: psk }); psk = '' }}>Set</button>
+        {#if ppskNow}<button class="btn ghost" onclick={() => review(`Remove own Wi-Fi password for ${displayName(c)}`, [`# remove-wifi-private-psk ${c.mac}`], { kind: 'remove-wifi-private-psk', mac: c.mac })}>Remove</button>{/if}</Field>
+    {/if}
     <Field label="Speed limit" help="Download/upload, e.g. 20M/5M"><input type="text" bind:value={s.limit} placeholder="Unlimited" />
       <button class="btn" disabled={!s.limit} onclick={() => { const i = limitIntent(); review(`Limit ${displayName(c)}`, [`/queue/simple/add name=tik-limit-${c.mac.replaceAll(':', '')} target=${c.ip}/32 max-limit=${i.up}/${i.down} comment=tik:limit:${c.mac}`], i) }}>Apply limit</button>
       <button class="btn ghost" onclick={() => review(`Remove limit for ${displayName(c)}`, [`/queue/simple/remove [find comment="tik:limit:${c.mac}"]`], { kind: 'unlimit-client', mac: c.mac })}>Remove</button></Field>

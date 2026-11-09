@@ -12,7 +12,6 @@
   const legacy = hw.wifiPackage !== 'wifi'
   const pkg = legacy ? 'wireless' : 'wifi'
   const NEW_PKG = `Needs the new wifi package (hAP ax/be). Not available on ${router.board ?? 'this router'}`
-  const NOT_WIRED = 'Not wired in tikontrol yet'
 
   // real rows: the snapshot's wifi interfaces (normalizeWifi: auth, master band), bridge ports, VLANs, schedules
   const W: any[] = raw.wifi ?? []
@@ -25,11 +24,11 @@
   // physical radios (virtual APs ride on their master); one checkbox per band
   const phys = radios.filter((r) => !W.find((w) => w.name === r.name)?.['master-interface'])
 
-  type Ssid = { name: string; password: string; security: string; bands: string[]; ifaces: string[]; network: number; hidden: boolean; isolation: boolean; guest: boolean; schedule: boolean; from: string; to: string; limit: string; macFilter: boolean }
+  type Ssid = { name: string; password: string; security: string; bands: string[]; ifaces: string[]; network: number; hidden: boolean; isolation: boolean; guest: boolean; schedule: boolean; from: string; to: string; limit: string; macFilter: boolean; ft: boolean; steer: boolean; passpoint: boolean }
   const fromRouter = (s: (typeof ssids)[number]): Ssid => {
     const rows = W.filter((w) => w.ssid === s.ssid), w0 = rows[0] ?? {}
     const lim = rows.length && (+w0['default-ap-tx-limit'] || +w0['default-client-tx-limit']) ? `${mbit(w0['default-ap-tx-limit'])}/${mbit(w0['default-client-tx-limit'])}` : ''
-    return { name: s.ssid, password: '', security: secOf(w0.auth), bands: s.radios.map((r) => r.band), ifaces: s.radios.map((r) => r.name), network: w0.name ? pvidOf(w0.name) : 1, hidden: !!w0['hide-ssid'], isolation: w0['default-forwarding'] === false, guest: String(w0.comment ?? '').startsWith('tik:guest'), schedule: !!(w0.name && sched(w0.name, true)), from: (w0.name && sched(w0.name, true)) || '07:00', to: (w0.name && sched(w0.name, false)) || '23:00', limit: lim, macFilter: (raw.accessList ?? []).length > 0 }
+    return { name: s.ssid, password: '', security: secOf(w0.auth), bands: s.radios.map((r) => r.band), ifaces: s.radios.map((r) => r.name), network: w0.name ? pvidOf(w0.name) : 1, hidden: !!w0['hide-ssid'], isolation: w0['default-forwarding'] === false, guest: String(w0.comment ?? '').startsWith('tik:guest'), schedule: !!(w0.name && sched(w0.name, true)), from: (w0.name && sched(w0.name, true)) || '07:00', to: (w0.name && sched(w0.name, false)) || '23:00', limit: lim, macFilter: (raw.accessList ?? []).length > 0, ft: w0.ft === true, steer: w0.steering !== false, passpoint: String(w0.interworking ?? '').startsWith('tik-passpoint-') }
   }
   let list = $state(ssids.map(fromRouter))
   let edit = $state<Ssid | null>(null)
@@ -71,6 +70,25 @@
     const r = s.ifaces[0]
     if (r) { const i: Intent = { kind: 'wifi-schedule', package: pkg, interface: r, on: s.from, off: s.to }; review(`Wi-Fi schedule for ${s.name}`, cmds(i), i) }
   }
+  // 802.11r (ft) and 802.11k/v (steering) per SSID, new wifi package only (server: wifi-roaming)
+  function reviewRoaming(s: Ssid) {
+    const b = list[editIdx]
+    const i: Intent = { kind: 'wifi-roaming', interfaces: s.ifaces, ...(s.ft !== b.ft ? { ft: s.ft } : {}), ...(s.steer !== b.steer ? { steering: s.steer } : {}) }
+    review(`Roaming for ${s.name}`, cmds(i), i)
+  }
+  // Passpoint: one tagged interworking profile per interface; switching it off removes it
+  let pp = $state({ domain: '', method: 'eap-tls', type: 'private', internet: true })
+  function reviewPasspoint(s: Ssid) {
+    const ifn = s.ifaces[0]
+    if (!ifn) return
+    const i: Intent = s.passpoint
+      ? { kind: 'wifi-passpoint', interface: ifn, domain: pp.domain, realm_method: pp.method, network_type: pp.type, internet: pp.internet }
+      : { kind: 'remove-wifi-passpoint', interface: ifn }
+    review(`Passpoint on ${ifn}`, cmds(i), i)
+  }
+  // MLO: only offered when a radio reports a multi-link group (Wi-Fi 7)
+  const wifiNets: { name: string; mlo?: boolean }[] = raw.wifiNetworks ?? []
+  const mloOk = !legacy && (raw.wifiRadios ?? []).some((r: any) => r['ml-group'])
   // WIFI: QR payload; \ ; , : " are escaped (zxing spec). The password is typed here and never leaves the browser.
   const esc = (v: string) => v.replace(/([\\;,:"])/g, '\\$1')
   const wifiQr = (s: Ssid) => `WIFI:T:${s.security === 'open' ? 'nopass' : 'WPA'};S:${esc(s.name)};${s.security === 'open' ? '' : `P:${esc(qrPass)};`}${s.hidden ? 'H:true;' : ''};`
@@ -141,10 +159,22 @@
       {#if edit.schedule}<Field label="On between" help="Applies to one radio"><input type="time" bind:value={edit.from} /><input type="time" bind:value={edit.to} /><button class="btn small" onclick={() => reviewSchedule(edit!)}>Review schedule</button></Field>{/if}
       <Field label="Speed limit per client" help="Download/upload, e.g. 50M/10M" na={legacy ? undefined : 'Not supported on the wifi package by tikontrol'}><input type="text" bind:value={edit.limit} placeholder="Unlimited" disabled={!legacy || editIdx < 0} /></Field>
       <Field label="MAC address filter" help="Access-list entries exist; manage them per device on the Clients page"><Toggle bind:checked={edit.macFilter} disabled label="MAC filter" /></Field>
-      <Field label="Private PSK" na={legacy ? NEW_PKG : NOT_WIRED} help="Different password per device"><Toggle checked={false} disabled label="PPSK" /></Field>
-      <Field label="Band steering / fast roaming (802.11r/k/v)" na={legacy ? NEW_PKG : NOT_WIRED}><Toggle checked={false} disabled label="Band steering" /></Field>
-      <Field label="MLO (WiFi 7)" na={hw.wifiStandard === 'WiFi 7' ? 'RouterOS support for MLO on this board is unconfirmed' : 'Needs WiFi 7 hardware (e.g. hAP be³)'}><Toggle checked={false} disabled label="MLO" /></Field>
-      <Field label="Hotspot 2.0 / Passpoint" na={legacy ? NEW_PKG : NOT_WIRED}><Toggle checked={false} disabled label="Hotspot 2.0" /></Field>
+      <Field label="Private PSK" help="Different password per device: open the device on the Clients page, Settings, Own Wi-Fi password"><a class="btn small" href="#/clients">Clients…</a></Field>
+      {#if editIdx >= 0}
+        <Field label="Fast roaming (802.11r)" na={legacy ? NEW_PKG : undefined} help="Faster hand-over between interfaces with this SSID"><Toggle bind:checked={edit.ft} disabled={legacy} label="Fast roaming" /></Field>
+        <Field label="Band steering (802.11k/v)" na={legacy ? NEW_PKG : undefined} help="Suggest a better band or AP to clients"><Toggle bind:checked={edit.steer} disabled={legacy} label="Band steering" />
+          {#if !legacy}<button class="btn small" onclick={() => reviewRoaming(edit!)}>Review roaming</button>{/if}</Field>
+        <Field label="Hotspot 2.0 / Passpoint" na={legacy ? NEW_PKG : undefined} help="Needs WPA2/WPA3-Enterprise with RADIUS on this SSID"><Toggle bind:checked={edit.passpoint} disabled={legacy} label="Hotspot 2.0" /></Field>
+        {#if !legacy && edit.passpoint}
+          <Field label="Operator domain"><input type="text" bind:value={pp.domain} placeholder="example.com" /></Field>
+          <Field label="Realm method"><select bind:value={pp.method}><option value="eap-tls">EAP-TLS</option><option value="eap-sim">EAP-SIM</option><option value="eap-aka">EAP-AKA</option><option value="not-specified">Not specified</option></select></Field>
+          <Field label="Network type"><select bind:value={pp.type}>{#each ['private', 'private-with-guest', 'public-free', 'public-chargeable', 'personal-device'] as t}<option value={t}>{t}</option>{/each}</select><Toggle bind:checked={pp.internet} label="Internet" /></Field>
+        {/if}
+        {#if !legacy && (edit.passpoint || list[editIdx].passpoint)}<Field label=""><button class="btn small" onclick={() => reviewPasspoint(edit!)}>Review Passpoint</button></Field>{/if}
+      {/if}
+      <Field label="MLO (WiFi 7)" na={mloOk ? undefined : hw.wifiStandard === 'WiFi 7' ? 'No radio reports a multi-link group (needs wifi-qcom-be or wifi-mediatek and a recent RouterOS)' : 'Needs WiFi 7 hardware (e.g. hAP be³)'}>
+        {#each wifiNets as n}<label class="chk"><input type="checkbox" checked={n.mlo !== false} onchange={(e) => review(`${(e.target as HTMLInputElement).checked ? 'Enable' : 'Disable'} MLO on ${n.name}`, [`/interface/wifi/network/set [find name="${n.name}"] mlo=${(e.target as HTMLInputElement).checked ? 'yes' : 'no'}`], { kind: 'wifi-mlo', network: n.name, enabled: (e.target as HTMLInputElement).checked })} /> {n.name}</label>{:else}<Toggle checked={false} disabled label="MLO" />{/each}
+      </Field>
     </details>
     {#snippet footer()}<button class="btn" onclick={() => (edit = null)}>Cancel</button><button class="btn primary" disabled={!edit?.name} onclick={save}>Review & apply</button>{/snippet}
   </Modal>
