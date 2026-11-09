@@ -11,7 +11,7 @@ Clean-room: we copy the behaviour, never the assets.
 **Backing:** `ROS` = RouterOS API on the router · `CMR` = MikroTik CMR server · `tik` = our own logic/DB · `✗` = nothing can back it
 
 <!-- progress:start -->
-**Progress:** 72 ✅ · 136 🟨 · 16 🎨 · 2 ⬜ · 8 ➖ (234 items, 32% done)
+**Progress:** 72 ✅ · 144 🟨 · 8 🎨 · 2 ⬜ · 8 ➖ (234 items, 32% done)
 <!-- progress:end -->
 
 ---
@@ -27,7 +27,7 @@ Clean-room: we copy the behaviour, never the assets.
 | P5 | Client Devices (list) | Clients | 1 | 🟨 |
 | P6 | Client detail (overview / insights / settings) | Client drawer | 1 | 🟨 |
 | P7 | Ports (port manager) | Ports | 2 | 🟨 |
-| P8 | Radios (Radio Manager, coverage, connectivity) | Radios | 3 |🎨 |
+| P8 | Radios (Radio Manager, coverage, connectivity; needs hardware (Wi-Fi AP)) | Radios | 3 |🟨 |
 | P9 | Insights / Traffic flows | Traffic | 3 | 🟨 |
 | P10 | Alarm Manager | Alerts | 2 | 🟨 |
 | P11 | System Log (events, admin activity, security, updates) | Events | 1 | 🟨 |
@@ -107,7 +107,7 @@ Clean-room: we copy the behaviour, never the assets.
 | Speed limit (client groups) | ROS simple queues | 2 | ✅ |
 | "Why is this client on 2.4 GHz?": reasons, band history from the log, Safe apply fixes (channel 36, 40 MHz, own 5 GHz SSID, signal-range access list) | tik from log + monitor · ROS wireless/wifi | 3 | 🟨 |
 | Kick / reconnect wireless client | ROS reg-table remove | 2 | 🟨 |
-| Override network/VLAN for client | ROS (MAC-based VLAN / access list) | 4 |🎨 |
+| Override network/VLAN for client (client drawer: set/remove; needs hardware (Wi-Fi AP), CHR refusal tested) | ROS (MAC-based VLAN / access list) | 4 |🟨 |
 | Offline / historical clients list | tik | 2 | 🟨 |
 | Roaming history (which AP, when) | tik (reg-table changes) · CMR wifi-logs | 3 | 🟨 |
 | Filters (wired / wireless / guest / offline) and search | tik | 1 | 🟨 |
@@ -132,14 +132,14 @@ Clean-room: we copy the behaviour, never the assets.
 ## Radios / WiFi monitoring
 | Feature | Backing | Phase | Status |
 |---|---|---|---|
-| Radio list per AP: band, channel, width, tx power, clients | ROS wireless/wifi · CMR | 3 | 🟨 |
-| Channel utilisation (channel, width, DFS, tx power, noise, CCQ; busy time not reported by RouterOS) | ROS monitor (driver dependent) | 3 | 🟨 |
-| Neighbouring networks / interference scan | ROS `scan` (duration-limited; disconnects clients, so copy-the-command only, results land on the router) | 3 |🎨 |
-| Signal strength distribution | tik from reg-table | 3 | 🟨 |
+| Radio list per AP: band, channel, width, tx power, clients (needs hardware (Wi-Fi AP)) | ROS wireless/wifi · CMR | 3 | 🟨 |
+| Channel utilisation (channel, width, DFS, tx power, noise, CCQ; busy time not reported by RouterOS; needs hardware (Wi-Fi AP)) | ROS monitor (driver dependent) | 3 | 🟨 |
+| Neighbouring networks / interference scan (one-shot, confirmed, admin + write access, max 10 s, disconnects the radio's clients; or copy the command; needs hardware (Wi-Fi AP)) | ROS `scan` | 3 |🟨 |
+| Signal strength distribution (needs hardware (Wi-Fi AP)) | tik from reg-table | 3 | 🟨 |
 | WiFi connectivity success (association / auth / DHCP / DNS) | tik from log + leases | 2 | 🟨 |
-| Radio link quality (CCQ buckets, channel, power, noise) | ROS wireless monitor | 2 | 🟨 |
+| Radio link quality (CCQ buckets, channel, power, noise; needs hardware (Wi-Fi AP)) | ROS wireless monitor | 2 | 🟨 |
 | Roaming journeys (Connectivity view) | tik · CMR wifi-logs | 3 | 🟨 |
-| Coverage map / floorplan (Design Center) | tik (manual floorplan, no RF model) | 4 |🎨 |
+| Coverage map / floorplan (Design Center): saved plan, drag/arrow-key AP pins, server-validated (PNG/JPEG/WebP, 200 KB, 32 APs); not yet tried in a browser | tik (manual floorplan, no RF model) | 4 |🟨 |
 | WiFiman (client-side speed/coverage app) | ✗ | – | ➖ |
 
 ## Insights / Traffic
@@ -182,10 +182,10 @@ Clean-room: we copy the behaviour, never the assets.
 | WiFi schedule (on/off by time) | ROS scheduler | 3 |🟨 |
 | Per-SSID speed limit (per client, legacy `wireless` default-*-tx-limit) | ROS wireless | 3 |🟨 |
 | MAC filter | ROS access-list | 3 |🟨 |
-| Private PSK (per-client passwords) | ROS wifi access-list passphrase (new wifi pkg) | 4 |🎨 |
-| Band steering / fast roaming (802.11r/k/v) | ROS wifi (new pkg) | 4 |🎨 |
-| MLO (WiFi 7) | ROS wifi-qcom-be (hw dependent) | 4 |🎨 |
-| Hotspot 2.0 / Passpoint | ROS wifi interworking | 4 |🎨 |
+| Private PSK (per-client passwords, client drawer; needs hardware (Wi-Fi AP)) | ROS access-list `passphrase` (wifi) / `private-pre-shared-key` (wireless) | 4 |🟨 |
+| Band steering / fast roaming (802.11r/k/v; needs hardware (Wi-Fi AP on the new wifi package)) | ROS wifi `security.ft`, `steering.rrm/wnm` (new pkg) | 4 |🟨 |
+| MLO (WiFi 7; needs hardware (Wi-Fi 7 AP: wifi-qcom-be / wifi-mediatek)) | ROS `/interface/wifi/network mlo` | 4 |🟨 |
+| Hotspot 2.0 / Passpoint (needs hardware (Wi-Fi AP on the new wifi package) + WPA-Enterprise/RADIUS) | ROS wifi interworking | 4 |🟨 |
 | QR code to join WiFi (password typed in the browser, never stored) | tik (browser) | 2 |🟨 |
 | Channel / tx power per radio | ROS · CMR radio | 3 |🟨 |
 
