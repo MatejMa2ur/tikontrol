@@ -25,22 +25,22 @@
 
 <hr>
 
-<table>
+<table width="100%">
   <tr>
-    <td><img src="docs/images/icons/router.svg" width="16" height="16" alt="">&nbsp;<strong>Runs on</strong></td>
+    <td nowrap><img src="docs/images/icons/router.svg" width="16" height="16" alt="">&nbsp;<strong>Runs&nbsp;on</strong></td>
     <td>Your MikroTik router, or any Docker host</td>
   </tr>
   <tr>
-    <td><img src="docs/images/icons/shield.svg" width="16" height="16" alt="">&nbsp;<strong>Safe</strong></td>
+    <td nowrap><img src="docs/images/icons/shield.svg" width="16" height="16" alt="">&nbsp;<strong>Safe</strong></td>
     <td>Read-only by default; changes undo themselves unless confirmed</td>
   </tr>
   <tr>
-    <td><img src="docs/images/icons/terminal.svg" width="16" height="16" alt="">&nbsp;<strong>Install</strong></td>
+    <td nowrap><img src="docs/images/icons/terminal.svg" width="16" height="16" alt="">&nbsp;<strong>Install</strong></td>
     <td><a href="docs/INSTALL.md">One paste</a> in the router terminal</td>
   </tr>
   <tr>
-    <td><img src="docs/images/icons/progress.svg" width="16" height="16" alt="">&nbsp;<strong>Status</strong></td>
-    <td>Early development, <a href="docs/FEATURES.md">progress</a></td>
+    <td nowrap><img src="docs/images/icons/progress.svg" width="16" height="16" alt="">&nbsp;<strong>Status</strong></td>
+    <td>Early development, <a href="docs/FEATURES.md">progress</a><img src="docs/images/icons/spacer.svg" width="2000" height="1" alt=""></td>
   </tr>
 </table>
 
