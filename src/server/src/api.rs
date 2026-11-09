@@ -265,8 +265,15 @@ fn own_ip_toward(host: &str, port: u16) -> Option<std::net::IpAddr> {
     Some(s.local_addr().ok()?.ip()).filter(|i| !i.is_unspecified())
 }
 
-/// Where the reader may log in from: tikontrol's own address, else the router's LAN.
-fn reader_address(r: &mut dyn conn::Router, host: &str, port: u16) -> Option<String> {
+/// Where the reader may log in from: the address the router sees our admin API session coming from
+/// (right behind NAT, e.g. Docker bridge or a VM), else tikontrol's own address, else the router's LAN.
+fn reader_address(r: &mut dyn conn::Router, user: &str, host: &str, port: u16) -> Option<String> {
+    let seen = r.run(&crate::ros::cmd::Cmd::new("/user/active/print").proplist(&["address"]).query("name", user).query("via", "api")).unwrap_or_default();
+    let mut ips = seen.iter().filter_map(|a| a.get("address")?.parse::<std::net::IpAddr>().ok());
+    // ponytail: several API sessions of this admin from different places is ambiguous, so fall back
+    if let Some(ip) = ips.next().filter(|first| ips.all(|i| i == *first)) {
+        return Some(format!("{ip}/{}", if ip.is_ipv4() { 32 } else { 128 }));
+    }
     if let Some(ip) = own_ip_toward(host, port) {
         return Some(format!("{ip}/{}", if ip.is_ipv4() { 32 } else { 128 }));
     }
@@ -344,7 +351,7 @@ fn setup_router(app: &Arc<App>, req: &Req) -> Resp {
         lock(&app.limiter).fail(ip);
         return Resp::error(403, &format!("'{}' is not a full admin (missing {}). Use an admin account, or the setup token", b.user, missing.join(", ")));
     }
-    let Some(addr) = reader_address(r.as_mut(), &b.host, b.port) else { return Resp::error(502, "cannot tell tikontrol's own address") };
+    let Some(addr) = reader_address(r.as_mut(), &b.user, &b.host, b.port) else { return Resp::error(502, "cannot tell tikontrol's own address") };
     let pw = crate::store::hex(&crate::store::random_bytes::<16>()); // 32 characters, never shown or logged
     if let Err(e) = policy::ensure_reader(r.as_mut(), &addr, &pw) {
         return Resp::error(502, &format!("creating {} on the router failed: {e}", policy::READER_NAME));
@@ -962,10 +969,10 @@ pub mod tests {
     #[test]
     fn one_step_setup_creates_the_reader_and_claims() {
         let (app, log) = recording_app("read,write,policy,api,test,ssh");
-        let (r, host) = one_step(&app, "admin", "router-pass");
+        let r = one_step(&app, "admin", "router-pass").0;
         assert_eq!(r.status, 200, "{:?}", json_of(&r));
         assert_eq!(json_of(&r)["mikrotik"], true);
-        let addr = format!("{}/32", own_ip_toward(&host, 8729).unwrap());
+        let addr = "192.0.2.50/32"; // where the fake router sees the admin's API session (NAT), not our own IP
         let st = lock(&app.store).state.clone();
         assert!(st.claimed && lock(&app.setup_token).is_none());
         let cfg = st.router.unwrap();
