@@ -23,9 +23,16 @@
   </p>
 </div>
 
-| <img src="docs/images/icons/router.svg" width="16" height="16" alt=""> Runs on | <img src="docs/images/icons/shield.svg" width="16" height="16" alt=""> Safe | <img src="docs/images/icons/terminal.svg" width="16" height="16" alt=""> Install | <img src="docs/images/icons/progress.svg" width="16" height="16" alt=""> Status |
-| --- | --- | --- | --- |
-| Your MikroTik router, or any Docker host | Read-only by default; changes undo themselves unless confirmed | [One paste](docs/INSTALL.md) in the router terminal | Early development, [progress](docs/FEATURES.md) |
+<table>
+  <tr>
+    <td width="50%"><img src="docs/images/icons/router.svg" width="16" height="16" alt=""> <strong>Runs on</strong><br>Your MikroTik router, or any Docker host</td>
+    <td width="50%"><img src="docs/images/icons/shield.svg" width="16" height="16" alt=""> <strong>Safe</strong><br>Read-only by default; changes undo themselves unless confirmed</td>
+  </tr>
+  <tr>
+    <td width="50%"><img src="docs/images/icons/terminal.svg" width="16" height="16" alt=""> <strong>Install</strong><br><a href="docs/INSTALL.md">One paste</a> in the router terminal</td>
+    <td width="50%"><img src="docs/images/icons/progress.svg" width="16" height="16" alt=""> <strong>Status</strong><br>Early development, <a href="docs/FEATURES.md">progress</a></td>
+  </tr>
+</table>
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/images/dashboard-dark.png">
