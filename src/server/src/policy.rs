@@ -15,6 +15,17 @@ pub const WRITER: &[&str] = &["read", "write", "api", "test"];
 /// One-step setup needs a full router admin: creating a group and user takes `write` and `policy`.
 pub const ADMIN: &[&str] = &["read", "write", "policy", "api", "test"];
 pub const READER_NAME: &str = "tikontrol-read";
+
+/// The reader user this tikontrol creates: `TIK_READER` (default `tikontrol-read`), e.g. `tikontrol-read-dev` for a
+/// second instance against the same router, so its setup doesn't reset the first one's user. Always in the
+/// `tikontrol-read` group; must start with `tikontrol-read` so ownership stays visible on the router.
+pub fn reader_name() -> String {
+    std::env::var("TIK_READER").ok().filter(|n| valid_reader(n)).unwrap_or_else(|| READER_NAME.into())
+}
+
+fn valid_reader(n: &str) -> bool {
+    n.starts_with(READER_NAME) && n.len() <= 32 && n.bytes().all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'-')
+}
 /// Marks what tikontrol created on the router, so ownership is visible there.
 pub const OWNED: &str = "tik: tikontrol";
 
@@ -61,19 +72,22 @@ pub fn detect(r: &mut dyn Router, user: &str) -> Result<Policies, String> {
 
 /// Creates the `tikontrol-read` group and user as the signed-in router admin, or resets them if they
 /// exist (same name, so it is ours: the user agreed by clicking Connect). Every value is a typed word.
-pub fn ensure_reader(r: &mut dyn Router, address: &str, password: &str) -> Result<(), String> {
-    let id = |r: &mut dyn Router, path: &str| -> Result<Option<String>, String> {
-        let rows = r.run(&Cmd::new(path).proplist(&[".id", "name"]).query("name", READER_NAME))?;
-        Ok(rows.iter().find(|x| x.get("name").map(String::as_str) == Some(READER_NAME)).and_then(|x| x.get(".id").cloned()))
+pub fn ensure_reader(r: &mut dyn Router, name: &str, address: &str, password: &str) -> Result<(), String> {
+    if !valid_reader(name) {
+        return Err(format!("invalid reader name {name:?}"));
+    }
+    let id = |r: &mut dyn Router, path: &str, name: &str| -> Result<Option<String>, String> {
+        let rows = r.run(&Cmd::new(path).proplist(&[".id", "name"]).query("name", name))?;
+        Ok(rows.iter().find(|x| x.get("name").map(String::as_str) == Some(name)).and_then(|x| x.get(".id").cloned()))
     };
-    let group = match id(r, "/user/group/print")? {
+    let group = match id(r, "/user/group/print", READER_NAME)? {
         Some(i) => Cmd::new("/user/group/set").arg(".id", &i),
         None => Cmd::new("/user/group/add").arg("name", READER_NAME),
     };
     r.run(&group.arg("policy", &READER.join(",")).arg("comment", OWNED))?;
-    let user = match id(r, "/user/print")? {
+    let user = match id(r, "/user/print", name)? {
         Some(i) => Cmd::new("/user/set").arg(".id", &i),
-        None => Cmd::new("/user/add").arg("name", READER_NAME),
+        None => Cmd::new("/user/add").arg("name", name),
     };
     r.run(&user.arg("group", READER_NAME).arg("address", address).arg("password", password).arg("comment", OWNED))?;
     Ok(())
@@ -152,9 +166,20 @@ mod tests {
     fn ensure_reader_resets_an_existing_reader() {
         let mut f = Fake::default();
         f.answers.insert("/user/print".into(), Ok(vec![row(&[(".id", "*5"), ("name", "tikontrol-read")])]));
-        ensure_reader(&mut f, "192.0.2.5/32", "pw").unwrap();
+        ensure_reader(&mut f, "tikontrol-read", "192.0.2.5/32", "pw").unwrap();
         assert_eq!(f.seen[1], ["/user/group/add", "=name=tikontrol-read", "=policy=read,api,test", "=comment=tik: tikontrol"]);
         assert_eq!(f.seen[3], ["/user/set", "=.id=*5", "=group=tikontrol-read", "=address=192.0.2.5/32", "=password=pw", "=comment=tik: tikontrol"]);
+    }
+
+    #[test]
+    fn a_second_reader_leaves_the_first_alone() {
+        let mut f = Fake::default();
+        f.answers.insert("/user/print".into(), Ok(vec![row(&[(".id", "*5"), ("name", "tikontrol-read")])]));
+        ensure_reader(&mut f, "tikontrol-read-dev", "192.0.2.9/32", "pw").unwrap();
+        assert_eq!(f.seen[3], ["/user/add", "=name=tikontrol-read-dev", "=group=tikontrol-read", "=address=192.0.2.9/32", "=password=pw", "=comment=tik: tikontrol"]);
+        for bad in ["admin", "tikontrol-read x", "tikontrol-READ", "tikontrol-read-a-very-long-name-xx"] {
+            assert!(ensure_reader(&mut f, bad, "192.0.2.9/32", "pw").is_err(), "{bad}");
+        }
     }
 
     #[test]

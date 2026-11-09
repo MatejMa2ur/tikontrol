@@ -18,6 +18,7 @@ All settings are environment variables.
 | `TIK_TLS_NAMES` | – | Extra names for the generated certificate, comma-separated: private IPv4 addresses or names under `tikontrol`, `localhost`, `.lan`, `.home.arpa`, `.internal`, `.local`. Behind a dst-nat, add the address you open in the browser (for example `192.168.1.1`). |
 | `TIK_HTTP` | – | Plain HTTP, loopback addresses only (a local reverse proxy, development). |
 | `TIK_POLL` | `30` | Seconds between router snapshots (5–3600). Lower costs router CPU. |
+| `TIK_READER` | `tikontrol-read` | Name of the read-only user setup creates (same `tikontrol-read` group). Give a second instance its own, e.g. `tikontrol-read-dev`, so its setup doesn't reset the first one's user. Must start with `tikontrol-read`. |
 | `TIK_DEBUG_API` | – | Log each RouterOS API command path and the reply types it got (no values). For diagnosing a router that behaves differently. |
 | `TIK_DEMO` | – | Path to a snapshot JSON (for example `src/ui/src/lib/sample.json`) to serve instead of a router. |
 

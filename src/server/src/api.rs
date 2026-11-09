@@ -332,7 +332,7 @@ fn setup_router(app: &Arc<App>, req: &Req) -> Resp {
         port: b.port,
         pin: b.pin.to_ascii_lowercase(),
         mode: Mode::ReadOnly,
-        reader: Cred { user: policy::READER_NAME.into(), password: String::new() },
+        reader: Cred { user: policy::reader_name(), password: String::new() },
         writer: None,
     };
     let mut r = match (app.connector)(&cfg, &b.user, &b.password) {
@@ -353,12 +353,13 @@ fn setup_router(app: &Arc<App>, req: &Req) -> Resp {
     }
     let Some(addr) = reader_address(r.as_mut(), &b.user, &b.host, b.port) else { return Resp::error(502, "cannot tell tikontrol's own address") };
     let pw = crate::store::hex(&crate::store::random_bytes::<16>()); // 32 characters, never shown or logged
-    if let Err(e) = policy::ensure_reader(r.as_mut(), &addr, &pw) {
-        return Resp::error(502, &format!("creating {} on the router failed: {e}", policy::READER_NAME));
+    let name = policy::reader_name();
+    if let Err(e) = policy::ensure_reader(r.as_mut(), &name, &addr, &pw) {
+        return Resp::error(502, &format!("creating {name} on the router failed: {e}"));
     }
     drop(r);
     let mut st = lock(&app.store);
-    let reader = Cred { user: policy::READER_NAME.into(), password: st.sealer.seal("router-password:reader", &pw) };
+    let reader = Cred { user: name.clone(), password: st.sealer.seal("router-password:reader", &pw) };
     st.state.router = Some(RouterCfg { reader, ..cfg });
     let saved = st.save();
     drop(st);
@@ -369,7 +370,7 @@ fn setup_router(app: &Arc<App>, req: &Req) -> Resp {
     app.drop_reader();
     *app.snap.write().unwrap_or_else(|e| e.into_inner()) = Default::default();
     lock(&app.limiter).success(ip);
-    eprintln!("tikontrol: set up by router admin {:?}; created or reset {} on the router", b.user, policy::READER_NAME);
+    eprintln!("tikontrol: set up by router admin {:?}; created or reset {name} on the router", b.user);
     // first read right away instead of at the next poll (up to TIK_POLL seconds), so the dashboard opens quickly
     let a = app.clone();
     std::thread::spawn(move || a.poll(false));

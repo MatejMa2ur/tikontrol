@@ -2,7 +2,7 @@
 //!
 //! Settings come from the environment (see docs/DEPLOY.md):
 //! TIK_DATA (default ./data), TIK_LISTEN (HTTPS, default 0.0.0.0:8443), TIK_HTTP (plain HTTP, loopback only),
-//! TIK_TLS_CERT + TIK_TLS_KEY (own certificate), TIK_TLS_NAMES (extra names for the generated one), TIK_POLL (seconds between snapshots, default 30),
+//! TIK_TLS_CERT + TIK_TLS_KEY (own certificate), TIK_TLS_NAMES (extra names for the generated one), TIK_POLL (seconds between snapshots, default 30), TIK_READER (reader user name, default tikontrol-read),
 //! TIK_DEMO (path to a snapshot JSON to serve instead of a router), TIK_FLOWS (NetFlow v5 collector address, off by default),
 //! TIK_GEOIP (path to a local IPv4-to-country CSV for Insights > Countries; nothing is downloaded).
 
