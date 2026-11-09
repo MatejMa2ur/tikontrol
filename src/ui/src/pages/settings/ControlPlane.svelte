@@ -1,7 +1,7 @@
 <script lang="ts">
   import { raw, router, isBackend } from '../../lib/data'
   import { review } from '../../lib/apply.svelte'
-  import { api, session } from '../../lib/backend'
+  import { api, session, site, switchSite, type Site } from '../../lib/backend'
   import Icon from '../../lib/Icon.svelte'
   import Section from '../../lib/ui/Section.svelte'
   import Field from '../../lib/ui/Field.svelte'
@@ -9,6 +9,11 @@
 
   const users: any[] = raw.users ?? []
   const backups: any[] = raw.backups ?? []
+  // SSH public keys (intents/users.rs): fingerprints only; tikontrol removes only keys it tagged
+  const sshKeys: any[] = raw.sshKeys ?? []
+  const tikKey = (k: any) => { const m = /^tik:ssh-key:[^:]+:(.+)$/.exec(k.comment ?? ''); return m ? { label: m[1] } : null }
+  let nk = $state({ user: users[0]?.name ?? '', label: '', key: '' })
+  const addKey = () => review(`Add SSH key ${nk.label} for ${nk.user}`, [`/user/ssh-keys/add user=${nk.user} key="${nk.key.trim().split(/\s+/).slice(0, 2).join(' ')}" comment=tik:ssh-key:${nk.user}:${nk.label}`], { kind: 'ssh-key', user: nk.user, label: nk.label, key: nk.key })
   const isAdmin = !isBackend || session.me?.role === 'admin'
 
   // tikontrol's own users (backend) — the RouterOS users below are shown read-only
@@ -87,6 +92,31 @@
   const revokeKey = (n: string) => confirm(`Revoke ${n}? Scripts using it stop working.`) && keyAct(() => api(`/apikeys?name=${encodeURIComponent(n)}`, { method: 'DELETE' }))
   loadKeys()
 
+  // ---------- Routers (sites): src/server/src/sites.rs. Each has its own credentials, data and history ----------
+  let sites = $state<Site[]>([])
+  let siteName = $state('')
+  let siteErr = $state('')
+  async function loadSites() { if (isBackend) try { sites = await api<Site[]>('/sites') } catch (e) { siteErr = (e as Error).message } }
+  async function addSite() {
+    siteErr = ''
+    try { const r = await api<{ id: string }>('/sites', { method: 'POST', body: { name: siteName } }); switchSite(r.id) } catch (e) { siteErr = (e as Error).message }
+  }
+  async function removeSite(s: Site) {
+    if (!confirm(`Remove ${s.name}? tikontrol forgets its credentials and history. Nothing on the router changes.`)) return
+    siteErr = ''
+    try { await api(`/sites?id=${encodeURIComponent(s.id)}`, { method: 'DELETE' }); if (s.id === site) switchSite(''); else await loadSites() } catch (e) { siteErr = (e as Error).message }
+  }
+  loadSites()
+
+  // ---------- Blueprint / drift: src/server/src/drift.rs ----------
+  type Drift = { saved: number | null; changes: { menu: string; added: Record<string, unknown>[]; removed: Record<string, unknown>[] }[] }
+  let drift = $state<Drift | null>(null)
+  let driftErr = $state('')
+  async function loadDrift() { if (isBackend) try { drift = await api<Drift>('/drift') } catch (e) { driftErr = (e as Error).message } }
+  async function saveBlueprint() { driftErr = ''; try { await api('/drift/baseline', { method: 'POST', body: {} }); await loadDrift() } catch (e) { driftErr = (e as Error).message } }
+  const fmtRow = (r: Record<string, unknown>) => Object.entries(r).map(([k, v]) => `${k}=${Array.isArray(v) ? v.join(',') : String(v)}`).join(' ')
+  loadDrift()
+
   // ---------- Console: read-only, vetted prints only (src/server/src/ros/queries.rs `console`) ----------
   let cmd = $state('')
   let allowed = $state<string[]>([])
@@ -130,6 +160,20 @@
 {/if}
 
 {#if isBackend}
+  <Section title="Routers" desc="Other routers this tikontrol manages, each with its own read-only (and optional writer) user. Switch between them in the top bar.">
+    <table><thead><tr><th>Name</th><th>Router</th><th>Address</th><th>Mode</th><th></th></tr></thead>
+      <tbody>{#each sites as s (s.id)}<tr class="nohover"><td><b>{s.name}</b>{#if s.id === site} <span class="muted small">(shown)</span>{/if}</td><td>{s.identity ?? '—'}</td><td class="mono small">{s.host ?? 'not connected'}</td>
+        <td>{#if s.error}<span class="pill bad" title={s.error}>error</span>{:else}<span class="pill">{s.mode ?? '—'}</span>{/if}</td>
+        <td class="r">{#if s.id !== site}<button class="btn small" onclick={() => switchSite(s.id)}>Open</button>{/if}
+          {#if isAdmin && s.id}<button class="btn small" onclick={() => removeSite(s)}>Remove</button>{/if}</td></tr>{/each}</tbody></table>
+    {#if isAdmin}
+      <form class="add" onsubmit={(e) => { e.preventDefault(); addSite() }}><input type="text" bind:value={siteName} maxlength="40" placeholder="Name, e.g. Office" aria-label="New router name" autocomplete="off" />
+        <button class="btn primary" disabled={!siteName.trim()}><Icon name="plus" size={14} /> Add router</button></form>
+      <p class="muted small">Adding opens the connect page for the new router. Your MikroTik sign-in only works on the main router: give other routers a stored writer user to make changes there.</p>
+    {/if}
+    {#if siteErr}<div class="err small" role="alert">{siteErr}</div>{/if}
+  </Section>
+
   <Section title="tikontrol users" desc="Who can sign in to tikontrol. Viewers see everything but change nothing.">
     <table><thead><tr><th>Name</th><th>Role</th><th></th></tr></thead>
       <tbody>{#each admins as a}<tr class="nohover"><td><b>{a.name}</b>{#if a.you} <span class="muted small">(you)</span>{/if}</td><td><span class="pill">{a.role}</span></td>
@@ -150,6 +194,17 @@
   <table><thead><tr><th>Name</th><th>Group</th><th>Last login</th><th></th></tr></thead>
     <tbody>{#each users as x}<tr class="nohover"><td><b>{x.name}</b> <span class="muted small">{x.comment ?? ''}</span></td><td><span class="pill">{x.group}</span></td><td>{x['last-logged-in'] ?? '—'}</td><td class="r">{#if x.name === 'admin'}<span class="muted small">Rename the default admin</span>{/if}</td></tr>{/each}</tbody></table>
   <Field label="Single sign-on" na="RouterOS has no SSO; use RADIUS for central logins"><span></span></Field>
+  <h4>SSH keys</h4>
+  <table><thead><tr><th>User</th><th>Key</th><th>Fingerprint</th><th></th></tr></thead>
+    <tbody>{#each sshKeys as k}{@const own = tikKey(k)}<tr class="nohover"><td><b>{k.user}</b></td><td>{own ? own.label : (k.comment || k.info || '')} <span class="muted small">{k['key-type']} {k.bits ?? ''}</span></td><td class="mono small">{k.fingerprint ?? ''}</td>
+      <td class="r">{#if own}<button class="btn small" onclick={() => review(`Remove SSH key ${own.label} from ${k.user}`, [`/user/ssh-keys/remove [find comment="${k.comment}"]`], { kind: 'remove-ssh-key', user: k.user, label: own.label })}>Remove</button>{:else}<span class="muted small" title="tikontrol only removes keys it added">not from tikontrol</span>{/if}</td></tr>
+    {:else}<tr class="nohover"><td colspan="4" class="muted">No SSH keys.</td></tr>{/each}</tbody></table>
+  <form class="add" onsubmit={(e) => { e.preventDefault(); addKey() }}>
+    <select bind:value={nk.user} aria-label="Router user">{#each users as x}<option>{x.name}</option>{/each}</select>
+    <input type="text" bind:value={nk.label} placeholder="Label, e.g. laptop" aria-label="Key label" maxlength="32" autocomplete="off" />
+    <input type="text" class="mono" bind:value={nk.key} placeholder="ssh-ed25519 AAAA… (public key only)" aria-label="Public key" style="flex:1" autocomplete="off" spellcheck="false" />
+    <button class="btn" disabled={!nk.user || !nk.label || !nk.key}><Icon name="key" size={14} /> Add key</button></form>
+  <p class="muted small">Public keys only (ed25519, ECDSA, or RSA of 3072+ bits). By default a user with a key can no longer use a password over SSH. Needs a writer with the <code>policy</code> policy.</p>
 </Section>
 
 <Section title="Backups" desc="A readable export without passwords and keys, saved on the router. Download it with WinBox or WebFig Files." ros="/file/print where type=backup">
@@ -163,7 +218,22 @@
   <div class="row muted small sched">Automatic: <button class="btn small" onclick={() => review('Weekly backups', ['/system/scheduler/add name=tik-backup interval=7d on-event="/export file=tik-auto"'], { kind: 'backup-schedule', enabled: true, interval: '7d' })}>Weekly backups</button></div>
 </Section>
 
-<Section title="Updates" desc="RouterOS version and channel. Picking a channel downloads nothing." ros="/system/package/update/print">
+{#if isBackend}
+  <Section title="Blueprint & config drift" desc="Save this router's configuration as a blueprint, then see what changed since: rows added and removed per menu. Built from tikontrol's read-only view (no passwords or keys), not from /export.">
+    {#snippet actions()}{#if isAdmin}<button class="btn" onclick={saveBlueprint}>Save blueprint</button>{/if}{/snippet}
+    {#if drift?.saved}
+      <p class="muted small">Blueprint from {new Date(drift.saved * 1000).toLocaleString()}.</p>
+      {#each drift.changes as c}
+        <h4>{c.menu}</h4>
+        {#each c.added as r}<div class="mono small ok">+ {fmtRow(r)}</div>{/each}
+        {#each c.removed as r}<div class="mono small err">− {fmtRow(r)}</div>{/each}
+      {:else}<p class="small">No drift: the configuration matches the blueprint.</p>{/each}
+    {:else}<p class="muted small">No blueprint saved yet.</p>{/if}
+    {#if driftErr}<div class="err small" role="alert">{driftErr}</div>{/if}
+  </Section>
+{/if}
+
+<Section title="Updates"desc="RouterOS version and channel. Picking a channel downloads nothing." ros="/system/package/update/print">
   <Field label="Version"><span>{router.version}</span></Field>
   <Field label="Channel"><select bind:value={channel} aria-label="Update channel"><option>stable</option><option>long-term</option><option>testing</option><option>development</option></select>
     <button class="btn" disabled={channel === router.channel} onclick={() => review(`Update channel: ${channel}`, [`/system/package/update/set channel=${channel}`], { kind: 'set-update-channel', channel })}>Review & apply</button></Field>

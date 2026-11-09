@@ -9,6 +9,10 @@ info:
     carry the session's CSRF token in `X-CSRF-Token`. Everything is denied unless listed as public.
     Bodies are JSON (`Content-Type: application/json`, at most 256 KiB); unknown fields are rejected.
     Errors are `{ "error": "message" }`.
+    Several routers: signed-in requests (and API-key requests) run against the router named by the
+    `X-Tik-Site` header (or a `site` query parameter, for EventSource), else the main router. Live data,
+    history, the snapshot, the router connection, drift and Safe apply changes are per router; users,
+    prefs, API keys and alert rules are shared. An unknown site answers 404 (only after authentication).
 servers:
   - url: https://tikontrol.lan:8443
 components:
@@ -34,7 +38,7 @@ components:
       type: object
       required: [kind]
       description: A Safe apply intent. `kind` selects the change; see src/server/src/apply.rs and src/server/src/intents/. `batch` groups up to 8 intents (`title`, `intents`) into one change, undone in reverse order.
-      properties: { kind: { type: string, examples: [block-client, dns-record, port-forward, traffic-rule, set-port-mirror, create-bond, batch] } }
+      properties: { kind: { type: string, examples: [block-client, dns-record, port-forward, traffic-rule, set-port-mirror, create-bond, ssh-key, remove-ssh-key, batch] } }
       additionalProperties: true
     Preview:
       type: object
@@ -166,6 +170,22 @@ paths:
       summary: Revoke an API key (admin)
       parameters: [{ name: name, in: query, required: true, schema: { type: string } }]
       responses: { '200': { description: ok }, '404': { description: no such key } }
+  /api/v1/sites:
+    get: { summary: 'Routers (sites): [{ id, name, identity, host, mode, error }]; id "" is the main router. No credentials', responses: { '200': { description: ok } } }
+    post:
+      security: [{ session: [], csrf: [] }]
+      summary: Add a router slot (admin, max 20). Connect it afterwards with POST /api/v1/router and `X-Tik-Site`
+      requestBody: { content: { application/json: { schema: { type: object, required: [name], properties: { name: { type: string, maxLength: 40 } } } } } }
+      responses: { '200': { description: '{ id }' }, '400': { description: invalid name }, '403': { description: not admin }, '409': { description: too many } }
+    delete:
+      security: [{ session: [], csrf: [] }]
+      summary: Remove an extra router (admin) with its sealed credentials, history and blueprint. Nothing on the router changes
+      parameters: [{ name: id, in: query, required: true, schema: { type: string } }]
+      responses: { '200': { description: ok }, '404': { description: no such site (the main router can't be removed here) } }
+  /api/v1/drift:
+    get: { summary: 'Config drift since the saved blueprint: { saved, changes: [{ menu, added[], removed[] }] }. Built from the reader''s structured prints (no secrets), not /export', responses: { '200': { description: ok }, '503': { description: no router data yet } } }
+  /api/v1/drift/baseline:
+    post: { security: [{ session: [], csrf: [] }], summary: Save the current configuration as the blueprint (admin), responses: { '200': { description: ok }, '403': { description: not admin }, '503': { description: no router data yet } } }
   /api/v1/tools/console:
     get: { summary: Commands the read-only console accepts, responses: { '200': { description: 'string[]' } } }
     post:

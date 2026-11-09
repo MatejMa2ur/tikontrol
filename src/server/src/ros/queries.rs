@@ -88,7 +88,9 @@ const QUERIES: &[Q] = &[
     q("hotspot", "/ip/hotspot/print", &["name", "interface", "address-pool", "profile", "disabled"]),
     q("hotspotActive", "/ip/hotspot/active/print", &["server", "user", "address", "mac-address", "login-by", "uptime", "session-time-left", "bytes-in", "bytes-out"]),
     q("users", "/user/print", &["name", "group", "last-logged-in", "disabled", "comment"]),
-    q("userGroups", "/user/group/print", &["name", "policy"]).arrays(&["policy"]),
+    // fingerprints only, never the key itself (public, but not needed)
+    q("sshKeys", "/user/ssh-keys/print", &["user", "key-type", "bits", "info", "fingerprint", "comment"]),
+    q("userGroups","/user/group/print", &["name", "policy"]).arrays(&["policy"]),
     // no on-event: script bodies can hold secrets
     q("scheduler", "/system/scheduler/print", &["name", "start-time", "interval", "disabled", "next-run", "comment"]),
     one("clock", "/system/clock/print", &["time-zone-name", "date", "time"]),
@@ -129,7 +131,7 @@ const QUERIES: &[Q] = &[
     q("ipv6Pools", "/ipv6/pool/print", &["name", "prefix", "prefix-length"]),
     q("ipv6Addresses", "/ipv6/address/print", &["address", "interface", "from-pool", "advertise", "dynamic", "comment"]),
     q("kidControl", "/ip/kid-control/print", &["name", "rate-limit", "disabled"]),
-    q("services", "/ip/service/print", &["name", "port", "disabled", "address", "certificate"]),
+    q("services", "/ip/service/print", &["name", "port", "disabled", "address", "certificate", "dynamic"]),
     q("log", "/log/print", &["time", "topics", "message"]).arrays(&["topics"]),
     // optional: MikroTik CMR (7.26+, `cmr` package). Routers without it just report an error for this key.
     // ponytail: field names from the CMR manual, unverified over the API

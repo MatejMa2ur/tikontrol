@@ -10,5 +10,6 @@ pub mod routing;
 pub mod security;
 pub mod system;
 pub mod traffic;
+pub mod users;
 pub mod vpn;
 pub mod wifi;
