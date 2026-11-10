@@ -721,16 +721,18 @@ def sc_update_window(c, data):
         f.ros_is(f":put [/system/scheduler/get {job} policy]", "read;write;test", "check-only window policy")  # :put joins the list with ;
         ev = ros(f":put [/system/scheduler/get {job} on-event]")
         f.need("check-for-updates once" in ev and "install" not in ev, f"check-only window script: {ev.strip()[:120]!r}")
-        msg = "tikontrol: checked for RouterOS updates"
-        n0 = ros(f':put [:len [/log/find message="{msg}"]]').strip()
+        # either line proves the window ran: a CHR has no internet, and a job made by a writer without the
+        # policy permission can't check, so it logs the warning instead of stopping silently
+        msg = "tikontrol: checked for RouterOS updates|tikontrol: the RouterOS update check failed"
+        n0 = ros(f':put [:len [/log/find message~"{msg}"]]').strip()
         ros(f"/system/scheduler/set {job} start-date=[/system/clock/get date] start-time=([:totime [/system/clock/get time]] + 30s)")
         fired = False
         for _ in range(30):
             time.sleep(5)
-            if ros(f':put [:len [/log/find message="{msg}"]]').strip() not in ("", n0):
+            if ros(f':put [:len [/log/find message~"{msg}"]]').strip() not in ("", n0):
                 fired = True
                 break
-        f.need(fired, "the window did not log its check within 150 s (check-for-updates needs internet on the CHR; near midnight the start time wraps)")
+        f.need(fired, "the window logged nothing within 150 s (near midnight the start time wraps)")
     return f.done([{"kind": "auto-update", "enabled": False}])
 
 

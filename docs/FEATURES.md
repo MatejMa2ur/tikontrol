@@ -279,7 +279,7 @@ Clean-room: we copy the behaviour, never the assets.
 | SSO / cloud account | ✗ local auth only | – | ➖ |
 | Sign in with MikroTik account (role from router group, password only in session memory, changes run as that user) 🔌 sign in with a router admin and a read-only user on a CHR | tik + ROS login | 2 | 🟨 |
 | Backups (scheduled, download, restore): list verified on CHR; tikontrol downloads its own `tik-*.rsc` exports (admin only, no secrets), full `.backup` files stay on the router 🔌 download a tik-*.rsc as the reader with `/file/read` (RouterOS 7.13+); check which policy the reader needs | ROS `/system/backup` + `/export` | 2 | 🟨 |
-| Firmware/app updates (channel, auto-update window: daily or weekly check, optional install) 🔌 let the window fire on a spare router: check `check-for-updates once`, the scheduler policy the writer may grant, and an install + restart | ROS / CMR | 2 | 🟨 |
+| Firmware/app updates (channel, auto-update window: daily or weekly check, optional install; on CHR the window fires and logs, and a job without the `policy` permission logs a warning instead of stopping silently: RouterOS gives a job only its creator's rights, and the check needs `policy`, install also `reboot`, which the least-privilege writer lacks) 🔌 on a spare router with internet: a real check and an install + restart, with a writer whose group has policy,reboot | ROS / CMR | 2 | 🟨 |
 | Integrations / local API (+ API keys) | tik REST | 4 | ✅ |
 | Console (terminal in browser) | ROS (SSH/API terminal) | 3 | ✅ |
 | Site settings (name, country, timezone, NTP) | ROS `/system/clock`, ntp | 2 | ✅ |

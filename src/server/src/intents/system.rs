@@ -81,6 +81,7 @@ fn three() -> u8 {
 }
 
 pub const UPDATE_JOB: &str = "tik-auto-update";
+const UPDATE_FAILED_PRE: &str = ":do { ";
 const DAYS: &[&str] = &["mon", "tue", "wed", "thu", "fri", "sat", "sun"];
 
 /// Weekday of a RouterOS date (both formats), 0 = Monday.
@@ -472,10 +473,13 @@ fn build(i: &SystemIntent, r: &mut dyn Router) -> Result<Plan, String> {
             let clock = first(r, "/system/clock", &["date", "time"])?;
             let (date, time) = next_window(clock.get("date").map_or("", |s| s), clock.get("time").map_or("", |s| s), day, *hour).ok_or("cannot read the router clock")?;
             let check = "/system/package/update/check-for-updates once; :delay 20s";
+            // RouterOS gives a scheduled job only the rights of the user who created it, and in a job the check
+            // needs `policy` (install also `reboot`), checked on CHR: without them the job stops with "not enough
+            // permissions". The on-error branch makes that a warning in the router log, not silence.
             let event = if *install {
-                format!("{check}; :if ([/system/package/update/get installed-version] != [/system/package/update/get latest-version]) do={{ :log warning \"tikontrol: installing a RouterOS update in the update window\"; /system/package/update/install }}")
+                format!("{UPDATE_FAILED_PRE}{check}; :if ([/system/package/update/get installed-version] != [/system/package/update/get latest-version]) do={{ :log warning \"tikontrol: installing a RouterOS update in the update window\"; /system/package/update/install }} }} on-error={{ :log warning \"tikontrol: the scheduled RouterOS update failed (no internet, or the job lacks the policy and reboot permissions)\" }}")
             } else {
-                format!("{check}; :log info \"tikontrol: checked for RouterOS updates\"")
+                format!("{UPDATE_FAILED_PRE}{check}; :log info \"tikontrol: checked for RouterOS updates\" }} on-error={{ :log warning \"tikontrol: the RouterOS update check failed (no internet, or the job lacks the policy permission)\" }}")
             };
             let policy = if *install { "read,write,policy,test,reboot" } else { "read,write,test" };
             let interval = if day == "daily" { "1d" } else { "7d" };
@@ -489,6 +493,7 @@ fn build(i: &SystemIntent, r: &mut dyn Router) -> Result<Plan, String> {
             ops.push(job);
             let mut p = plan(if *install { format!("Install RouterOS updates {when}") } else { format!("Check for RouterOS updates {when}") }, if *install { Risk::High } else { Risk::Low }, ops, undo);
             p.warnings.push("Router time is used: check the router's clock and time zone.".into());
+            p.warnings.push(format!("RouterOS runs a scheduled job with the rights of the user who creates it, and the update {} the policy permission{}. tikontrol's writer doesn't have {} by default (policy lets a user change any user's rights), so with it the job only logs a warning in the router log. Give its group {} only if you accept that.", if *install { "needs" } else { "check needs" }, if *install { " and reboot" } else { "" }, if *install { "them" } else { "it" }, if *install { "policy,reboot" } else { "policy" }));
             if *install {
                 p.warnings.push("High risk: in the window the router installs a newer version on its channel by itself and restarts. Internet and Wi-Fi drop for a few minutes; there is no automatic way back.".into());
                 p.warnings.push("Keep the channel on stable or long-term, and keep a recent backup.".into());
@@ -658,6 +663,9 @@ mod tests {
         let p = c(json!({"kind":"auto-update","enabled":true,"day":"sun","hour":4}), &mut f).unwrap();
         let cli = p.cli().join("\n");
         assert!(cli.contains("start-date=2026-11-15") && cli.contains("interval=7d") && !cli.contains("/install"), "{cli}");
+        // a job without the policy permission fails: it says so in the log instead of stopping silently
+        assert!(cli.contains(r#"on-event=":do { /system/package/update/check-for-updates once"#) && cli.contains("on-error={ :log warning"), "{cli}");
+        assert!(p.warnings.iter().any(|w| w.contains("the policy permission")));
         assert_eq!(p.risk, Risk::Low);
         assert_eq!(p.undo_cli(), [r#"/system/scheduler/remove [find name="tik-auto-update"]"#]);
         let p = c(json!({"kind":"auto-update","enabled":true,"install":true}), &mut f).unwrap();
