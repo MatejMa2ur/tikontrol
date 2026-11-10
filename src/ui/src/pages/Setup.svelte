@@ -44,7 +44,8 @@
   // router
   // initial values only; the hint may be `host:port` (TIK_ROUTER)
   const hinted = untrack(() => (me?.routerHint ?? hint ?? '').match(/^([^:]*)(?::(\d+))?$/))
-  let host = $state(hinted?.[1] ?? untrack(() => me?.routerHint ?? hint ?? ''))
+  // a router added from the Devices setup guide (ControlPlane ?add=); the server validates it again
+  let host = $state((site && sessionStorage.getItem('tik.addHost')) || (hinted?.[1] ?? untrack(() => me?.routerHint ?? hint ?? '')))
   let port = $state(Number(hinted?.[2] ?? 8729))
   let pin = $state('')
   let pinOk = $state(false)

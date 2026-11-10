@@ -6,6 +6,7 @@
   import { review } from '../lib/apply.svelte'
   import { cmr, loadCmr, cmrOk, type CmrDevice } from '../lib/cmr.svelte'
   import { cmpVersion } from '../lib/security'
+  import { privateIp, setupSteps, tooOld } from '../lib/guide'
   import Icon from '../lib/Icon.svelte'
   import DeviceFace from '../lib/DeviceFace.svelte'
   import Tabs from '../lib/ui/Tabs.svelte'
@@ -60,6 +61,15 @@
   const ruleIntent = () => ({ kind: 'cmr-upgrade-rule', name: rule.name, labels: labelList(rule.labels), channel: rule.channel, time: rule.time, days: rule.days, strategy: rule.strategy, fail_policy: rule.fail })
   let alert = $state({ name: 'CPU high', metric: 'cpu', threshold: 90, severity: 'high', labels: '' })
   const tik = (c?: string) => !!c?.startsWith('tik:')
+
+  // "Set up this device" for a not-adopted neighbour (lib/guide.ts); API-SSL commands come from the server
+  let guide = $state.raw<{ n: any; ssl: string[]; self: string } | null>(null)
+  function openGuide(n: any) {
+    guide = { n, ssl: [], self: '' }
+    if (isBackend && privateIp(n.address ?? '')) api<{ commands: string[]; self: string }>(`/router/setup-commands?host=${encodeURIComponent(n.address)}`).then((r) => { if (guide?.n === n) guide = { n, ssl: r.commands, self: r.self } }).catch(() => {})
+  }
+  const steps = $derived(guide ? setupSteps(guide.n, guide.ssl, guide.self) : [])
+  const copy = (cmds: string[]) => navigator.clipboard?.writeText(cmds.filter((c) => !c.startsWith('#')).join('\n'))
   $effect(() => { keep('devices.tab', dtab) })
 </script>
 
@@ -98,10 +108,10 @@
           {/each}
           {#each strangers as n}
             {@const ver = (n.version ?? '').split(' ')[0]}
-            <tr><td><b>{n.identity}</b></td><td>{n.board ?? n.platform}</td><td class="mono">{n.address}</td>
-              <td>{ver}{#if ver && cmpVersion(ver, '7.18') < 0}<br /><span class="pill warn" title="tikontrol reads routers over the API from RouterOS 7.18. Update it first: /system/package/update/install">update to 7.18+</span>{/if}</td>
+            <tr onclick={() => openGuide(n)}><td><b>{n.identity}</b></td><td>{n.board ?? n.platform}</td><td class="mono">{n.address}</td>
+              <td>{ver}{#if tooOld(ver)}<br /><span class="pill bad" title="tikontrol needs RouterOS 7">RouterOS 7 needed</span>{:else if ver && cmpVersion(ver, '7.18') < 0}<br /><span class="pill warn" title="tikontrol reads routers over the API from RouterOS 7.18">update to 7.18+</span>{/if}</td>
               <td>—</td><td>—</td><td>—</td><td>—</td>
-              <td><span class="pill">Not adopted</span> <a class="btn small" href="#/settings/control" title="Add {n.identity} ({n.address}) under Routers: it needs an API-SSL certificate and its admin login">Add as router</a></td></tr>
+              <td><span class="pill">Not adopted</span> <button class="btn small" onclick={(e) => { e.stopPropagation(); openGuide(n) }} aria-label="Set up {n.identity}">Set up</button></td></tr>
           {/each}
         </tbody>
       </table>
@@ -270,6 +280,28 @@
   </Modal>
 {/if}
 
+{#if guide}
+  {@const n = guide.n}
+  <Modal title="Set up {n.identity}" onclose={() => (guide = null)}>
+    <p class="small"><b>{n.board ?? n.platform ?? 'MikroTik'}</b> · {n.identity} · <span class="mono">{n.address ?? 'no address'}</span> · {n.version ?? 'version unknown'}</p>
+    {#if tooOld((n.version ?? '').split(' ')[0])}
+      <p class="small" role="alert"><b>RouterOS 7 needed.</b> tikontrol manages RouterOS 7.18 and newer over API-SSL. This device runs {n.version} (RouterOS 6 or SwOS), which tikontrol cannot manage. Install RouterOS 7 on it first if the model supports it (see MikroTik's upgrade guide); otherwise it stays visible here as a neighbour.</p>
+    {:else}
+      <p class="small">Paste each block into the device's terminal: WinBox → <b>New Terminal</b>, or WebFig at <span class="mono">http://{n.address ?? '<its address>'}/</span> → <b>Terminal</b>. Sign in there with its admin login; tikontrol never sees it.</p>
+      <ol class="small steps">
+        {#each steps as s}
+          <li><b>{s.title}</b><div class="muted">{s.why}</div>
+            {#if s.cmds.length}<div class="cmd"><pre class="mono">{s.cmds.join('\n')}</pre><button class="btn small" onclick={() => copy(s.cmds)} aria-label="Copy: {s.title}">Copy</button></div>
+            {:else if !s.title.startsWith('Add')}<div class="muted">{isBackend ? 'Loading the commands…' : 'The commands come from the tikontrol server (they include its own address).'}</div>{/if}
+            {#if s.add}<div><a class="btn small primary" href="#/settings/control?add={s.add}" onclick={() => (guide = null)}>Add as router</a></div>
+            {:else if s.title.startsWith('Add')}<div class="muted">Its address is not a LAN address: type the one tikontrol reaches it on under Settings → Control Plane → Routers.</div>{/if}
+          </li>
+        {/each}
+      </ol>
+    {/if}
+  </Modal>
+{/if}
+
 {#if labelEdit}
   <Modal title="Labels of {labelEdit.d.identity}" onclose={() => (labelEdit = null)}>
     <p class="small">CMR pushes Wi-Fi networks, VLANs and upgrade rules to devices by label. Automatic labels: <span class="mono">{(labelEdit.d['auto-labels'] ?? []).join(', ')}</span></p>
@@ -301,6 +333,9 @@
   .hrow .mono { text-align: right; }
   .actions { display: flex; gap: 8px; margin-top: 16px; }
   .steps { line-height: 1.8; padding-left: 18px; }
+  .steps li + li { margin-top: 10px; }
+  .cmd { display: flex; gap: 8px; align-items: flex-start; margin: 4px 0; }
+  .cmd pre { flex: 1; margin: 0; padding: 6px 8px; background: var(--bg); border: 1px solid var(--line); border-radius: 6px; overflow-x: auto; line-height: 1.5; white-space: pre; }
   .chk { display: inline-flex; gap: 3px; align-items: center; font-size: 12px; }
   code { font: 11.5px var(--mono); background: var(--panel2); padding: 1px 5px; border-radius: 4px; }
 </style>

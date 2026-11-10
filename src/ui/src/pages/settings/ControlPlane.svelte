@@ -7,6 +7,7 @@
   import Field from '../../lib/ui/Field.svelte'
   import Toggle from '../../lib/ui/Toggle.svelte'
   import { cmr, loadCmr } from '../../lib/cmr.svelte'
+  import { privateIp } from '../../lib/guide'
 
   const users: any[] = raw.users ?? []
   // full backups plus tikontrol's own text exports (tik-*.rsc, listed by RouterOS as type "script")
@@ -117,8 +118,11 @@
   let siteName = $state('')
   let siteErr = $state('')
   async function loadSites() { if (isBackend) try { sites = await api<Site[]>('/sites') } catch (e) { siteErr = (e as Error).message } }
+  // #/settings/control?add=<ip> from the Devices setup guide: the new router's connect page starts with that address
+  const adding = ((a) => (privateIp(a) ? a : ''))(new URLSearchParams(location.hash.split('?')[1] ?? '').get('add') ?? '')
   async function addSite() {
     siteErr = ''
+    if (adding) sessionStorage.setItem('tik.addHost', adding)
     try { const r = await api<{ id: string }>('/sites', { method: 'POST', body: { name: siteName } }); switchSite(r.id) } catch (e) { siteErr = (e as Error).message }
   }
   async function removeSite(s: Site) {
@@ -187,8 +191,9 @@
         <td class="r">{#if s.id !== site}<button class="btn small" onclick={() => switchSite(s.id)}>Open</button>{/if}
           {#if isAdmin && s.id}<button class="btn small" onclick={() => removeSite(s)}>Remove</button>{/if}</td></tr>{/each}</tbody></table>
     {#if isAdmin}
-      <form class="add" onsubmit={(e) => { e.preventDefault(); addSite() }}><input type="text" bind:value={siteName} maxlength="40" placeholder="Name, e.g. Office" aria-label="New router name" autocomplete="off" />
+      <form class="add" onsubmit={(e) => { e.preventDefault(); addSite() }}><input type="text" bind:value={siteName} maxlength="40" placeholder="Name, e.g. Office" aria-label="New router name" {@attach (el) => { if (adding) el.focus() }} autocomplete="off" />
         <button class="btn primary" disabled={!siteName.trim()}><Icon name="plus" size={14} /> Add router</button></form>
+      {#if adding}<p class="small" role="status">Adding <b class="mono">{adding}</b> from the setup guide: give it a name.</p>{/if}
       <p class="muted small">Adding opens the connect page for the new router. Your MikroTik sign-in only works on the main router: give other routers a stored writer user to make changes there.</p>
     {/if}
     {#if siteErr}<div class="err small" role="alert">{siteErr}</div>{/if}

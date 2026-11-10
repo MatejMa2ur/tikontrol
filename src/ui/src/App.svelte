@@ -34,7 +34,7 @@
     addEventListener('hashchange', on)
     return () => removeEventListener('hashchange', on)
   })
-  const route = $derived(hash.replace(/^#\/?/, '').split('/'))
+  const route = $derived(hash.replace(/^#\/?/, '').split('?')[0].split('/')) // ?query is for the page itself
   // old/short links: #/ports and #/radios live under Devices
   const alias: Record<string, string[]> = { ports: ['devices', 'ports'], radios: ['devices', 'radios'] }
   const r = $derived(alias[route[0]] ?? route)

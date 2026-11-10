@@ -1231,6 +1231,15 @@
    "platform": "MikroTik",
    "board": "CSS610-8G-2S+",
    "version": "2.17"
+  },
+  {
+   "interface": "ether4,bridge",
+   "address": "10.12.0.3",
+   "mac-address": "02:AA:BB:00:10:02",
+   "identity": "Garage AP",
+   "platform": "MikroTik",
+   "board": "hAP ax lite",
+   "version": "7.15.3 (stable)"
   }
  ],
  "secProfiles": [
