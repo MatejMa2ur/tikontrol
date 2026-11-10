@@ -177,7 +177,12 @@ fn build(x: C, r: &mut dyn Router) -> Result<Plan, String> {
             if !l.is_empty() {
                 args.insert(1, ("labels", labels(&l, true)?));
             }
-            Ok(plan(format!("Device Supervisor alert {name}"), Risk::Low, vec![Op::add(ALERT, args)], vec![Op::on(ALERT, "remove", "comment", &c, vec![])]))
+            let mut p = plan(format!("Device Supervisor alert {name}"), Risk::Low, vec![Op::add(ALERT, args)], vec![Op::on(ALERT, "remove", "comment", &c, vec![])]);
+            if metric == "cpu" && threshold < 50 {
+                // seen on CHR 7.26beta5: cpu-above=1 flapped and the CMR server hung (softlockup) within a minute
+                p.warnings.push("A low CPU threshold turns on and off all the time and floods the log; on RouterOS 7.26beta5 it made the CMR server hang.".into());
+            }
+            Ok(p)
         }
         C::CmrRemoveAlert { name } => {
             let c = format!("tik:alert:{}", ros_name(&name)?);

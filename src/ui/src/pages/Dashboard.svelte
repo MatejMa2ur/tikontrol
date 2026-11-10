@@ -9,6 +9,7 @@
   import { prefs } from '../lib/live.svelte'
   import { isBackend } from '../lib/data'
   import { api, session } from '../lib/backend'
+  import { cmr, loadCmr } from '../lib/cmr.svelte'
 
   // speed test (server side, src/server/src/speedtest.rs)
   type Run = { t: number; down: number; up: number; ping: number; host: string }
@@ -41,6 +42,9 @@
   const identified = wifiClients.reduce((s, c) => s + c.bytesDown + c.bytesUp, 0)
   const trafficDown = wifiClients.reduce((s, c) => s + c.bytesDown, 0)
   const trafficUp = wifiClients.reduce((s, c) => s + c.bytesUp, 0)
+  // Top applications: CMR's classifier, last hour (src/server/src/cmr.rs)
+  $effect(() => { loadCmr() })
+  const topApps = $derived((cmr.data?.apps ?? []).filter((x) => x.hour).sort((a, b) => b.hour![0] + b.hour![1] - a.hour![0] - a.hour![1]).slice(0, 5))
 
   const expOf = (cs: typeof clients) => signalQuality(cs.reduce((s, c) => s + (c.signal ?? -60), 0) / (cs.length || 1))
   const mostActive = $derived([...online].sort((a, b) => (live.rate[b.mac]?.rx ?? 0) - (live.rate[a.mac]?.rx ?? 0)).slice(0, 7))
@@ -211,7 +215,14 @@
           </tbody>
         </table>
       </div>
-      <div class="note tiny muted">By client. Per-app identification arrives with MikroTik CMR (Phase 3).</div>
+      {#if topApps.length}
+        <table class="mini">
+          <thead><tr><th>Top applications (last hour)</th><th class="r">Download</th><th class="r">Upload</th></tr></thead>
+          <tbody>{#each topApps as x}<tr onclick={() => (location.hash = '#/insights/apps')}><td><span class="ell">{x.name}</span>{#if x.category}<span class="muted tiny"> · {x.category}</span>{/if}</td><td class="r down">{bytes(x.hour![0])}</td><td class="r up">{bytes(x.hour![1])}</td></tr>{/each}</tbody>
+        </table>
+      {:else}
+        <div class="note tiny muted">By client. Per-app identification needs a MikroTik CMR server (Devices).</div>
+      {/if}
     </section>
 {/snippet}
 
