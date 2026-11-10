@@ -211,8 +211,14 @@ fn rule_args(chain: &str, action: &str, m: &Match) -> Result<Vec<(&'static str, 
 /// were (before the rule that followed them), not to the end of the chain. Order matters: an input
 /// `accept` re-added after "drop all not coming from LAN" would never match.
 fn rebuild_in_place(r: &mut dyn Router, chain: &str, fields: &[&'static str], c: &str) -> Result<Vec<Op>, String> {
-    let mut undo = rebuild(r, FILTER, fields, c)?;
-    let rows = print(r, FILTER, &[".id", "comment"], Some(("chain", chain)))?;
+    anchored(r, FILTER, Some(("chain", chain)), fields, c)
+}
+
+/// `rebuild` of the rows tagged `c` in `path` (within `scope`), each put back before the row that followed them.
+/// Order matters for firewall rules and for overlapping DNS static entries (match-subdomain).
+fn anchored(r: &mut dyn Router, path: &'static str, scope: Option<(&str, &str)>, fields: &[&'static str], c: &str) -> Result<Vec<Op>, String> {
+    let mut undo = rebuild(r, path, fields, c)?;
+    let rows = print(r, path, &[".id", "comment"], scope)?;
     let ours = |x: &crate::ros::conn::Row| x.get("comment").is_some_and(|v| v == c);
     let next = rows.iter().rposition(ours).and_then(|i| rows[i + 1..].iter().find(|x| !ours(x)));
     // a tikontrol rule next in line may be removed and re-added in the same batch, with a new .id by the
@@ -407,7 +413,7 @@ fn build(i: &S, r: &mut dyn Router) -> Result<Plan, String> {
         UnblockDomain { domain } => {
             let d = dns_name(domain)?;
             let c = format!("tik:app:{d}");
-            let mut undo = rebuild(r, STATIC, &["name", "type", "match-subdomain"], &c)?;
+            let mut undo = anchored(r, STATIC, None, &["name", "type", "match-subdomain"], &c)?;
             if undo.is_empty() {
                 return Err("only domains blocked by tikontrol can be unblocked here".into());
             }
@@ -503,13 +509,14 @@ mod tests {
         f
     }
 
-    /// A filter table that honours `?k=v` queries, which `Fake` ignores.
-    struct Rules(Vec<crate::ros::conn::Row>);
+    /// Tables (filter, DNS static) that honour `?k=v` queries, which `Fake` ignores.
+    struct Rules(Vec<crate::ros::conn::Row>, Vec<crate::ros::conn::Row>);
     impl Router for Rules {
         fn run(&mut self, cmd: &crate::ros::cmd::Cmd) -> Result<Vec<crate::ros::conn::Row>, String> {
             let w = cmd.words()?;
             let q: Vec<(&str, &str)> = w.iter().filter_map(|x| x.strip_prefix('?')).filter_map(|x| x.split_once('=')).collect();
-            Ok(self.0.iter().filter(|r| q.iter().all(|(k, v)| r.get(*k).map(String::as_str) == Some(*v))).cloned().collect())
+            let rows = if cmd.path().starts_with(STATIC) { &self.1 } else { &self.0 };
+            Ok(rows.iter().filter(|r| q.iter().all(|(k, v)| r.get(*k).map(String::as_str) == Some(*v))).cloned().collect())
         }
     }
 
@@ -522,8 +529,10 @@ mod tests {
             rule("*3", "tik:app:cdn.example", "cdn.example"),
             rule("*4", "tik:app:cdn.example", "*.cdn.example"),
             row(&[(".id", "*5"), ("chain", "forward"), ("comment", "defconf: fasttrack")]),
-            row(&[("name", "app.example"), ("type", "NXDOMAIN"), ("comment", "tik:app:app.example")]),
-            row(&[("name", "cdn.example"), ("type", "NXDOMAIN"), ("comment", "tik:app:cdn.example")]),
+        ], vec![
+            row(&[(".id", "*A"), ("name", "app.example"), ("type", "NXDOMAIN"), ("comment", "tik:app:app.example")]),
+            row(&[(".id", "*B"), ("name", "cdn.example"), ("type", "NXDOMAIN"), ("comment", "tik:app:cdn.example")]),
+            row(&[(".id", "*C"), ("name", "nas.lan"), ("address", "192.0.2.9")]),
         ]);
         let p = go(json!({"kind": "unblock-domain", "domain": "app.example"}), &mut Fake::default());
         assert!(p.is_err(), "nothing blocked on an empty router");
@@ -533,6 +542,9 @@ mod tests {
         assert!(app.undo_cli().iter().any(|c| c.contains(r#"place-before=[:pick [/ip/firewall/filter/find comment="tik:app:cdn.example"] 0]"#)), "{:?}", app.undo_cli());
         // a rule that isn't ours stays where it is: its .id is fine
         assert!(cdn.undo_cli().iter().any(|c| c.contains("place-before=*5")), "{:?}", cdn.undo_cli());
+        // DNS static entries keep their order the same way (overlapping match-subdomain names depend on it)
+        assert!(app.undo_cli()[0].starts_with("/ip/dns/static/add name=app.example") && app.undo_cli()[0].contains(r#"place-before=[:pick [/ip/dns/static/find comment="tik:app:cdn.example"] 0]"#), "{:?}", app.undo_cli());
+        assert!(cdn.undo_cli()[0].contains("place-before=*C"), "{:?}", cdn.undo_cli());
         // the revert script still adds the rule, at the end, if the anchor is gone
         let script = crate::apply::revert_script("x", &app).unwrap();
         assert!(script.contains(r#"on-error={ :do { /ip/firewall/filter/add chain=forward protocol=tcp dst-port=443 tls-host=app.example action=reject reject-with=tcp-reset comment=tik:app:app.example } on-error={} }"#), "{script}");
