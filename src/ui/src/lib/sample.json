@@ -1195,7 +1195,7 @@
    ]
   }
  ],
- "neighbors": [],
+ "neighbors": [{"interface": "ether3,bridge", "address": "10.12.0.2", "mac-address": "02:AA:BB:00:10:01", "identity": "Office switch", "platform": "MikroTik", "board": "CSS610-8G-2S+", "version": "2.17"}],
  "secProfiles": [
   {
    ".id": "*7D",

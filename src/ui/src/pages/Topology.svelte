@@ -5,6 +5,7 @@
   import { live, displayName } from '../lib/live.svelte'
   import Icon from '../lib/Icon.svelte'
   import Ros from '../lib/Ros.svelte'
+  import { groupByNeighbor, type Downstream } from '../lib/topology'
 
   type N = { id: string; label: string; sub?: string; icon: string; kind: 'net' | 'dev' | 'client'; link?: string; wireless?: boolean; level?: string; href?: string; children: N[]; x?: number; y?: number }
   const mon: any[] = raw.etherMon ?? []
@@ -19,17 +20,26 @@
   const wired = clients.filter((c) => c.wired && c.online)
   const hosts = wired.filter((c) => c.kind === 'server')
   const vmOf = (c: Client) => (c.kind === 'vm' ? hosts.find((h) => h.port === c.port) : undefined)
-  const topWired = wired.filter((c) => !vmOf(c)).map((c) => {
+  const withVms = (list: Client[]) => list.filter((c) => !vmOf(c)).map((c) => {
     const n = clientNode(c)
     n.children = wired.filter((v) => vmOf(v) === c).map((v) => ({ ...clientNode(v), link: 'Virtual machine' }))
     return n
   })
-  const wireless = clients.filter((c) => !c.wired && c.online).sort((a, b) => (a.band ?? '').localeCompare(b.band ?? '')).map(clientNode)
+  // switches and APs heard over MNDP/LLDP sit between this router and the clients on their port
+  const grouped = groupByNeighbor(clients.filter((c) => c.online), raw.neighbors ?? [])
+  const devNode = (d: Downstream<Client>): N => ({
+    id: d.id, label: d.label, sub: [d.board, d.sub].filter(Boolean).join(' · '), icon: 'devices', kind: 'dev',
+    link: `Port ${d.port.replace('ether', '')}${speed(d.port) ? ` · ${speed(d.port)}` : ''}`,
+    children: [...d.devices.map(devNode), ...withVms(d.clients)],
+  })
+  const neighborNodes = grouped.devices.map(devNode)
+  const topWired = withVms(grouped.direct.filter((c) => c.wired))
+  const wireless = grouped.direct.filter((c) => !c.wired).sort((a, b) => (a.band ?? '').localeCompare(b.band ?? '')).map(clientNode)
 
   const tree: N = {
     id: 'internet', label: 'Internet', sub: internet.publicIp, icon: 'globe', kind: 'net', children: [{
       id: 'upstream', label: internet.doubleNat ? 'Upstream router' : 'Modem', sub: internet.gateway, icon: 'devices', kind: 'dev', link: `WAN · Port ${internet.wanPort}${speed(internet.wanIf) ? ` · ${speed(internet.wanIf)}` : ''}`, children: [{
-        id: 'gw', label: router.identity, sub: `${router.board} · ${internet.gatewayIp}`, icon: 'devices', kind: 'dev', href: '#/devices', link: speed(internet.wanIf), children: [...topWired, ...wireless],
+        id: 'gw', label: router.identity, sub: `${router.board} · ${internet.gatewayIp}`, icon: 'devices', kind: 'dev', href: '#/devices', link: speed(internet.wanIf), children: [...neighborNodes, ...topWired, ...wireless],
       }],
     }],
   }
@@ -80,7 +90,7 @@
       <h1>Topology</h1>
       <div class="row">
         <div class="stats row small muted">
-          <span><b>2</b> network devices</span><span><b>{wiredN}</b> wired</span><span><b>{wifiN}</b> WiFi</span><span><b>{portsUp}</b>/{mon.length} ports up</span>
+          <span><b>{2 + all.filter((n) => n.id.startsWith('nb:')).length}</b> network devices</span><span><b>{wiredN}</b> wired</span><span><b>{wifiN}</b> WiFi</span><span><b>{portsUp}</b>/{mon.length} ports up</span>
         </div>
         <input type="search" placeholder="Spotlight: name, IP, MAC…" bind:value={q} />
         <div class="seg"><button onclick={() => (zoom = Math.max(0.5, zoom - 0.15))} aria-label="Zoom out">−</button><button onclick={() => (zoom = 1)}>{Math.round(zoom * 100)}%</button><button onclick={() => (zoom = Math.min(1.6, zoom + 0.15))} aria-label="Zoom in">+</button></div>

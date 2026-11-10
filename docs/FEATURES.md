@@ -12,7 +12,7 @@ Clean-room: we copy the behaviour, never the assets.
 **Backing:** `ROS` = RouterOS API on the router · `CMR` = MikroTik CMR server · `tik` = our own logic/DB · `✗` = nothing can back it
 
 <!-- progress:start -->
-**Progress:** 113 ✅ · 109 🟨 · 3 🎨 · 1 ⬜ · 8 ➖ (234 items, 50% done) · 7 🔌 waiting for a hardware test ([list](HARDWARE_TESTS.md))
+**Progress:** 113 ✅ · 109 🟨 · 3 🎨 · 1 ⬜ · 8 ➖ (234 items, 50% done) · 10 🔌 waiting for a hardware test ([list](HARDWARE_TESTS.md))
 <!-- progress:end -->
 
 ---
@@ -23,7 +23,7 @@ Clean-room: we copy the behaviour, never the assets.
 |---|---|---|---|---|
 | P1 | Dashboard | Dashboard | 1 | ✅ |
 | P2 | UniFi Devices (list) | Devices | 3 | ✅ |
-| P3 | Topology | Topology (tab in Devices) | 2 | 🟨 |
+| P3 | Topology 🔌 a real downstream MikroTik switch and AP heard over MNDP/LLDP | Topology (tab in Devices) | 2 | 🟨 |
 | P4 | Device detail (overview / ports / insights / settings) | Device drawer | 3 | ✅ |
 | P5 | Client Devices (list) | Clients | 1 | ✅ |
 | P6 | Client detail (overview / insights / settings) | Client drawer | 1 | ✅ |
@@ -82,8 +82,8 @@ Clean-room: we copy the behaviour, never the assets.
 | Device restart / locate (blink LED) | CMR reboot · ROS `/system/routerboard` LED | 3 | 🟨 |
 | Firmware update per device | CMR / ROS | 3 | 🟨 |
 | Scheduled / rolling fleet updates (needs CMR server) | CMR upgrade rules | 3 | ✅ |
-| Topology map (auto layout, wired + wireless links) | CMR layout · ROS neighbor + bridge host | 2 | 🟨 |
-| Topology Spotlight (highlight/filter) | tik | 3 | 🟨 |
+| Topology map (auto layout, wired + wireless links; MNDP/LLDP neighbours as intermediate switch/AP nodes with their port's clients) 🔌 check with a real switch and AP behind the router, including a daisy chain | CMR layout · ROS neighbor + bridge host | 2 | 🟨 |
+| Topology Spotlight (highlight/filter) 🔌 check on a real multi-device topology | tik | 3 | 🟨 |
 | Device Supervisor (health anomalies; needs CMR server) | CMR state alerts | 4 | ✅ |
 | Blueprints / config drift inspector (diff of the reader's structured prints, not `/export`: over the API with only `read` it returns an empty `!done`, and exports risk secrets) | tik (snapshot diff) | 4 | ✅ |
 | Device SSH credentials management (public keys only; writer needs the `policy` policy) | ROS `/user/ssh-keys` | 3 | ✅ |
