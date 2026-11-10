@@ -547,12 +547,28 @@ fn build(i: &N, r: &mut dyn Router) -> Result<Plan, String> {
         RemoveDhcpOption { name } => {
             let name = slug(name)?;
             let c = format!("tik:dhcpopt:{name}");
-            let undo = rebuild(r, DHCPO, &["name", "code", "value"], &c)?;
+            let mut undo = rebuild(r, DHCPO, &["name", "code", "value"], &c)?;
             if undo.is_empty() {
                 return Err("only DHCP options created by tikontrol can be removed here".into());
             }
-            let mut p = plan(format!("Remove DHCP option {name}"), Risk::Low, vec![remove(DHCPO, &c)], undo);
-            p.warnings.push("If a DHCP network still lists this option, remove it there too.".into());
+            // a network that still lists the option would keep a dangling reference (*id) to it, and the undo's
+            // new option would not be linked again (seen on CHR): take it off those networks first, put it back after
+            let mut ops = vec![];
+            for net in print(r, DHCPN, &["address", "dhcp-option"], None)? {
+                let (Some(a), Some(old)) = (net.get("address"), net.get("dhcp-option")) else { continue };
+                let list: Vec<&str> = old.split(',').filter(|o| !o.is_empty()).collect();
+                if list.contains(&name.as_str()) {
+                    let new = list.iter().filter(|o| **o != name).copied().collect::<Vec<_>>().join(",");
+                    ops.push(Op::on(DHCPN, "set", "address", a, vec![("dhcp-option", new)]));
+                    undo.push(Op::on(DHCPN, "set", "address", a, vec![("dhcp-option", old.clone())]));
+                }
+            }
+            ops.push(remove(DHCPO, &c));
+            let detached = ops.len() > 1;
+            let mut p = plan(format!("Remove DHCP option {name}"), Risk::Low, ops, undo);
+            if detached {
+                p.warnings.push("The option is also taken off the DHCP networks that hand it out.".into());
+            }
             p
         }
         Dhcpv6Server { interface } => {
@@ -772,6 +788,19 @@ mod tests {
         f.answers.insert("/ip/firewall/filter/print".into(), Ok(vec![row(&[(".id", "*7")])]));
         f
     }
+    #[test]
+    fn removing_a_dhcp_option_takes_it_off_its_networks_and_back() {
+        let mut f = Fake::default();
+        f.answers.insert("/ip/dhcp-server/option/print".into(), Ok(vec![row(&[("name", "tftp"), ("code", "66"), ("value", "'192.0.2.5'"), ("comment", "tik:dhcpopt:tftp")])]));
+        f.answers.insert("/ip/dhcp-server/network/print".into(), Ok(vec![row(&[("address", "192.168.88.0/24"), ("dhcp-option", "ntp,tftp")]), row(&[("address", "10.0.0.0/24"), ("dhcp-option", "ntp")]), row(&[("address", "10.1.0.0/24")])]));
+        let p = go(json!({"kind": "remove-dhcp-option", "name": "tftp"}), &mut f).unwrap();
+        assert_eq!(p.cli(), [r#"/ip/dhcp-server/network/set [find address="192.168.88.0/24"] dhcp-option=ntp"#, r#"/ip/dhcp-server/option/remove [find comment="tik:dhcpopt:tftp"]"#]);
+        let undo = p.undo_cli();
+        assert!(undo[0].starts_with("/ip/dhcp-server/option/add name=tftp code=66"), "{undo:?}");
+        assert_eq!(undo[1], r#"/ip/dhcp-server/network/set [find address="192.168.88.0/24"] dhcp-option=ntp,tftp"#);
+        assert!(p.warnings.iter().any(|w| w.contains("taken off")));
+    }
+
     fn go(v: serde_json::Value, f: &mut Fake) -> Result<Plan, String> {
         compile(&v, f).expect("own kind")
     }
