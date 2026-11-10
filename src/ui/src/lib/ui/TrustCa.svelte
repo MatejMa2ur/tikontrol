@@ -1,8 +1,10 @@
 <script lang="ts">
   // "Trust this tikontrol": download tikontrol's local CA (public certificate only) and compare its SHA-256.
   let fp = $state('')
-  let missing = $state(false)
-  fetch('/api/v1/ca.crt', { credentials: 'same-origin' })
+  // only HTTPS has a local CA (and crypto.subtle needs a secure context); plain HTTP is a local dev server
+  const https = location.protocol === 'https:'
+  let missing = $state(!https)
+  if (https) fetch('/api/v1/ca.crt', { credentials: 'same-origin' })
     .then(async (r) => {
       if (!r.ok) { missing = true; return }
       const b64 = (await r.text()).replace(/-----[^-]+-----|\s/g, '')
