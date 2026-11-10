@@ -40,6 +40,17 @@ pub fn extra(app: &Arc<App>, req: &Req, s: &Session) -> Option<Resp> {
             let roams: Vec<&Ev> = h.events.iter().filter(|e| e.mac.as_deref() == Some(&mac)).collect();
             Resp::json(200, &json!({ "hours": hours, "seen": seen, "events": roams }))
         }
+        ("GET", "/api/v1/history/clients") => {
+            let Some(hours) = crate::live::client_window(&req.param("window").unwrap_or_else(|| "24h".into())) else {
+                return Some(Resp::error(400, "window must be 24h or 7d"));
+            };
+            let top = match req.param("top").map(|t| t.parse::<usize>()) {
+                None => 8,
+                Some(Ok(n)) if (1..=crate::live::MAX_TOP).contains(&n) => n,
+                _ => return Some(Resp::error(400, &format!("top must be 1-{}", crate::live::MAX_TOP))),
+            };
+            Resp::json(200, &crate::live::top_clients(&lock(&app.live.history).clients, now(), hours, top))
+        }
         ("GET", "/api/v1/clients/offline") => {
             let h = lock(&app.live.history);
             let cutoff = now().saturating_sub(120);

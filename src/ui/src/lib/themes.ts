@@ -119,6 +119,15 @@ export function designVars(design: string, t: Tweaks = {}): Design {
 export const DEFAULT_PALETTE = 'blue'
 export const DEFAULT_DESIGN = 'default'
 
+// Categorical chart colours (--series-1 … --series-8), one per entity, in this fixed order: adjacent pairs stay
+// apart for colour-blind readers (checked with the dataviz palette validator against the panel colours).
+// The same for every palette, stepped per mode. Three light steps are under 3:1, so charts using them
+// also show a table with the same numbers.
+export const series: Record<Mode, string[]> = {
+  light: ['#2a78d6', '#eb6834', '#1baf7a', '#eda100', '#e87ba4', '#008300', '#6250d6', '#e34948'],
+  dark: ['#3987e5', '#d95926', '#199e70', '#c98500', '#d55181', '#008300', '#9085e9', '#e66767'],
+}
+
 // accentBg -> --accent-bg, panel2 -> --panel2
 const cssVar = (k: string) => '--' + k.replace(/[A-Z]/g, (c) => '-' + c.toLowerCase())
 
@@ -128,5 +137,6 @@ export function applyTheme(el: HTMLElement, mode: Mode, palette: string, design:
   const pal = Object.hasOwn(palettes, palette) ? palette : DEFAULT_PALETTE
   const des = Object.hasOwn(designs, design) ? design : DEFAULT_DESIGN
   for (const [k, v] of Object.entries({ ...palettes[pal][m], ...designVars(des, t) })) if (k !== 'label') el.style.setProperty(cssVar(k), v)
+  series[m].forEach((c, i) => el.style.setProperty(`--series-${i + 1}`, c))
   Object.assign(el.dataset, { theme: m, palette: pal, design: des })
 }

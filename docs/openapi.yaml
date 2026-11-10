@@ -146,6 +146,15 @@ paths:
       summary: Hourly bytes, first/last seen and events of one client
       parameters: [{ name: mac, in: query, required: true, schema: { type: string } }]
       responses: { '200': { description: ok } }
+  /api/v1/history/clients:
+    get:
+      summary: 'Traffic by client over time: the top clients by bytes (down + up) in the window, with hourly buckets; the rest summed into other. Wi-Fi stations and wired clients with kid-control accounting'
+      parameters:
+        - { name: window, in: query, schema: { enum: [24h, 7d], default: 24h } }
+        - { name: top, in: query, schema: { type: integer, minimum: 1, maximum: 20, default: 8 } }
+      responses:
+        '200': { description: '{ start, end (unix s, end exclusive), step: 3600, clients[{ mac, down, up, buckets[{ t, down, up }] }] (biggest first; buckets oldest first, only hours with bytes), other{ count, down, up, buckets[{ t, down, up }] } }' }
+        '400': { description: invalid window or top }
   /api/v1/flows:
     get:
       summary: NetFlow v5 aggregates (collector is opt-in via TIK_FLOWS; in memory only). Destinations are named from the router's DNS cache; countries need TIK_GEOIP (a local CSV, never downloaded)

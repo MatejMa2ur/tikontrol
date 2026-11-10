@@ -188,6 +188,53 @@ impl History {
     }
 }
 
+/// Most clients one `/history/clients` call returns; the rest are summed into `other`.
+pub const MAX_TOP: usize = 20;
+/// One stored client hour: (hour start, bytes down, bytes up).
+type Hourly = (u64, u64, u64);
+
+/// `window` query value -> hours covered (the client store keeps 7 days).
+pub fn client_window(w: &str) -> Option<u64> {
+    match w {
+        "24h" => Some(24),
+        "7d" => Some(CLIENT_HOURS as u64),
+        _ => None,
+    }
+}
+
+/// Traffic by client over time: the `top` clients by bytes (down + up) in the `hours` hours ending
+/// with the hour that holds `end`, each with its hourly buckets (only hours with bytes, oldest first),
+/// and everyone else summed into `other`. Ties go to the lower MAC so the order is stable.
+pub fn top_clients(clients: &BTreeMap<String, VecDeque<Hourly>>, end: u64, hours: u64, top: usize) -> Value {
+    let end = end / 3600 * 3600 + 3600;
+    let start = end.saturating_sub(hours * 3600);
+    let bucket = |t: u64, d: u64, u: u64| json!({ "t": t, "down": d, "up": u });
+    let mut rows: Vec<(&String, u64, u64, Vec<Hourly>)> = clients
+        .iter()
+        .filter_map(|(mac, q)| {
+            let b: Vec<Hourly> = q.iter().filter(|x| x.0 >= start && x.0 < end && x.1 + x.2 > 0).copied().collect();
+            let (d, u) = b.iter().fold((0u64, 0u64), |(d, u), x| (d + x.1, u + x.2));
+            (d + u > 0).then_some((mac, d, u, b))
+        })
+        .collect();
+    rows.sort_by(|a, b| (b.1 + b.2).cmp(&(a.1 + a.2)).then(a.0.cmp(b.0)));
+    let rest = rows.split_off(top.clamp(1, MAX_TOP).min(rows.len()));
+    let mut other: BTreeMap<u64, (u64, u64)> = BTreeMap::new();
+    for (_, _, _, b) in &rest {
+        for &(t, d, u) in b {
+            let e = other.entry(t).or_default();
+            e.0 += d;
+            e.1 += u;
+        }
+    }
+    let (od, ou) = rest.iter().fold((0u64, 0u64), |(d, u), r| (d + r.1, u + r.2));
+    json!({
+        "start": start, "end": end, "step": 3600,
+        "clients": rows.iter().map(|(mac, d, u, b)| json!({ "mac": mac, "down": d, "up": u, "buckets": b.iter().map(|&(t, d, u)| bucket(t, d, u)).collect::<Vec<_>>() })).collect::<Vec<_>>(),
+        "other": { "count": rest.len(), "down": od, "up": ou, "buckets": other.iter().map(|(&t, &(d, u))| bucket(t, d, u)).collect::<Vec<_>>() },
+    })
+}
+
 /// ISP status: WAN uptime and outages over the stored minute history (up to 7 days).
 /// Only minutes tikontrol sampled count: a gap (tikontrol not running) is unknown, neither up nor down,
 /// and it ends an outage. An outage is a run of consecutive minutes in which the WAN link was down.
@@ -592,6 +639,45 @@ mod tests {
         assert_eq!(s["uptime"], 33.33);
         // the sampler stopped long ago: not claimed as ongoing
         assert_eq!(isp_status(&[m(60, true)], 100_000)["outages"][0]["ongoing"], false);
+    }
+
+    #[test]
+    fn top_clients_ranks_buckets_and_folds_the_rest() {
+        let mut h = History::default();
+        let t0 = 1_000 * 3600;
+        h.client_bytes("AA", t0, 100, 10);
+        h.client_bytes("AA", t0 + 3600, 50, 5);
+        h.client_bytes("BB", t0 + 3600, 500, 0);
+        h.client_bytes("CC", t0, 30, 0);
+        h.client_bytes("DD", t0 + 7200, 0, 30);
+        h.client_bytes("EE", t0 - 30 * 3600, 9_999, 9_999); // older than 24 h: left out
+        h.client_bytes("FF", t0, 0, 0); // no bytes: left out
+        let v = top_clients(&h.clients, t0 + 7200 + 59, 24, 2);
+        assert_eq!(v["end"], t0 + 3 * 3600);
+        assert_eq!(v["start"], t0 + 3 * 3600 - 24 * 3600);
+        let macs: Vec<&str> = v["clients"].as_array().unwrap().iter().map(|c| c["mac"].as_str().unwrap()).collect();
+        assert_eq!(macs, ["BB", "AA"]);
+        assert_eq!(v["clients"][1]["down"], 150);
+        assert_eq!(v["clients"][1]["up"], 15);
+        assert_eq!(v["clients"][1]["buckets"], json!([{ "t": t0, "down": 100, "up": 10 }, { "t": t0 + 3600, "down": 50, "up": 5 }]));
+        // CC and DD tie on 30 bytes; both go to other, bucketed by hour
+        assert_eq!(v["other"]["count"], 2);
+        assert_eq!(v["other"]["down"], 30);
+        assert_eq!(v["other"]["up"], 30);
+        assert_eq!(v["other"]["buckets"], json!([{ "t": t0, "down": 30, "up": 0 }, { "t": t0 + 7200, "down": 0, "up": 30 }]));
+        // 7 days takes EE in; ties sort by MAC; top is capped
+        let v = top_clients(&h.clients, t0 + 7200, client_window("7d").unwrap(), 1000);
+        let macs: Vec<&str> = v["clients"].as_array().unwrap().iter().map(|c| c["mac"].as_str().unwrap()).collect();
+        assert_eq!(macs, ["EE", "BB", "AA", "CC", "DD"]);
+        assert_eq!(v["other"]["count"], 0);
+        assert_eq!(top_clients(&h.clients, t0, 24, 0)["clients"].as_array().unwrap().len(), 1, "top 0 means at least one");
+        let many: BTreeMap<String, VecDeque<(u64, u64, u64)>> = (0..30).map(|i| (format!("M{i:02}"), [(t0, 1, 1)].into())).collect();
+        let v = top_clients(&many, t0, 24, 1000);
+        assert_eq!(v["clients"].as_array().unwrap().len(), MAX_TOP);
+        assert_eq!(v["other"]["count"], 30 - MAX_TOP);
+        assert_eq!(top_clients(&BTreeMap::new(), t0, 24, 8)["clients"], json!([]));
+        assert_eq!(client_window("24h"), Some(24));
+        assert_eq!(client_window("30d"), None);
     }
 
     #[test]
