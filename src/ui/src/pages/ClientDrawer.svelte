@@ -32,6 +32,12 @@
   const acl = (tag: string) => (raw.accessList ?? []).find((a: any) => a.comment === `tik:${tag}:${c.mac.toUpperCase()}`)
   const vlanNow = $derived(acl('vlan')?.['vlan-id'] as number | undefined)
   const ppskNow = $derived(!!acl('ppsk'))
+  // Block and Pause each add a forward drop rule tagged tik:block:<MAC> / tik:pause:<MAC> (src/server/src/apply.rs)
+  const ruled = (kind: 'block' | 'pause') => (raw.filter ?? []).some((r: any) => r.comment === `tik:${kind}:${c.mac.toUpperCase()}`)
+  const blocked = $derived(ruled('block'))
+  const paused = $derived(ruled('pause'))
+  const dropCmd = (kind: string) => `/ip/firewall/filter/add chain=forward src-mac-address=${c.mac} action=drop comment=tik:${kind}:${c.mac} place-before=[first forward rule]`
+  const removeCmd = (kind: string) => `/ip/firewall/filter/remove [find comment="tik:${kind}:${c.mac}"]`
   let psk = $state('')
   const KINDS = ['phone', 'computer', 'server', 'vm', 'speaker', 'iot', 'devices', 'unknown']
 
@@ -127,13 +133,22 @@
       <div><div class="muted small"><Icon name="up" size={12} /> Upload</div><div class="big">{bps(live.rate[c.mac]?.tx ?? 0)}</div></div>
     </div>
     <div class="actions">
-      <button class="btn" onclick={() => review('Pause internet', [`/ip/kid-control/add name=tik-paused`, `/ip/kid-control/device/add name="${displayName(c)}" mac-address=${c.mac} user=tik-paused`, '/ip/kid-control/pause [find name=tik-paused]'], { kind: 'pause-client', mac: c.mac })}><Icon name="pause" size={14} /> Pause</button>
+      {#if paused}
+        <button class="btn" onclick={() => review(`Resume internet for ${displayName(c)}`, [removeCmd('pause')], { kind: 'resume-client', mac: c.mac })}><Icon name="check" size={14} /> Resume</button>
+      {:else}
+        <button class="btn" onclick={() => review('Pause internet', [dropCmd('pause')], { kind: 'pause-client', mac: c.mac })}><Icon name="pause" size={14} /> Pause</button>
+      {/if}
       <button class="btn" onclick={() => (tab = 'settings')}><Icon name="gauge" size={14} /> Limit</button>
       <button class="btn" disabled={c.fixedIp} onclick={() => review('Fixed IP', `/ip/dhcp-server/lease/make-static [find mac-address=${c.mac}]`, { kind: 'fixed-ip', mac: c.mac })}><Icon name="pin" size={14} /> {c.fixedIp ? 'Fixed IP' : 'Fix IP'}</button>
       {#if !c.wired}<button class="btn" onclick={() => review('Reconnect client', `/interface/wireless/registration-table/remove [find mac-address=${c.mac}]`, { kind: 'kick-wifi', mac: c.mac })}><Icon name="wifi" size={14} /> Reconnect</button>{/if}
       <button class="btn" onclick={() => { trafficDraft.mac = c.mac; location.hash = '#/settings/security' }}><Icon name="shield" size={14} /> Traffic rule</button>
-      <button class="btn danger" onclick={() => review('Block client', [`/ip/firewall/address-list/add list=tik-blocked address=${c.ip} comment=${c.mac}`, '/ip/firewall/filter/add chain=forward src-address-list=tik-blocked action=drop comment="tik:block" place-before=0'], { kind: 'block-client', mac: c.mac })}><Icon name="block" size={14} /> Block</button>
+      {#if blocked}
+        <button class="btn" onclick={() => review(`Unblock ${displayName(c)}`, [removeCmd('block')], { kind: 'unblock-client', mac: c.mac })}><Icon name="check" size={14} /> Unblock</button>
+      {:else}
+        <button class="btn danger" onclick={() => review('Block client', [dropCmd('block')], { kind: 'block-client', mac: c.mac })}><Icon name="block" size={14} /> Block</button>
+      {/if}
     </div>
+    {#if blocked || paused}<p class="small state" role="status"><Icon name="alert" size={13} /> {blocked ? 'Blocked: this device has no network access through the router.' : 'Paused: this device\'s internet is paused.'}</p>{/if}
     <dl>
       <dt>Experience</dt><dd><span class="pill {sq.level}">{sq.label}</span>{#if c.signal}<span class="mono muted"> {c.signal} dBm</span>{/if}</dd>
       <dt>Connection</dt><dd>{c.wired ? `Wired · ${c.port ?? 'unknown port'}` : `${c.ssid} · ${c.band} · ${c.port}`}</dd>
@@ -234,6 +249,7 @@
   .tabs { margin: 16px 0 6px; }
   .live { gap: 32px; margin: 14px 0; }
   .actions { display: flex; gap: 8px; flex-wrap: wrap; }
+  .state { color: var(--warn); margin: 10px 0 0; display: flex; gap: 6px; align-items: center; }
   dl { display: grid; grid-template-columns: 120px 1fr; gap: 8px 12px; margin: 20px 0; }
   dt { color: var(--muted); }
   dd { margin: 0; }

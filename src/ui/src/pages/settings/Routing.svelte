@@ -19,34 +19,41 @@
   const ospf: any[] = raw.ospfInstances ?? []
   const ospfN: any[] = raw.ospfNeighbors ?? []
   const bgp: any[] = raw.bgpSessions ?? []
+  // only what tikontrol made can be removed here: the server refuses anything without its tik: comment
+  const pfOf = (r: any) => String(r.comment ?? '').match(/^tik:pf:(tcp|udp):(\d{1,5})$/)
+  const routeOf = (r: any) => String(r.comment ?? '').match(/^tik:route:(\d{1,3}(?:\.\d{1,3}){3}\/\d{1,2}):(\d{1,3}(?:\.\d{1,3}){3})$/)
+  const dnsOf = (d: any) => String(d.comment ?? '').match(/^tik:dns:([a-z0-9.-]{1,253})$/)
 </script>
 
 <Section title="Port forwarding" desc="Open a port from the internet to a device." ros="/ip/firewall/nat/print">
   {#if internet.doubleNat}<div class="muted small warn"><Icon name="alert" size={13} /> Behind double NAT: forwards also need to be set on {internet.gateway}.</div>{/if}
-  <table><thead><tr><th>Name</th><th>Chain</th><th>Action</th><th>To</th></tr></thead>
-    <tbody>{#each nat as r}<tr class="nohover"><td>{r.comment ?? '—'}</td><td>{r.chain}</td><td>{r.action}</td><td class="mono small">{r['to-addresses'] ?? ''}{r['to-ports'] ? `:${r['to-ports']}` : ''}</td></tr>{/each}</tbody></table>
+  <table><thead><tr><th>Name</th><th>Chain</th><th>Action</th><th>To</th><th></th></tr></thead>
+    <tbody>{#each nat as r}{@const pf = pfOf(r)}<tr class="nohover"><td>{r.comment ?? '—'}</td><td>{r.chain}</td><td>{r.action}</td><td class="mono small">{r['to-addresses'] ?? ''}{r['to-ports'] ? `:${r['to-ports']}` : ''}</td>
+      <td class="r">{#if pf}<button class="btn small" aria-label="Remove port forward {pf[1]} {pf[2]}" onclick={() => review(`Remove port forward ${pf[1]} ${pf[2]}`, [`/ip/firewall/nat/remove [find comment="${r.comment}"]`], { kind: 'remove-port-forward', protocol: pf[1], port: +pf[2] })}>Remove</button>{/if}</td></tr>{/each}</tbody></table>
   <div class="add">
     <input type="text" bind:value={fwd.name} placeholder="Name" />
     <select bind:value={fwd.proto}><option>tcp</option><option>udp</option></select>
     <input type="text" bind:value={fwd.port} placeholder="WAN port" style="width:90px" />
     <select bind:value={fwd.to}><option value="">Device…</option>{#each clients as c}<option value={c.ip}>{c.name} ({c.ip})</option>{/each}</select>
     <input type="text" bind:value={fwd.toPort} placeholder="Device port" style="width:100px" />
-    <button class="btn primary" disabled={!fwd.name || !fwd.port || !fwd.to} onclick={() => review(`Port forward ${fwd.name}`, [`/ip/firewall/nat/add chain=dstnat in-interface-list=WAN protocol=${fwd.proto} dst-port=${fwd.port} action=dst-nat to-addresses=${fwd.to} to-ports=${fwd.toPort || fwd.port} comment="tik:${fwd.name}"`], { kind: 'port-forward', protocol: fwd.proto, port: +fwd.port, to_ip: fwd.to, to_port: +(fwd.toPort || fwd.port), name: fwd.name })}><Icon name="plus" size={14} /> Add</button>
+    <button class="btn primary" disabled={!fwd.name || !fwd.port || !fwd.to} onclick={() => review(`Port forward ${fwd.name}`, [`/ip/firewall/nat/add chain=dstnat in-interface-list=WAN protocol=${fwd.proto} dst-port=${fwd.port} action=dst-nat to-addresses=${fwd.to} to-ports=${fwd.toPort || fwd.port} comment=tik:pf:${fwd.proto}:${fwd.port}`], { kind: 'port-forward', protocol: fwd.proto, port: +fwd.port, to_ip: fwd.to, to_port: +(fwd.toPort || fwd.port), name: fwd.name })}><Icon name="plus" size={14} /> Add</button>
   </div>
 </Section>
 
 <Section title="Static routes" ros="/ip/route/print">
-  <table><thead><tr><th>Destination</th><th>Gateway</th><th>Distance</th><th>Table</th><th>Type</th></tr></thead>
-    <tbody>{#each routes as r}<tr class="nohover"><td class="mono">{r['dst-address']}</td><td class="mono">{r.gateway}</td><td>{r.distance}</td><td>{r['routing-table']}</td><td><span class="pill">{r.dynamic ? 'Auto' : 'Static'}</span></td></tr>{/each}</tbody></table>
+  <table><thead><tr><th>Destination</th><th>Gateway</th><th>Distance</th><th>Table</th><th>Type</th><th></th></tr></thead>
+    <tbody>{#each routes as r}{@const rm = routeOf(r)}<tr class="nohover"><td class="mono">{r['dst-address']}</td><td class="mono">{r.gateway}</td><td>{r.distance}</td><td>{r['routing-table']}</td><td><span class="pill">{r.dynamic ? 'Auto' : 'Static'}</span></td>
+      <td class="r">{#if rm}<button class="btn small" aria-label="Remove route {rm[1]} via {rm[2]}" onclick={() => review(`Remove route ${rm[1]} via ${rm[2]}`, [`/ip/route/remove [find comment="${r.comment}"]`], { kind: 'remove-static-route', dst: rm[1], gateway: rm[2] })}>Remove</button>{/if}</td></tr>{/each}</tbody></table>
   <div class="add"><input type="text" bind:value={rt.dst} placeholder="10.0.0.0/8" /><input type="text" bind:value={rt.gw} placeholder="Gateway" />
-    <button class="btn primary" disabled={!rt.dst || !rt.gw} onclick={() => review('Static route', [`/ip/route/add dst-address=${rt.dst} gateway=${rt.gw} comment=tik:route`], { kind: 'static-route', dst: rt.dst, gateway: rt.gw })}><Icon name="plus" size={14} /> Add</button></div>
+    <button class="btn primary" disabled={!rt.dst || !rt.gw} onclick={() => review('Static route', [`/ip/route/add dst-address=${rt.dst} gateway=${rt.gw} comment=tik:route:${rt.dst}:${rt.gw}`], { kind: 'static-route', dst: rt.dst, gateway: rt.gw })}><Icon name="plus" size={14} /> Add</button></div>
 </Section>
 
 <Section title="Local DNS records" desc="Names for devices on your network." ros="/ip/dns/static/print">
-  <table><thead><tr><th>Name</th><th>Type</th><th>Address</th></tr></thead>
-    <tbody>{#each dnsStatic as d}<tr class="nohover"><td class="mono">{d.name}</td><td>{d.type ?? 'A'}</td><td class="mono">{d.address}</td></tr>{/each}</tbody></table>
+  <table><thead><tr><th>Name</th><th>Type</th><th>Address</th><th></th></tr></thead>
+    <tbody>{#each dnsStatic as d}{@const dn = dnsOf(d)}<tr class="nohover"><td class="mono">{d.name}</td><td>{d.type ?? 'A'}</td><td class="mono">{d.address}</td>
+      <td class="r">{#if dn}<button class="btn small" aria-label="Remove DNS record {dn[1]}" onclick={() => review(`Remove DNS record ${dn[1]}`, [`/ip/dns/static/remove [find comment="${d.comment}"]`], { kind: 'remove-dns-record', name: dn[1] })}>Remove</button>{/if}</td></tr>{/each}</tbody></table>
   <div class="add"><input type="text" bind:value={dns.name} placeholder="nas.lan" /><input type="text" bind:value={dns.ip} placeholder="10.0.0.50" />
-    <button class="btn primary" disabled={!dns.name || !dns.ip} onclick={() => review(`DNS ${dns.name}`, [`/ip/dns/static/add name=${dns.name} address=${dns.ip} comment=tik:dns`], { kind: 'dns-record', name: dns.name, address: dns.ip })}><Icon name="plus" size={14} /> Add</button></div>
+    <button class="btn primary" disabled={!dns.name || !dns.ip} onclick={() => review(`DNS ${dns.name}`, [`/ip/dns/static/add name=${dns.name} address=${dns.ip} comment=tik:dns:${dns.name}`], { kind: 'dns-record', name: dns.name, address: dns.ip })}><Icon name="plus" size={14} /> Add</button></div>
 </Section>
 
 <Section title="UPnP" desc="Lets games and consoles open ports themselves. Convenient, but any device can use it." ros="/ip/upnp/print">
