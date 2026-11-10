@@ -63,6 +63,8 @@ enum S {
     },
     UnblockDomain { domain: String },
     AddAdlist { url: String },
+    /// One of [`ADLIST_PRESETS`] by id: the server picks the URL, the browser never sends one.
+    AddAdlistPreset { preset: String },
     RemoveAdlist { url: String },
     RegionBlock { country: String, url: String },
     RemoveRegionBlock { country: String },
@@ -83,6 +85,7 @@ const KINDS: &[&str] = &[
     "block-domain",
     "unblock-domain",
     "add-adlist",
+    "add-adlist-preset",
     "remove-adlist",
     "region-block",
     "remove-region-block",
@@ -91,6 +94,30 @@ const KINDS: &[&str] = &[
     "isolate-device",
     "unisolate-device",
 ];
+
+/// Content filter presets: (id, label, URL). Well-known public hosts lists the router downloads itself from a third
+/// party (GitHub), so adding one is opt-in and says so. Each StevenBlack "alternates" list is the unified ads + malware
+/// list plus its extension. Mirrored for display in src/ui/src/pages/settings/Security.svelte; this list is the authority.
+pub const ADLIST_PRESETS: &[(&str, &str, &str)] = &[
+    ("adult", "Adult content", "https://raw.githubusercontent.com/StevenBlack/hosts/master/alternates/porn/hosts"),
+    ("gambling", "Gambling", "https://raw.githubusercontent.com/StevenBlack/hosts/master/alternates/gambling/hosts"),
+    ("family", "Family (adult content and gambling)", "https://raw.githubusercontent.com/StevenBlack/hosts/master/alternates/gambling-porn/hosts"),
+];
+
+/// The preset's (label, URL); unknown ids are refused.
+pub fn adlist_preset(id: &str) -> Result<(&'static str, &'static str), String> {
+    ADLIST_PRESETS.iter().find(|(k, _, _)| *k == id).map(|(_, l, u)| (*l, *u)).ok_or_else(|| "unknown preset: choose adult, gambling or family".into())
+}
+
+fn add_adlist(r: &mut dyn Router, url: &str, title: String) -> Result<Plan, String> {
+    let u = https_url(url)?;
+    if !print(r, ADLIST, &["url"], Some(("url", &u)))?.is_empty() {
+        return Err("this list is already added".into());
+    }
+    let mut p = plan(title, Risk::Low, vec![Op::add(ADLIST, vec![("url", u.clone()), ("ssl-verify", "yes".into())])], vec![Op::on(ADLIST, "remove", "url", &u, vec![])]);
+    p.warnings.push("Large lists need a bigger DNS cache (/ip/dns cache-size); names that don't fit are not blocked.".into());
+    Ok(p)
+}
 
 pub fn compile(v: &serde_json::Value, r: &mut dyn Router) -> Option<Result<Plan, String>> {
     let kind = v.get("kind")?.as_str()?;
@@ -381,13 +408,12 @@ fn build(i: &S, r: &mut dyn Router) -> Result<Plan, String> {
             undo.extend(rebuild_in_place(r, "forward", &["chain", "protocol", "dst-port", "tls-host", "action", "reject-with"], &c)?);
             plan(format!("Unblock {d}"), Risk::Low, vec![remove(FILTER, &c), remove(STATIC, &c)], undo)
         }
-        AddAdlist { url } => {
-            let u = https_url(url)?;
-            if !print(r, ADLIST, &["url"], Some(("url", &u)))?.is_empty() {
-                return Err("this list is already added".into());
-            }
-            let mut p = plan("Add content filter list".into(), Risk::Low, vec![Op::add(ADLIST, vec![("url", u.clone()), ("ssl-verify", "yes".into())])], vec![Op::on(ADLIST, "remove", "url", &u, vec![])]);
-            p.warnings.push("Large lists need a bigger DNS cache (/ip/dns cache-size); names that don't fit are not blocked.".into());
+        AddAdlist { url } => add_adlist(r, url, "Add content filter list".into())?,
+        AddAdlistPreset { preset } => {
+            let (label, url) = adlist_preset(preset)?;
+            let mut p = add_adlist(r, url, format!("Add content filter: {label}"))?;
+            p.warnings.push("Third-party list: the router downloads it from raw.githubusercontent.com (the StevenBlack/hosts project on GitHub), which sees the router's public IP. It also blocks ads and malware.".into());
+            p.warnings.push("DNS filtering is easy to bypass: devices using DNS over HTTPS or another resolver are not filtered.".into());
             p
         }
         RemoveAdlist { url } => {
@@ -582,6 +608,33 @@ mod tests {
         let p = go(json!({"kind":"address-group","name":"servers","addresses":["10.0.0.2","10.0.1.0/24","10.0.2.1-10.0.2.9"]}), &mut fake()).unwrap();
         assert_eq!(p.ops.len(), 3);
         assert_eq!(p.undo_cli(), [r#"/ip/firewall/address-list/remove [find comment="tik:group:servers"]"#]);
+    }
+
+    #[test]
+    fn adlist_presets_map_to_fixed_https_urls() {
+        for (id, _, url) in ADLIST_PRESETS {
+            let p = go(json!({"kind":"add-adlist-preset","preset":id}), &mut fake()).unwrap();
+            assert_eq!(p.cli(), [format!("/ip/dns/adlist/add url={url} ssl-verify=yes")]);
+            assert_eq!(p.undo_cli(), [format!(r#"/ip/dns/adlist/remove [find url="{url}"]"#)]);
+            assert!(url.starts_with("https://raw.githubusercontent.com/StevenBlack/hosts/master/alternates/"), "{url}");
+            assert!(p.warnings.iter().any(|w| w.contains("Third-party")) && p.warnings.iter().any(|w| w.contains("bypass")));
+        }
+        assert!(go(json!({"kind":"add-adlist-preset","preset":"family"}), &mut fake()).unwrap().cli()[0].contains("alternates/gambling-porn/hosts"));
+        // unknown ids, a URL in place of an id and extra fields are refused
+        for bad in [
+            json!({"kind":"add-adlist-preset","preset":"news"}),
+            json!({"kind":"add-adlist-preset","preset":"Adult"}),
+            json!({"kind":"add-adlist-preset","preset":""}),
+            json!({"kind":"add-adlist-preset"}),
+            json!({"kind":"add-adlist-preset","preset":"https://example.org/hosts"}),
+            json!({"kind":"add-adlist-preset","preset":"adult","url":"https://example.org/hosts"}),
+        ] {
+            assert!(go(bad.clone(), &mut fake()).is_err(), "{bad}");
+        }
+        // already on the router
+        let mut f = fake();
+        f.answers.insert("/ip/dns/adlist/print".into(), Ok(vec![row(&[("url", ADLIST_PRESETS[0].2)])]));
+        assert!(go(json!({"kind":"add-adlist-preset","preset":"adult"}), &mut f).unwrap_err().contains("already"));
     }
 
     #[test]

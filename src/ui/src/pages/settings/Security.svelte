@@ -79,6 +79,14 @@
   // ---------- ad blocking / content filtering ----------
   const adlists: any[] = raw.adlist ?? []
   let adUrl = $state('')
+  // presets: the server maps the id to a fixed URL (ADLIST_PRESETS in src/server/src/intents/security.rs); shown here only
+  const SB = 'https://raw.githubusercontent.com/StevenBlack/hosts/master/alternates/'
+  const presets = [
+    { id: 'adult', label: 'Adult content', url: `${SB}porn/hosts` },
+    { id: 'gambling', label: 'Gambling', url: `${SB}gambling/hosts` },
+    { id: 'family', label: 'Family (adult content and gambling)', url: `${SB}gambling-porn/hosts` },
+  ]
+  const hasList = (url: string) => adlists.some((l) => l.url === url)
 
   // ---------- region blocking, threat feeds, IP groups (all tagged tik:) ----------
   let geo = $state({ countries: '' })
@@ -246,6 +254,12 @@
         <td class="r0">{#if l.url}<button class="btn small" onclick={() => review(`${l.disabled ? 'Enable' : 'Disable'} ad-block list`, [`/ip/dns/adlist/set [find url="${l.url}"] disabled=${l.disabled ? 'no' : 'yes'}`], { kind: 'set-adlist', url: l.url, disabled: !l.disabled })}>{l.disabled ? 'Enable' : 'Disable'}</button>
           <button class="btn small" onclick={() => review('Remove content filter list', [`/ip/dns/adlist/remove [find url="${l.url}"]`], { kind: 'remove-adlist', url: l.url })}>Remove</button>{/if}</td></tr>{/each}</tbody></table></div>
   {:else}<div class="muted small">No lists yet.</div>{/if}
+  <h3 class="sub">Presets</h3>
+  <p class="muted small">Third-party lists, off until you add one: the router downloads them from raw.githubusercontent.com (the public StevenBlack/hosts project on GitHub), which sees your public IP. Each also blocks ads and malware. DNS filtering is easy to bypass: devices using DNS over HTTPS or another resolver are not filtered. To send a network's devices to a family-safe resolver instead, set its Content filtering in Settings › <a href="#/settings/networks">Networks</a>.</p>
+  <div class="presets">{#each presets as p}
+    <button class="btn small" disabled={hasList(p.url)} onclick={() => review(`Add content filter: ${p.label}`, [`/ip/dns/adlist/add url=${p.url} ssl-verify=yes`], { kind: 'add-adlist-preset', preset: p.id })} title={p.url}>{#if hasList(p.url)}{p.label}: added{:else}<Icon name="plus" size={14} /> {p.label}{/if}</button>
+  {/each}</div>
+  <h3 class="sub">Any list by URL</h3>
   <div class="add"><input type="url" bind:value={adUrl} placeholder="https://… hosts list" aria-label="List URL" style="flex:1" />
     <button class="btn primary" disabled={!adUrl.trim().startsWith('https://')} onclick={() => review('Add content filter list', [`/ip/dns/adlist/add url=${adUrl.trim()} ssl-verify=yes`], { kind: 'add-adlist', url: adUrl.trim() })}><Icon name="plus" size={14} /> Add</button></div>
 </Section>
@@ -298,6 +312,8 @@
   .audit b { color: var(--text); }
   .grow { flex: 1 1 220px; min-width: 0; overflow-wrap: anywhere; }
   .add { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 10px; }
+  .sub { font-size: 13px; margin: 16px 0 6px; }
+  .presets { display: flex; gap: 6px; flex-wrap: wrap; }
   .apps { display: flex; gap: 18px; flex-wrap: wrap; }
   .apps .row { gap: 6px; }
   .off { opacity: .45; }
