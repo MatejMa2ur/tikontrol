@@ -78,8 +78,9 @@ impl Op {
                     return Ok(0);
                 }
                 let list = ids.iter().map(|s| s.as_str()).collect::<Vec<_>>().join(",");
-                // `run` (scripts) names its target `number`; every other verb takes `numbers`
-                let key = if self.verb == "run" { "number" } else { "numbers" };
+                // `run` (scripts) and `sign` (certificates, refuses `numbers` on 7.25: seen on CHR) name their one
+                // target `number`; every other verb takes `numbers`
+                let key = if matches!(self.verb, "run" | "sign") { "number" } else { "numbers" };
                 r.run(&with_args(Cmd::new(&full).arg(key, &list))).map(|_| ids.len())
             }
         }
@@ -844,6 +845,16 @@ mod tests {
         let v = serde_json::json!({"kind": "block-domain", "domain": "example.com"});
         assert!(compile_value(&v, &mut Fake::default()).unwrap().title.contains("example.com"));
         assert!(compile_value(&serde_json::json!({"kind": "nope"}), &mut Fake::default()).is_err());
+    }
+
+    #[test]
+    fn sign_and_run_name_their_target_number_other_verbs_numbers() {
+        for (verb, key) in [("sign", "=number=*5"), ("run", "=number=*5"), ("remove", "=numbers=*5"), ("export-certificate", "=numbers=*5")] {
+            let mut f = Fake::default();
+            f.answers.insert("/certificate/print".into(), Ok(vec![row(&[(".id", "*5")])]));
+            Op::on("/certificate", verb, "name", "tik-ovpn-ca", vec![]).run(&mut f).unwrap();
+            assert_eq!(f.seen[1], [format!("/certificate/{verb}"), key.to_string()], "{verb}");
+        }
     }
 
     #[test]
