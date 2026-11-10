@@ -99,3 +99,48 @@
 2. Spend about an hour running nasnet-panel on the router, then decide whether to fork it or build fresh.
 3. MVP: dashboard + client list + per-client traffic. All of it is read-only, so there's no lockout risk.
 4. Then write features behind auto-revert: networks/VLANs, Wi-Fi, port forwards.
+
+## 7. MikroTik CMR, measured on CHR 7.26beta5 (2026-11)
+
+Two CHR VMs: a CMR server (`cmr` package, `/cmr set enabled=yes`, TCP 54321 reachable) and a managed device.
+`src/scripts/cmr-e2e.py` reruns everything below. Values here are fictional.
+
+- **Menus.** `/cmr`: `alert`, `client`, `device`, `layout` (`node`, `link`), `upgrade` (`job`), `vlan`, `wifi` (`radio`),
+  plus `push-button`, `set` (`enabled`, `apptraffic-devices`, `auto-labels`, `controller-addresses`, `pairing-requirement`,
+  `track-topology`, `upgrade-check-interval`, `packages-cache-*`). Device commands: `pair`, `apptraffic`, `dashboard`,
+  `upgrade`, `reboot`, `run-script`, `wifi-logs`. The client side is built into every 7.26 RouterOS: `/cmr/client set
+  enabled=yes controller-addresses=<server>` (discovery via MNDP/DNS without it).
+- **The server lists itself** as a device with `controller=true` and `connected=false`; other devices have `connected`.
+- **Pairing.** Defaults: the device requires `password`, the server `confirm`. The device shows up with `pending` /
+  `remote-pending` and a `state` such as `pair: device:password required, cmr:waiting confirmation`. One
+  `/cmr/device/pair numbers=<id> username=<device user> password=<device password>` satisfies both sides; over the API it
+  returns rows `{device, status}` (`… waiting …`, then `paired`) and `!done`. `/cmr/device/remove` unpairs: the device
+  reconnects as pending (new `.id`, same `ids`), so it is the exact inverse of `pair`.
+  **`pair` needs the `reboot` policy** (read,write,api,test gets `not enough permissions (9)`); `remove`, `set labels`,
+  upgrade rules and alerts work without it.
+- **Read-only users** (read,api,test): every `/cmr` print works; `/cmr/wifi/print` shows `security.passphrase=*****`
+  (admins see it in clear, so tikontrol never asks for the field); all writes and `pair` are refused by the router,
+  also through `/execute`.
+- **App traffic.** `/cmr/device/apptraffic [find] once` prints APPLICATION and down/up for the last minute/hour/day/week
+  (`62.5KiB/3006`); over the API the same command returns `!re` rows with no attributes (7.26beta5), so tikontrol
+  runs it with `/execute script=… as-string` (allowed for read,api,test) and parses the table. The table is 80
+  columns wide: once the numbers grow, LAST-WEEK (then LAST-DAY) is left out, so the `Columns:` line decides. Enabling it on a device
+  turns on `/tool apptraffic` (and connection tracking) there; `apptraffic-devices` defaults to `gateway`.
+  Categories come from `/tool/apptraffic/stats/print` (`application`, `category`, no byte counters) on each device.
+- **Dashboard.** `/cmr/device/dashboard` is console-only: over the API it closes the connection. tikontrol derives the
+  same totals from the device list.
+- **Alerts.** Eight disabled example rules ship (`cpu>95%`, `memory>80%`, `upgrade failed`, …). Counters `devices`,
+  `devices-on`, `fired`; `/cmr/alert/show-devices number=<id>` lists the devices a state alert is active on (finishes by
+  itself over the API). A `cpu-above=1` rule with `action.log` (fires and clears all the time) made the server
+  hang with a softlockup panic within a minute, twice (CHR under TCG, host busy); `mem-above=10` ran fine.
+  `disabled` can't be `unset` on alerts. Touching an example rule makes it appear in `/export` (set-vs-default), even after setting
+  it back.
+- **Upgrades.** A dynamic `default` rule (`channel=stable`, `strategy=parallel`). Adding a rule with
+  `schedule-time=03:00:00@sun` creates a `scheduled` job (`starts-in`, `rule=true`) and claims matching devices
+  (`/cmr/device` `upgrade-rule`). `version-check` prints the newest version per channel.
+- **Labels.** `labels` on `/cmr/device`; `auto-labels` hold arch, board, identity and address. An empty `labels=` shows
+  up in export as `labels=""`; `unset value-name=labels` restores the original.
+- **Topology.** `/cmr/layout add-devices` places nodes; `rebuild-links` found no links between two NATed CHRs (needs
+  real neighbours/LLDP).
+- **Wi-Fi / VLAN.** `/cmr/wifi` takes the entry on a CHR (no radio, nothing broadcast); `wifi-logs`, radios and
+  band labels need real APs.
