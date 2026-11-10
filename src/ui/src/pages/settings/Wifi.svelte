@@ -133,7 +133,7 @@
   const channels = (band: string) => (band.startsWith('2') ? ['auto', '1', '6', '11'] : band.startsWith('6') ? ['auto', '5', '37', '69', '101', '133', '165', '197'] : ['auto', '36', '44', '52', '100', '116', '132', '149'])
 </script>
 
-<Section title="WiFi networks" desc="Each SSID can broadcast on one or more bands." ros="/interface/wireless/print; /interface/wireless/security-profiles/print">
+<Section title="WiFi networks" desc="Each SSID can broadcast on one or more bands." ros={legacy ? '/interface/wireless/print; /interface/wireless/security-profiles/print proplist=name,mode,authentication-types,management-protection' : '/interface/wifi/print proplist=name,configuration.ssid,channel.band,master-interface,security.authentication-types,configuration.hide-ssid,running,disabled,comment; /interface/wifi/network/print'}>
   {#snippet actions()}<button class="btn primary" onclick={() => open(-1)}><Icon name="plus" size={14} /> Create New</button>{/snippet}
   <table>
     <thead><tr><th>Name</th><th>Security</th><th>Bands</th><th>Network</th><th>Clients</th><th></th></tr></thead>
@@ -155,7 +155,7 @@
   </table>
 </Section>
 
-<Section title="Radios" desc="Channel, width and transmit power per band. Auto picks the quietest channel at boot." ros="/interface/wireless/set wlan2 frequency=… channel-width=… tx-power=…">
+<Section title="Radios" desc="Channel, width and transmit power per band. Auto picks the quietest channel at boot." ros={legacy ? '/interface/wireless/print where interface-type!=virtual' : '/interface/wifi/print proplist=name,channel.band,channel.width,running,disabled where !master-interface; /interface/wifi/radio/print'}>
   {#each rf as r}
     <Field label="{r.band} · {r.name}">
       <select bind:value={r.channel}>{#each channels(r.band) as c}<option value={c}>{c === 'auto' ? 'Auto channel' : `Channel ${c}`}</option>{/each}</select>
@@ -168,7 +168,7 @@
   <div class="r"><button class="btn" disabled={!rf.length} onclick={() => review('Radio settings', rf.map(radioCli), rf.length === 1 ? radioIntent(rf[0]) : { kind: 'batch', title: 'Radio settings', intents: rf.slice(0, 8).map(radioIntent) })}>Apply all radios</button></div>
 </Section>
 
-<Section title="Access rules" desc="Allow or deny single devices by MAC address. The router uses the first matching rule, so tikontrol puts new ones on top." ros="{pkgPath}/access-list/print; /system/scheduler/print">
+<Section title="Access rules" desc="Allow or deny single devices by MAC address. The router uses the first matching rule, so tikontrol puts new ones on top." ros={legacy ? '/interface/wireless/access-list/print proplist=mac-address,interface,signal-range,authentication,forwarding,vlan-id,comment; /system/scheduler/print where name~"^tik-wifi-"' : '/interface/wifi/access-list/print proplist=mac-address,interface,signal-range,action,vlan-id,comment; /system/scheduler/print where name~"^tik-wifi-"'}>
   {#if W.length}
     <Field label="MAC address filter" help="Deny blocks the device. Allow only restricts once the interface stops accepting unknown devices">
       <input type="text" bind:value={mf.mac} placeholder="02:00:00:00:00:01" aria-label="Device MAC address" autocomplete="off" spellcheck="false" />

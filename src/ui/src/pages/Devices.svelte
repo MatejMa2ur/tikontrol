@@ -112,7 +112,7 @@
   {:else if tab === 'radios'}
     <Radios />
   {:else if tab === 'updates'}
-    <Section title="Firmware" desc="RouterOS packages and RouterBOOT firmware for every managed device." ros="/system/package/update/check-for-updates; /system/routerboard/print">
+    <Section title="Firmware" desc="RouterOS packages and RouterBOOT firmware for every managed device." ros="/system/package/update/print; /system/routerboard/print">
       <table>
         <thead><tr><th>Device</th><th>RouterOS</th><th>Channel</th><th>RouterBOOT</th><th></th></tr></thead>
         <tbody><tr>
@@ -124,7 +124,7 @@
       </table>
     </Section>
     {#if cmrOk()}
-      <Section title="Fleet versions" desc="Every device the CMR server manages, with the upgrade rule that claims it." ros="/cmr/device/print; /cmr/upgrade/version-check">
+      <Section title="Fleet versions" desc="Every device the CMR server manages, with the upgrade rule that claims it." ros="/cmr/device/print">
         <table>
           <thead><tr><th>Device</th><th>RouterOS</th><th>Channel</th><th>Rule</th><th></th></tr></thead>
           <tbody>{#each fleet.filter((d) => d.paired) as d}<tr>
@@ -157,7 +157,7 @@
       {/if}
     </Section>
   {:else if tab === 'supervisor'}
-    <Section title="Device Supervisor" desc="Health anomalies across devices: offline, high CPU/memory, failed upgrades. Needs the CMR server; for this router, CPU and memory alerts are in Logs & Alarms." ros="/cmr/alert/print">
+    <Section title="Device Supervisor" desc="Health anomalies across devices: offline, high CPU/memory, failed upgrades. Needs the CMR server; for this router, CPU and memory alerts are in Logs & Alarms." ros="/system/resource/print; /cmr/alert/print">
       <div class="row sup"><span class="dot ok"></span> {identity}: online, CPU {live.cpu}%, memory <span class={memPct > 75 ? 'warnc' : ''}>{memPct}%</span>{#if memPct > 75}<span class="pill warn">memory high</span>{/if}</div>
       {#if cmrOk()}
         {#each cmr.data!.devices.filter((d) => d.paired && !d.online) as d}<div class="row sup"><span class="dot bad"></span> {d.identity}: offline</div>{/each}
@@ -179,7 +179,7 @@
         <div class="r"><button class="btn primary" onclick={() => review(`Alert ${alert.name}`, [`/cmr/alert/add name=${q(alert.name)}`], { kind: 'cmr-alert', name: alert.name, metric: alert.metric, threshold: alert.metric === 'update' ? 0 : alert.threshold, severity: alert.severity, labels: labelList(alert.labels) })}>Review alert</button></div>
       {/if}
     </Section>
-    <Section title="Config drift" desc="Compare the configuration with a stored baseline (Blueprints / Drift Inspector)." ros="/export show-sensitive=no">
+    <Section title="Config drift" desc="Compare the configuration with a stored baseline (Blueprints / Drift Inspector).">
       <div class="muted small">Not built yet. tikontrol's reader account has no <code>sensitive</code> policy, and reading <code>/export</code> over the API with only <code>read</code> is not verified yet (a 7.21 pre-release leaked keys in a hide-sensitive export). Until that is tested on CHR, no baseline is taken.</div>
     </Section>
   {/if}

@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { radios, clients, signalQuality, isBackend, router } from '../lib/data'
+  import { radios, clients, signalQuality, isBackend, router, hw } from '../lib/data'
   import { api } from '../lib/backend'
   import { displayName } from '../lib/live.svelte'
   import { review } from '../lib/apply.svelte'
@@ -105,7 +105,7 @@
     {/each}
   </div>
 
-  <Section title="Client signal distribution" desc="How strongly each Wi-Fi client hears the router." ros="/interface/wireless/registration-table/print">
+  <Section title="Client signal distribution" desc="How strongly each Wi-Fi client hears the router." ros={hw.wifiPackage === 'wifi' ? '/interface/wifi/registration-table/print' : '/interface/wireless/registration-table/print'}>
     <div class="histo">
       {#each bins as b, i}
         {@const q = signalQuality(b + 2)}

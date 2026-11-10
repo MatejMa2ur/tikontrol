@@ -153,7 +153,7 @@
   }
 </script>
 
-<Section title="Networks" desc="Each network is a subnet with its own DHCP, optionally on its own VLAN." ros="/ip/address/print; /ip/dhcp-server/print; /ip/dhcp-server/network/print; /interface/vlan/print">
+<Section title="Networks" desc="Each network is a subnet with its own DHCP, optionally on its own VLAN." ros="/ip/address/print; /ip/pool/print; /ip/dhcp-server/print; /ip/dhcp-server/network/print; /interface/vlan/print; /ipv6/address/print; /ipv6/dhcp-server/print">
   {#snippet actions()}<button class="btn primary" onclick={() => (open = true)}><Icon name="plus" size={14} /> New Network</button>{/snippet}
   <table>
     <thead><tr><th>Name</th><th>VLAN</th><th>Subnet</th><th>Gateway</th><th>DHCP range</th><th>Lease</th><th>Domain</th><th>Filter</th><th>IPv6</th></tr></thead>
@@ -163,7 +163,7 @@
   </table>
 </Section>
 
-<Section title="Network-wide options" ros="/ip/dns/print; /interface/bridge/print; /ipv6/settings/print">
+<Section title="Network-wide options" ros="/ip/dns/print; /interface/bridge/print; /ipv6/settings/print; /ipv6/pool/print">
   <Field label="DNS servers"><span class="mono small">{(dns.servers ?? []).join(', ')}</span></Field>
   <Field label="mDNS across networks" help="Lets AirPlay/Chromecast work between the networks you tick (at least two)" na={mdnsSupported ? undefined : 'Needs RouterOS 7.16 or later'}>
     {#if mdnsSupported}

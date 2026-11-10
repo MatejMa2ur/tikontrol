@@ -98,7 +98,7 @@
   <div class="r"><button class="btn primary" onclick={snmpReview}>Review & apply</button></div>
 </Section>
 
-<Section title="Remote logging" ros="/system/logging/action/print; /ip/traffic-flow/print">
+<Section title="Remote logging" ros="/system/logging/print; /ip/traffic-flow/print">
   {#if ourSyslog}
     <Field label="Remote syslog" help="Set up by tikontrol"><button class="btn" onclick={() => review('Stop remote syslog', ['/system/logging/remove [find action=tikremote]', '/system/logging/action/remove [find name=tikremote]'], { kind: 'remove-remote-syslog' })}>Remove</button></Field>
   {:else}

@@ -229,7 +229,7 @@
   </Section>
 {/if}
 
-<Section title="Router users" desc="Who can log in to the router itself (shown read-only; manage them in WinBox)." ros="/user/print">
+<Section title="Router users" desc="Who can log in to the router itself (shown read-only; manage them in WinBox)." ros="/user/print; /user/ssh-keys/print proplist=user,key-type,bits,info,fingerprint,comment">
   <table><thead><tr><th>Name</th><th>Group</th><th>Last login</th><th></th></tr></thead>
     <tbody>{#each users as x}<tr class="nohover"><td><b>{x.name}</b> <span class="muted small">{x.comment ?? ''}</span></td><td><span class="pill">{x.group}</span></td><td>{x['last-logged-in'] ?? '—'}</td><td class="r">{#if x.name === 'admin'}<span class="muted small">Rename the default admin</span>{/if}</td></tr>{/each}</tbody></table>
   <Field label="Single sign-on" na="RouterOS has no SSO; use RADIUS for central logins"><span></span></Field>
@@ -246,7 +246,7 @@
   <p class="muted small">Public keys only (ed25519, ECDSA, or RSA of 3072+ bits). By default a user with a key can no longer use a password over SSH. Needs a writer with the <code>policy</code> policy.</p>
 </Section>
 
-<Section title="Backups" desc="A readable export without passwords and keys, saved on the router; tikontrol can download it. Full backups hold passwords and keys, so they stay on the router (copy them with WinBox or WebFig Files)." ros="/file/print where type=backup">
+<Section title="Backups" desc="A readable export without passwords and keys, saved on the router; tikontrol can download it. Full backups hold passwords and keys, so they stay on the router (copy them with WinBox or WebFig Files)." ros="/file/print where type=backup; /file/print where type=script; /system/scheduler/print where name=tik-backup">
   {#snippet actions()}<button class="btn primary" onclick={() => review('Back up now', [`/export file=tik-${today()}`], { kind: 'export-config', name: today() })}>Back up now</button>
     <button class="btn" title="Binary backup with passwords and keys, for restoring this same router" onclick={() => review('Full backup', [`/system/backup/save name=tik-${today()} dont-encrypt=yes`], { kind: 'save-backup', name: today() })}>Full backup</button>{/snippet}
   <table><thead><tr><th>File</th><th>Date</th><th class="r">Size</th><th></th></tr></thead>
@@ -273,7 +273,7 @@
   </Section>
 {/if}
 
-<Section title="Updates"desc="RouterOS version and channel. Picking a channel downloads nothing." ros="/system/package/update/print">
+<Section title="Updates" desc="RouterOS version and channel. Picking a channel downloads nothing." ros="/system/package/update/print; /system/scheduler/print where name=tik-auto-update">
   <Field label="Version"><span>{router.version}</span></Field>
   <Field label="Channel"><select bind:value={channel} aria-label="Update channel"><option>stable</option><option>long-term</option><option>testing</option><option>development</option></select>
     <button class="btn" disabled={channel === router.channel} onclick={() => review(`Update channel: ${channel}`, [`/system/package/update/set channel=${channel}`], { kind: 'set-update-channel', channel })}>Review & apply</button></Field>

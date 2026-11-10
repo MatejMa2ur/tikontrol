@@ -79,7 +79,7 @@
 
   {#if tab === 'portal'}
     <div class="two">
-      <Section title="Captive portal" desc="A guest network with a login page: RouterOS Hotspot, optionally with a branded page served from the router." ros="/ip/hotspot/print; /ip/hotspot/profile/print">
+      <Section title="Captive portal" desc="A guest network with a login page: RouterOS Hotspot, optionally with a branded page served from the router." ros="/ip/hotspot/print; /ip/hotspot/profile/print; /ip/hotspot/user/profile/print; /ip/address/print where comment=tik:hotspot">
         <Field label="Enabled" help={ours ? 'Turn off and review to remove the guest portal' : ''}><Toggle bind:checked={portal.on} label="Guest portal" /></Field>
         {#if others.length}<div class="muted small">This router has other hotspots ({others.map((h) => h.name).join(', ')}); tikontrol leaves them alone.</div>{/if}
         <Field label="Guest interface" help="Only guests should use it: a guest VLAN or guest Wi-Fi, never your main LAN"><input type="text" bind:value={portal.iface} disabled={!!ours} /></Field>
@@ -120,7 +120,7 @@
       </div>
     </div>
   {:else if tab === 'vouchers'}
-    <Section title="Vouchers" desc="Codes for guests: each code is a hotspot login. New codes are generated in this browser and shown once for printing; the router keeps them." ros="/ip/hotspot/user/print">
+    <Section title="Vouchers" desc="Codes for guests: each code is a hotspot login. New codes are generated in this browser and shown once for printing; the router keeps them." ros="/ip/hotspot/user/print proplist=name,profile,limit-uptime,uptime,comment,disabled where comment~&quot;^tik:voucher:&quot;">
       {#snippet actions()}
         <input type="number" bind:value={gen.count} min="1" max="100" style="width:70px" aria-label="Number of vouchers" />
         <select bind:value={gen.duration} aria-label="Time per voucher"><option>1h</option><option>1d</option><option>7d</option><option>30d</option></select>

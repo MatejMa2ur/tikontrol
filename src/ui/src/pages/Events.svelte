@@ -126,7 +126,7 @@
 </div>
 
 {#snippet syslog()}
-  <Section title="Remote syslog / SIEM" desc="Forward the router log to a syslog server on your network (unencrypted UDP)." ros="/system/logging/action/print; /system/logging/print">
+  <Section title="Remote syslog / SIEM" desc="Forward the router log to a syslog server on your network (unencrypted UDP)." ros="/system/logging/print">
     {#if ourSyslog}
       <Field label="Syslog server" help="Set up by tikontrol"><button class="btn" onclick={() => review('Stop remote syslog', ['/system/logging/remove [find action=tikremote]', '/system/logging/action/remove [find name=tikremote]'], { kind: 'remove-remote-syslog' })}>Remove</button></Field>
     {:else}

@@ -50,7 +50,7 @@
   let radius = $state({ host: '', secret: '' })
 </script>
 
-<Section title="Speed limit profiles" desc="A per-device limit for every member of a client group (PCQ queues on the group's address list). Set members in Clients → Groups." ros="/queue/tree/print; /queue/type/print where kind=pcq">
+<Section title="Speed limit profiles" desc="A per-device limit for every member of a client group (PCQ queues on the group's address list). Set members in Clients → Groups." ros="/queue/tree/print where comment~&quot;tik:profile:&quot;; /queue/type/print where kind=pcq">
   {#each speed as s}<div class="row between small"><span><b>{s.name}</b> · {s.down} ↓ / {s.up} ↑ per device{s.disabled ? ' · disabled' : ''}</span><button class="btn small" onclick={() => removeSpeed(s.name)} aria-label={`Remove speed profile ${s.name}`}>Remove</button></div>
   {:else}<div class="muted small">No speed profiles yet.</div>{/each}
   <div class="add"><select bind:value={sp.name} aria-label="Group"><option value="">Group…</option>{#each prefs.groups as g}<option value={slug(g.name)}>{g.name}</option>{/each}</select><input type="number" bind:value={sp.down} title="Down Mbps" aria-label="Download Mbps" style="width:80px" /><input type="number" bind:value={sp.up} title="Up Mbps" aria-label="Upload Mbps" style="width:80px" /><span class="muted small">Mbps ↓/↑ per device</span>
@@ -63,14 +63,14 @@
     ], { kind: 'group-limit', group: sp.name, down: `${sp.down}M`, up: `${sp.up}M` })}><Icon name="plus" size={14} /> Add</button></div>
 </Section>
 
-<Section title="Port profiles" desc="Named VLAN templates, saved in tikontrol only: nothing is sent to the router here. To use one, edit a port on the Ports page and pick it there; it fills in the native and tagged VLANs." ros="/interface/bridge/vlan/print">
+<Section title="Port profiles" desc="Named VLAN templates, saved in tikontrol only: nothing is sent to the router here. To use one, edit a port on the Ports page and pick it there; it fills in the native and tagged VLANs.">
   {#each prefs.portProfiles as pp, i}<div class="row between small"><span><b>{pp.name}</b> · native {pp.native}{pp.tagged.length ? ` · tagged ${pp.tagged.join(', ')}` : ''}</span><button class="btn small ghost" onclick={() => prefs.portProfiles.splice(i, 1)} aria-label={`Delete ${pp.name}`}>Delete</button></div>
   {:else}<div class="muted small">No port profiles yet.</div>{/each}
   <div class="add"><input type="text" bind:value={port.name} placeholder="Name" aria-label="Profile name" /><input type="number" min="1" max="4094" bind:value={port.native} title="Native VLAN" aria-label="Native VLAN" style="width:90px" /><input type="text" bind:value={port.tagged} placeholder="Tagged VLANs: 20,30" aria-label="Tagged VLANs" />
     <button class="btn primary" disabled={!port.name.trim() || !(port.native >= 1 && port.native <= 4094) || prefs.portProfiles.some((x) => x.name === port.name.trim())} onclick={() => { prefs.portProfiles.push({ name: port.name.trim(), native: port.native, tagged: port.tagged.split(',').map((v) => Number(v.trim())).filter((v) => v >= 1 && v <= 4094) }); port = { name: '', native: 1, tagged: '' } }}><Icon name="plus" size={14} /> Add</button></div>
 </Section>
 
-<Section title="RADIUS" desc="For WPA-Enterprise Wi-Fi and 802.1X ports. Shared secrets are never read back or shown." ros="/radius/print">
+<Section title="RADIUS" desc="For WPA-Enterprise Wi-Fi and 802.1X ports. Shared secrets are never read back or shown." ros="/radius/print proplist=address,service,comment,disabled">
   {#each radiusRows as r}{@const ours = String(r.comment ?? '').startsWith('tik:radius:')}
     <div class="row between small"><span class="mono">{r.address ?? '?'}</span><span class="muted">{list(r.service).join(', ') || '—'}{r.disabled ? ' · disabled' : ''}</span>
       {#if ours}<button class="btn small" onclick={() => review(`Remove RADIUS server ${r.address}`, [`/radius/remove [find comment="${r.comment}"]`], { kind: 'remove-radius', address: String(r.address) })} aria-label={`Remove RADIUS server ${r.address}`}>Remove</button>{:else}<span class="muted">not added by tikontrol</span>{/if}</div>
@@ -80,7 +80,7 @@
   <div class="r"><button class="btn primary" disabled={!radius.host || !radius.secret} onclick={() => review('RADIUS', [`/radius/add address=${radius.host} secret="********" service=wireless,dot1x comment=tik:radius:${radius.host}`], { kind: 'radius-server', address: radius.host, secret: radius.secret, services: ['wireless', 'dot1x'] })}>Review & apply</button></div>
 </Section>
 
-<Section title="QoS" desc="Prioritise latency-sensitive traffic: DSCP marks plus a queue priority. Only matters when the line is full (use Smart Queues)." ros="/queue/tree/print where comment~tik:qos; /ip/firewall/mangle/print">
+<Section title="QoS" desc="Prioritise latency-sensitive traffic: DSCP marks plus a queue priority. Only matters when the line is full (use Smart Queues)." ros="/queue/tree/print where comment~&quot;tik:qos:&quot;">
   {#each Object.entries(QOS) as [name, q]}{@const on = qos.find((x) => x.name === name)}
     <div class="row between small"><span>{q.label}{#if on} <span class="muted">· on, priority {on.priority}{on.disabled ? ' · disabled' : ''}</span>{/if}</span>
       {#if on}<button class="btn" onclick={() => removeQos(name)} aria-label={`Remove QoS rule ${q.label}`}>Remove</button>{:else}<button class="btn" onclick={() => qosRule(name as 'voip' | 'gaming')} aria-label={`Add QoS rule ${q.label}`}>Review & apply</button>{/if}</div>

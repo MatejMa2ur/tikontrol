@@ -142,7 +142,7 @@
   const saveRule = () => review(`Traffic rule ${tr.name}`, [`# traffic rule ${tr.name}: ${whatDo(tr)} for ${who(tr)}, ${whenStr(tr)} (the tikontrol server compiles the commands)`], trIntent(tr))
 </script>
 
-<Section title="Security audit" desc="Things on this router worth fixing." ros="/ip/service/print; /ip/dns/print; /user/print; /ip/upnp/print; /system/package/update/print">
+<Section title="Security audit" desc="Things on this router worth fixing." ros="/ip/service/print; /ip/firewall/filter/print; /ip/dns/print; /user/print; /ip/upnp/print; /system/package/update/print">
   {#each audit as a}<div class="row audit {a.level}"><Icon name="alert" size={14} /><b>{a.title}</b><span class="muted small grow">{a.detail}</span>
     {#if a.fix}{@const f = a.fix}<button class="btn small" onclick={() => review(f.title, [a.ros], f.intent)}>{f.label}…</button>{/if}</div>
   {:else}<div class="muted small">No issues found.</div>{/each}
@@ -260,7 +260,7 @@
   <div class="r"><button class="btn primary" disabled={!geoIntents().length} onclick={() => { const parts = geoIntents(); send('Region blocking', parts.map((i) => `# block ${i.country} from ${i.url}`), parts) }}>Review & apply</button></div>
 </Section>
 
-<Section title="IP groups" desc="Reusable address lists for rules: type a group name as the source or destination of a firewall rule." ros="/ip/firewall/address-list/print">
+<Section title="IP groups" desc="Reusable address lists for rules: type a group name as the source or destination of a firewall rule." ros="/ip/firewall/address-list/print where dynamic=no">
   {#each groups as g}{@const rows = lists.filter((l) => l.comment === `tik:group:${g}`)}
     <div class="row grp"><b>{g}</b><span class="mono small grow">{rows.map((l) => l.address).join(', ')}</span>
       <button class="btn small" onclick={() => review(`Remove IP group ${g}`, [`/ip/firewall/address-list/remove [find comment="tik:group:${g}"]`], { kind: 'remove-address-group', name: g })}>Remove</button></div>
@@ -280,7 +280,7 @@
     <button class="btn primary" disabled={!isoMac} onclick={() => review(`Isolate ${nameOf(isoMac)}`, [`/interface/bridge/filter/add chain=forward src-mac-address=${isoMac}/FF:FF:FF:FF:FF:FF action=drop comment=tik:isolate:${isoMac}`, `/interface/bridge/filter/add chain=forward dst-mac-address=${isoMac}/FF:FF:FF:FF:FF:FF action=drop comment=tik:isolate:${isoMac}`], { kind: 'isolate-device', mac: isoMac })}>Isolate</button></div>
 </Section>
 
-<Section title="Threat management">
+<Section title="Threat management" ros="/system/scheduler/print where comment~&quot;tik:threat:&quot;; /ip/firewall/address-list/print count-only where list~&quot;^tik-threat-&quot;">
   <Field label="IDS / IPS" na="Not available in RouterOS (no Suricata on this hardware)"><span></span></Field>
   <Field label="Honeypot" na="Not available in RouterOS"><span></span></Field>
   <Field label="Threat feed" help="Drop known-bad IPs (Spamhaus DROP), refreshed daily">

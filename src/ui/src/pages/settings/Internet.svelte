@@ -39,7 +39,7 @@
   const serverList = () => d.servers.split(/[\s,]+/).filter(Boolean)
 </script>
 
-<Section title="Primary WAN · Port {internet.wanPort}" desc="How this router reaches the internet." ros="/ip/dhcp-client/print; /ip/route/print where dst-address=0.0.0.0/0">
+<Section title="Primary WAN · Port {internet.wanPort}" desc="How this router reaches the internet." ros="/ip/dhcp-client/print; /ip/route/print where dst-address=0.0.0.0/0; /ip/cloud/print proplist=public-address; /interface/vlan/print where comment~&quot;tik:wanvlan:&quot;">
   {#snippet actions()}{#if wanUp}<span class="pill ok"><span class="dot ok"></span>Connected</span>{:else}<span class="pill bad"><span class="dot bad"></span>No default route</span>{/if}{/snippet}
   <div class="kv small">
     <span class="muted">WAN IP</span><span class="mono">{internet.wanIp}</span>
@@ -81,7 +81,7 @@
   {/if}
 </Section>
 
-<Section title="Smart Queues" desc="Removes bufferbloat (lag while downloading). Set to ~90% of your real line speed." ros="/queue/type/print where kind=cake; /queue/simple/print">
+<Section title="Smart Queues" desc="Removes bufferbloat (lag while downloading). Set to ~90% of your real line speed." ros="/queue/simple/print where comment=tik:smartqueue">
   <Field label="Enabled"><Toggle bind:checked={sq.on} label="Smart Queues" /></Field>
   {#if sq.on}<Field label="Download / upload (Mbps)"><input type="number" bind:value={sq.down} /><input type="number" bind:value={sq.up} /></Field>{/if}
   <div class="r">
@@ -96,13 +96,13 @@
   <div class="r"><button class="btn primary" disabled={!serverList().length} onclick={() => review('DNS', [`/ip/dns/set servers=${serverList().join(',')} use-doh-server=${d.doh || '""'} verify-doh-cert=${d.doh ? 'yes' : 'no'}`], { kind: 'wan-dns', servers: serverList(), doh: d.doh.trim() })}>Review & apply</button></div>
 </Section>
 
-<Section title="Dynamic DNS" desc="A stable name for your public IP, from MikroTik's IP Cloud." ros="/ip/cloud/print">
+<Section title="Dynamic DNS" desc="A stable name for your public IP, from MikroTik's IP Cloud." ros="/ip/cloud/print proplist=dns-name,ddns-enabled">
   <Field label="Enabled"><Toggle bind:checked={d.ddns} label="DDNS" /></Field>
   <Field label="Name"><span class="mono small">{cloud['dns-name'] ?? '—'}</span></Field>
   <div class="r"><button class="btn primary" onclick={() => review(`${d.ddns ? 'Enable' : 'Disable'} dynamic DNS`, [`/ip/cloud/set ddns-enabled=${d.ddns ? 'yes' : 'no'}`], { kind: 'ddns', enabled: d.ddns })}>Review & apply</button></div>
 </Section>
 
-<Section title="IPv6" desc="Ask the ISP for a prefix and hand it out on your networks.">
+<Section title="IPv6" desc="Ask the ISP for a prefix and hand it out on your networks." ros="/ipv6/pool/print">
   <Field label="IPv6 on WAN"><Toggle bind:checked={v6.on} label="IPv6" /></Field>
   {#if v6.on}<Field label="Prefix delegation size"><select bind:value={v6.pd}><option value={48}>/48</option><option value={56}>/56</option><option value={60}>/60</option><option value={64}>/64</option></select></Field>
     <div class="r"><button class="btn primary" onclick={() => review('IPv6 WAN', [`/ipv6/dhcp-client/add interface=${internet.wanIf} request=prefix pool-name=tik-v6 pool-prefix-length=64 prefix-hint=::/${v6.pd} add-default-route=yes use-peer-dns=yes comment=tik:v6wan`, '/ipv6/address/add interface=bridge from-pool=tik-v6 advertise=yes comment=tik:v6wan'], { kind: 'ipv6-wan', interface: internet.wanIf, lan: 'bridge', prefix_len: +v6.pd })}>Review & apply</button></div>
