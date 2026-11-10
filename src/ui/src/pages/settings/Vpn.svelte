@@ -252,6 +252,6 @@
   .nowrap { white-space: nowrap; }
   .note { border: 1px solid var(--line); border-radius: 8px; padding: 10px; font-size: 13px; line-height: 1.5; margin: 8px 0; }
   .note summary { cursor: pointer; margin-top: 6px; }
-  .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+  .sr { position: absolute; left: 0; top: 0; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
   @media (max-width: 800px) { .cols { grid-template-columns: minmax(0, 1fr); } }
 </style>

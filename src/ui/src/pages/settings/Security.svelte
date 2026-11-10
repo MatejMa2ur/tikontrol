@@ -296,7 +296,7 @@
   .audit { gap: 8px; padding: 6px 0; flex-wrap: wrap; color: var(--warn); }
   .audit.bad { color: var(--bad); }
   .audit b { color: var(--text); }
-  .grow { flex: 1; min-width: 0; }
+  .grow { flex: 1 1 220px; min-width: 0; overflow-wrap: anywhere; }
   .add { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 10px; }
   .apps { display: flex; gap: 18px; flex-wrap: wrap; }
   .apps .row { gap: 6px; }
@@ -305,7 +305,7 @@
   .day { padding: 4px 7px; border: 1px solid var(--line); background: var(--panel2); border-radius: 6px; cursor: pointer; font-size: 12px; color: var(--muted); }
   .day[aria-pressed='true'] { border-color: var(--accent); color: var(--accent); }
   .r0 { text-align: right; white-space: nowrap; }
-  .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+  .sr { position: absolute; left: 0; top: 0; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
   .r { text-align: right; margin-top: 10px; }
   .small { font-size: 12px; }
   .scroll { overflow-x: auto; }
