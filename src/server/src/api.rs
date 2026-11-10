@@ -114,6 +114,14 @@ fn route(app: &Arc<App>, req: &Req, s: &Session) -> Resp {
         ("PUT", "/api/v1/prefs") => put_prefs(app, req),
         ("GET", "/api/v1/router") => router_info(app),
         ("GET", "/api/v1/router/setup-commands") => {
+            // ?host=<a newly found router>: only the API-SSL part, for tikontrol's address as that router sees it
+            if let Some(h) = req.param("host") {
+                let Some(h) = h.parse::<std::net::IpAddr>().ok().filter(|i| local_ip(*i)) else {
+                    return Resp::error(400, "host must be a private IP address");
+                };
+                let me = own_ip_toward(&h.to_string(), 8729).map(|i| i.to_string()).unwrap_or_default();
+                return Resp::json(200, &json!({ "commands": policy::api_ssl_commands(&me), "self": me }));
+            }
             let ip = req.param("ip").unwrap_or_default();
             if !ip.is_empty() && ip.parse::<std::net::IpAddr>().is_err() {
                 return Resp::error(400, "ip must be an IP address");
@@ -272,6 +280,14 @@ fn setup_probe(app: &App, req: &Req) -> Resp {
             let me = own_ip_toward(&b.host, b.port).map(|i| i.to_string()).unwrap_or_default();
             Resp::json(502, &json!({ "error": e, "commands": policy::api_ssl_commands(&me) }))
         }
+    }
+}
+
+/// LAN, loopback or link-local: the setup guide never points tikontrol at the internet.
+fn local_ip(i: std::net::IpAddr) -> bool {
+    match i {
+        std::net::IpAddr::V4(a) => a.is_private() || a.is_loopback() || a.is_link_local(),
+        std::net::IpAddr::V6(a) => a.is_loopback() || a.is_unique_local() || a.is_unicast_link_local(),
     }
 }
 
@@ -890,6 +906,21 @@ pub mod tests {
         assert_eq!(handle(&app, out).status, 200);
         lock(&app.sessions).clear();
         assert_eq!(handle(&app, with_r("/api/v1/me", "GET")).status, 401, "logout forgets the browser");
+    }
+
+    #[test]
+    fn setup_guide_commands_only_for_local_hosts() {
+        let app = new_app();
+        let (c, csrf) = admin_session(&app);
+        let get = |q: &str| handle(&app, with_session(req("GET", &format!("/api/v1/router/setup-commands?host={q}"), ""), &c, &csrf));
+        for bad in ["8.8.8.8", "example.com", "", "2001:db8::1"] {
+            assert_eq!(get(bad).status, 400, "{bad}");
+        }
+        let ok = json_of(&get("127.0.0.1"));
+        assert_eq!(ok["self"], "127.0.0.1");
+        let cmds: Vec<String> = serde_json::from_value(ok["commands"].clone()).unwrap();
+        assert!(cmds.iter().any(|c| c.contains("api-ssl") && c.contains("127.0.0.1/32")));
+        assert!(!cmds.iter().any(|c| c.contains("/user/add")), "only the API-SSL part");
     }
 
     #[test]

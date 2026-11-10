@@ -364,8 +364,9 @@ paths:
   /api/v1/router/setup-commands:
     get:
       summary: RouterOS commands that create least-privilege tikontrol users (no secrets)
-      parameters: [{ name: ip, in: query, schema: { type: string } }, { name: write, in: query, schema: { enum: ['0', '1'] } }]
-      responses: { '200': { description: '{ commands[] }' } }
+      description: 'With host (a newly found router, private/loopback/link-local IP only): just the API-SSL certificate commands, restricted to tikontrol''s own address as that router sees it (self); ip and write are ignored.'
+      parameters: [{ name: ip, in: query, schema: { type: string } }, { name: write, in: query, schema: { enum: ['0', '1'] } }, { name: host, in: query, schema: { type: string } }]
+      responses: { '200': { description: '{ commands[] } or, with host, { commands[], self }' }, '400': { description: ip or host invalid } }
   /api/v1/cmr:
     get:
       summary: MikroTik CMR fleet data from the CMR server (the router itself, or the controller below)
