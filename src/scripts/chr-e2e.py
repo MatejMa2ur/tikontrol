@@ -716,7 +716,7 @@ def sc_update_window(c, data):
     f = Flow(c, "scenario update window fires (check only)", ROWS["auto-update"])
     if f.keep({"kind": "auto-update", "enabled": True, "day": "daily", "hour": 3}):
         job = "[/system/scheduler/find name=tik-auto-update]"
-        f.ros_is(f":put [/system/scheduler/get {job} policy]", "read,write,test", "check-only window policy")
+        f.ros_is(f":put [/system/scheduler/get {job} policy]", "read;write;test", "check-only window policy")  # :put joins the list with ;
         ev = ros(f":put [/system/scheduler/get {job} on-event]")
         f.need("check-for-updates once" in ev and "install" not in ev, f"check-only window script: {ev.strip()[:120]!r}")
         msg = "tikontrol: checked for RouterOS updates"
