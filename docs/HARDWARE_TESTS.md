@@ -126,7 +126,7 @@ Cross-cutting questions (dotted proplists, Safe apply under device mode or after
 ## VPN
 
 - [ ] **WireGuard server + peers + QR (enable/disable and remove peers)** 🟨: a phone peer connects over a real WAN, disable stops it, remove + revert
-- [ ] **OpenVPN server (on/off, VPN users; refuses without a certificate and explains how to make one; certificate generation not built)** 🟨: older versions print `certificate=none`; log in with an ovpn VPN user
+- [ ] **OpenVPN server (on/off, VPN users; refuses without a certificate and explains how to make one; generates its own CA and server certificate, signs them on the router and offers the CA for download)** 🟨: older versions print `certificate=none`; log in with an ovpn VPN user
 - [ ] **L2TP/IPsec server (`use-ipsec=required` with a masked IPsec secret, VPN users add/remove)** 🟨: enable with a secret, check the dynamic IPsec peer, log in from a phone, revert leaves `use-ipsec` as it was
 - [ ] **Connected VPN users view (`/ppp/active` + WireGuard peers with a handshake in the last 3 minutes)** 🟨: field names `caller-id`/`encoding` on 7.18+ and WireGuard `last-handshake` format over the API
 

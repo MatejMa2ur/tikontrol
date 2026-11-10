@@ -220,7 +220,7 @@ Clean-room: we copy the behaviour, never the assets.
 | Feature | Backing | Phase | Status |
 |---|---|---|---|
 | WireGuard server + peers + QR (enable/disable and remove peers) 🔌 a phone peer connects over a real WAN, disable stops it, remove + revert | ROS `/interface/wireguard` | 2 | 🟨 |
-| OpenVPN server (on/off, VPN users; refuses without a certificate and explains how to make one; certificate generation not built) 🔌 older versions print `certificate=none`; log in with an ovpn VPN user | ROS ovpn-server | 4 | 🟨 |
+| OpenVPN server (on/off, VPN users; refuses without a certificate and explains how to make one; generates its own CA and server certificate, signs them on the router and offers the CA for download) 🔌 older versions print `certificate=none`; log in with an ovpn VPN user | ROS ovpn-server | 4 | 🟨 |
 | L2TP/IPsec server (`use-ipsec=required` with a masked IPsec secret, VPN users add/remove) 🔌 enable with a secret, check the dynamic IPsec peer, log in from a phone, revert leaves `use-ipsec` as it was | ROS | 4 | 🟨 |
 | VPN client (to a provider) | ROS wg / ovpn client | 3 | ✅ |
 | Site-to-site (WireGuard / IPsec) | ROS | 3 | ✅ |
