@@ -638,13 +638,15 @@ class Flow:
         st, m = self.c.change(intent, "revert")
         return self.need(st in ("preview", "apply") and export() == snap, f"{why}: expected a refusal, got {st} {m}")
 
-    def apply_revert(self, intent, while_applied=None, ordered=True):
-        """Apply, run the checks while it is live, revert: the config must be exactly as before the apply."""
+    def apply_revert(self, intent, while_applied=None, ordered=True, in_export=True):
+        """Apply, run the checks while it is live, revert: the config must be exactly as before the apply.
+        in_export=False for changes that only touch files (not in /export): while_applied checks those."""
         snap = export()
         st, m = self.c.change(intent, None)
         if not self.need(st == "ok", f"{intent['kind']}: {st} {m}"):
             return
-        self.need(export() != snap, f"{intent['kind']} changed nothing")
+        if in_export:
+            self.need(export() != snap, f"{intent['kind']} changed nothing")
         if while_applied:
             while_applied()
         s, r = self.c.call("POST", "/api/v1/apply/revert", {"id": m["id"]})
@@ -818,7 +820,7 @@ def sc_hotspot_page(c, data):
         f.need(file_count("tik-guest-html") == "0", "revert left tik-guest-html files")
         if f.keep(page):
             first = page_contents()
-            f.apply_revert(page2, lambda: f.need("Second version" in page_contents(), "edited page not written"))
+            f.apply_revert(page2, lambda: f.need("Second version" in page_contents(), "edited page not written"), in_export=False)
             f.need(page_contents() == first, "revert of an edit did not restore the old page")
             f.apply_revert({"kind": "remove-hotspot-page"}, lambda: f.need(file_count("tik-guest-html") == "0", "files still there while removed"))
             f.need(page_contents() == first, "revert of remove-hotspot-page did not bring the page back")
