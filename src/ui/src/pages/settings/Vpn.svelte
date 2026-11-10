@@ -55,13 +55,13 @@
   let ovpn = $state({ on: ovpns.some(ovpnOn) })
   const ovpnMissing = $derived(ovpns.length === 0 ? 'There is no OpenVPN server on this router yet.' : ovpns.every(noCert) ? 'The OpenVPN server has no certificate, so it can\'t accept connections. It needs a certificate authority (CA) and a server certificate signed by it.' : '')
 
-  // tikontrol's own certificates (ovpn-certificates intent): a CA and a server certificate, tagged tik:ovpn-*.
-  // Names that exist without our tag were made by hand: tikontrol leaves them alone.
+  // tikontrol's own certificates (ovpn-certificates intent): a CA and a server certificate, known by their tik-
+  // names (/certificate has no comment). Only one of the two is a leftover or made by hand: tikontrol leaves it alone.
   const certs: any[] = raw.certificates ?? []
-  const ourCert = (name: string, tag: string) => certs.find((c) => c.name === name && c.comment === tag)
-  const ovpnCa = ourCert(CA_CERT, 'tik:ovpn-ca')
-  const ovpnSrvCert = ourCert(SERVER_CERT, 'tik:ovpn-server')
-  const certClash = !(ovpnCa && ovpnSrvCert) && certs.some((c) => [CA_CERT, SERVER_CERT].includes(c.name) || ['tik:ovpn-ca', 'tik:ovpn-server'].includes(c.comment))
+  const ourCert = (name: string) => certs.find((c) => c.name === name)
+  const ovpnCa = ourCert(CA_CERT)
+  const ovpnSrvCert = ourCert(SERVER_CERT)
+  const certClash = !(ovpnCa && ovpnSrvCert) && !!(ovpnCa || ovpnSrvCert)
   // the server the profile is for: the one using our certificate, else the first
   const ovpnSrv: any = ovpns.find((o) => o.certificate === SERVER_CERT) ?? ovpns[0] ?? {}
   const usesOurs = ovpns.some((o) => o.certificate === SERVER_CERT)
@@ -73,11 +73,11 @@
   function certReview() {
     const make = { kind: 'ovpn-certificates', common_name: cert.cn, key_size: +cert.keySize }
     const cmds = [
-      `/certificate/add name=${CA_CERT} common-name=tikontrol-ovpn-ca key-size=${cert.keySize} days-valid=3650 key-usage=key-cert-sign,crl-sign comment=tik:ovpn-ca`,
-      `/certificate/sign [find comment="tik:ovpn-ca"]`,
-      `/certificate/add name=${SERVER_CERT} common-name=${cert.cn} key-size=${cert.keySize} days-valid=3650 key-usage=digital-signature,key-encipherment,tls-server comment=tik:ovpn-server`,
-      `/certificate/sign [find comment="tik:ovpn-server"] ca=${CA_CERT}`,
-      `/certificate/export-certificate [find comment="tik:ovpn-ca"] type=pem file-name=cert_export_${CA_CERT}`,
+      `/certificate/add name=${CA_CERT} common-name=tikontrol-ovpn-ca key-size=${cert.keySize} days-valid=3650 key-usage=key-cert-sign,crl-sign`,
+      `/certificate/sign [find name="${CA_CERT}"]`,
+      `/certificate/add name=${SERVER_CERT} common-name=${cert.cn} key-size=${cert.keySize} days-valid=3650 key-usage=digital-signature,key-encipherment,tls-server`,
+      `/certificate/sign [find name="${SERVER_CERT}"] ca=${CA_CERT}`,
+      `/certificate/export-certificate [find name="${CA_CERT}"] type=pem file-name=cert_export_${CA_CERT}`,
     ]
     if (cert.use && ovpns.length) review('OpenVPN certificates', [...cmds, useCmd(ovpnName)], { kind: 'batch', title: 'OpenVPN certificates', intents: [make, useOn(ovpnName)] })
     else review('OpenVPN certificates', cmds, make)
@@ -104,7 +104,7 @@
       prof.missing = e instanceof ApiError && (e.status === 404 || e.status === 502)
     } finally { prof.busy = false }
   }
-  const reexport = () => review(`Export the public certificate of ${CA_CERT}`, [`/file/remove [find name="${CA_FILE}"]`, `/certificate/export-certificate [find comment="tik:ovpn-ca"] type=pem file-name=cert_export_${CA_CERT}`], { kind: 'export-ovpn-ca' })
+  const reexport = () => review(`Export the public certificate of ${CA_CERT}`, [`/file/remove [find name="${CA_FILE}"]`, `/certificate/export-certificate [find name="${CA_CERT}"] type=pem file-name=cert_export_${CA_CERT}`], { kind: 'export-ovpn-ca' })
 
   // L2TP always runs over IPsec: enabling sets use-ipsec=required with a pre-shared secret.
   // Secrets are typed or generated here, sent once in the intent, and masked in every preview.

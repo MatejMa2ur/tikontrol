@@ -181,8 +181,6 @@ const NO_CERT: &str = "the OpenVPN server has no certificate, so it can't accept
 const CERTS: &str = "/certificate";
 pub const OVPN_CA: &str = "tik-ovpn-ca";
 pub const OVPN_SERVER_CERT: &str = "tik-ovpn-server";
-const OVPN_CA_TAG: &str = "tik:ovpn-ca";
-const OVPN_SERVER_TAG: &str = "tik:ovpn-server";
 /// What `/certificate/export-certificate tik-ovpn-ca file-name=cert_export_tik-ovpn-ca` writes (PEM, `.crt`
 /// added by RouterOS). Without `export-passphrase` only the public certificate is written, never the key.
 pub const OVPN_CA_FILE: &str = "cert_export_tik-ovpn-ca.crt";
@@ -201,7 +199,7 @@ fn common_name(s: &str) -> Result<String, String> {
 fn export_ca_ops() -> Vec<Op> {
     vec![
         Op::on("/file", "remove", "name", OVPN_CA_FILE, vec![]),
-        Op::on(CERTS, "export-certificate", "comment", OVPN_CA_TAG, vec![("type", "pem".into()), ("file-name", OVPN_CA_FILE.trim_end_matches(".crt").into())]),
+        Op::on(CERTS, "export-certificate", "name", OVPN_CA, vec![("type", "pem".into()), ("file-name", OVPN_CA_FILE.trim_end_matches(".crt").into())]),
     ]
 }
 
@@ -474,24 +472,24 @@ fn build(x: V, r: &mut dyn Router) -> Result<Plan, String> {
             if !(30..=3650).contains(&days_valid) {
                 return Err("days valid must be 30-3650".into());
             }
-            // the undo removes by tag, so a certificate that already has our name or tag (made by hand,
-            // renamed, or left from an earlier run) must not exist: it would be deleted on revert
-            let have = r.run(&Cmd::new("/certificate/print").proplist(&["name", "comment"]))?;
-            let ours = [OVPN_CA, OVPN_SERVER_CERT, OVPN_CA_TAG, OVPN_SERVER_TAG];
-            if have.iter().any(|c| ["name", "comment"].iter().any(|k| c.get(*k).is_some_and(|v| ours.contains(&v.as_str())))) {
+            // the undo removes by name, so a certificate that already has one of our names (made by hand or
+            // left from an earlier run) must not exist: it would be deleted on revert
+            let have = r.run(&Cmd::new("/certificate/print").proplist(&["name"]))?;
+            if have.iter().any(|c| c.get("name").is_some_and(|v| [OVPN_CA, OVPN_SERVER_CERT].contains(&v.as_str()))) {
                 return Err(format!("certificates {OVPN_CA} / {OVPN_SERVER_CERT} already exist on this router: use them, or remove them in RouterOS (/certificate) first"));
             }
             let (bits, days) = (key_size.to_string(), days_valid.to_string());
-            let cert = |name: &str, cn: &str, usage: &str, tag: &str| Op::add(CERTS, vec![("name", name.into()), ("common-name", cn.into()), ("key-size", bits.clone()), ("days-valid", days.clone()), ("key-usage", usage.into()), ("comment", tag.into())]);
+            // /certificate has no comment (RouterOS 7.25 refuses one): ours are found by their tik- names
+            let cert = |name: &str, cn: &str, usage: &str| Op::add(CERTS, vec![("name", name.into()), ("common-name", cn.into()), ("key-size", bits.clone()), ("days-valid", days.clone()), ("key-usage", usage.into())]);
             let mut ops = vec![
-                cert(OVPN_CA, &ca_cn, "key-cert-sign,crl-sign", OVPN_CA_TAG),
-                Op::on(CERTS, "sign", "comment", OVPN_CA_TAG, vec![]),
-                cert(OVPN_SERVER_CERT, &cn, "digital-signature,key-encipherment,tls-server", OVPN_SERVER_TAG),
-                Op::on(CERTS, "sign", "comment", OVPN_SERVER_TAG, vec![("ca", OVPN_CA.into())]),
+                cert(OVPN_CA, &ca_cn, "key-cert-sign,crl-sign"),
+                Op::on(CERTS, "sign", "name", OVPN_CA, vec![]),
+                cert(OVPN_SERVER_CERT, &cn, "digital-signature,key-encipherment,tls-server"),
+                Op::on(CERTS, "sign", "name", OVPN_SERVER_CERT, vec![("ca", OVPN_CA.into())]),
             ];
             ops.extend(export_ca_ops());
             // the server certificate goes before its CA
-            let undo = vec![Op::on("/file", "remove", "name", OVPN_CA_FILE, vec![]), rm(CERTS, OVPN_SERVER_TAG), rm(CERTS, OVPN_CA_TAG)];
+            let undo = vec![Op::on("/file", "remove", "name", OVPN_CA_FILE, vec![]), Op::on(CERTS, "remove", "name", OVPN_SERVER_CERT, vec![]), Op::on(CERTS, "remove", "name", OVPN_CA, vec![])];
             let mut p = plan(format!("OpenVPN certificates for {cn}"), Risk::Medium, ops, undo);
             p.warnings.push(format!("Creates a private certificate authority ({OVPN_CA}) and a server certificate ({OVPN_SERVER_CERT}, valid {days_valid} days) on the router. Their private keys stay on the router; only the CA's public certificate is written to {OVPN_CA_FILE} for client profiles."));
             p.warnings.push(if key_size > 2048 { "Signing 4096-bit keys can take minutes on small routers: keep this page open until it finishes, and keep the change soon after.".to_string() } else { "Signing takes a few seconds per certificate, longer on small routers.".to_string() });
@@ -529,8 +527,8 @@ fn build(x: V, r: &mut dyn Router) -> Result<Plan, String> {
             Ok(p)
         }
         V::ExportOvpnCa {} => {
-            let have = r.run(&Cmd::new("/certificate/print").proplist(&["name", "comment"]).query("comment", OVPN_CA_TAG))?;
-            if !have.iter().any(|c| c.get("name").is_some_and(|n| n == OVPN_CA)) {
+            let have = r.run(&Cmd::new("/certificate/print").proplist(&["name"]).query("name", OVPN_CA))?;
+            if have.is_empty() {
                 return Err(format!("there is no {OVPN_CA} certificate created by tikontrol on this router"));
             }
             let mut p = plan(format!("Export the public certificate of {OVPN_CA}"), Risk::Low, export_ca_ops(), vec![Op::on("/file", "remove", "name", OVPN_CA_FILE, vec![])]);
@@ -740,32 +738,32 @@ mod tests {
         assert_eq!(
             p.cli(),
             [
-                "/certificate/add name=tik-ovpn-ca common-name=tikontrol-ovpn-ca key-size=2048 days-valid=3650 key-usage=key-cert-sign,crl-sign comment=tik:ovpn-ca",
-                r#"/certificate/sign [find comment="tik:ovpn-ca"]"#,
-                "/certificate/add name=tik-ovpn-server common-name=vpn.example.net key-size=2048 days-valid=3650 key-usage=digital-signature,key-encipherment,tls-server comment=tik:ovpn-server",
-                r#"/certificate/sign [find comment="tik:ovpn-server"] ca=tik-ovpn-ca"#,
+                "/certificate/add name=tik-ovpn-ca common-name=tikontrol-ovpn-ca key-size=2048 days-valid=3650 key-usage=key-cert-sign,crl-sign",
+                r#"/certificate/sign [find name="tik-ovpn-ca"]"#,
+                "/certificate/add name=tik-ovpn-server common-name=vpn.example.net key-size=2048 days-valid=3650 key-usage=digital-signature,key-encipherment,tls-server",
+                r#"/certificate/sign [find name="tik-ovpn-server"] ca=tik-ovpn-ca"#,
                 r#"/file/remove [find name="cert_export_tik-ovpn-ca.crt"]"#,
-                r#"/certificate/export-certificate [find comment="tik:ovpn-ca"] type=pem file-name=cert_export_tik-ovpn-ca"#,
+                r#"/certificate/export-certificate [find name="tik-ovpn-ca"] type=pem file-name=cert_export_tik-ovpn-ca"#,
             ]
         );
         // server before CA, the exported file too
-        assert_eq!(p.undo_cli(), [r#"/file/remove [find name="cert_export_tik-ovpn-ca.crt"]"#, r#"/certificate/remove [find comment="tik:ovpn-server"]"#, r#"/certificate/remove [find comment="tik:ovpn-ca"]"#]);
+        assert_eq!(p.undo_cli(), [r#"/file/remove [find name="cert_export_tik-ovpn-ca.crt"]"#, r#"/certificate/remove [find name="tik-ovpn-server"]"#, r#"/certificate/remove [find name="tik-ovpn-ca"]"#]);
         assert!(p.revertible);
         assert_eq!(p.risk, Risk::Medium);
         assert!(p.warnings.iter().any(|w| w.contains("deletes both certificates")));
         // the key is never exported: no passphrase anywhere
         assert!(p.cli().iter().all(|c| !c.contains("passphrase")));
         assert!(revert_script("c", &p).is_ok());
-        // the existence check reads names and tags only
-        assert_eq!(f.seen[0], ["/certificate/print", "=.proplist=name,comment"]);
+        // the existence check reads names only
+        assert_eq!(f.seen[0], ["/certificate/print", "=.proplist=name"]);
         let p = compile_value(&json!({"kind": "ovpn-certificates", "common_name": "203.0.113.7", "ca_common_name": "Home-CA", "key_size": 4096, "days_valid": 825}), &mut Fake::default()).unwrap();
         assert!(p.cli()[0].contains("common-name=Home-CA key-size=4096 days-valid=825"));
         assert!(p.warnings.iter().any(|w| w.contains("minutes")));
     }
 
     #[test]
-    fn ovpn_certificates_refuse_existing_names_or_tags() {
-        for existing in [row(&[("name", "tik-ovpn-ca")]), row(&[("name", "tik-ovpn-server")]), row(&[("name", "renamed"), ("comment", "tik:ovpn-ca")]), row(&[("name", "renamed"), ("comment", "tik:ovpn-server")])] {
+    fn ovpn_certificates_refuse_existing_names() {
+        for existing in [row(&[("name", "tik-ovpn-ca")]), row(&[("name", "tik-ovpn-server")])] {
             let e = compile_value(&json!({"kind": "ovpn-certificates", "common_name": "vpn.example.net"}), &mut certs(vec![existing])).unwrap_err();
             assert!(e.contains("already exist"), "{e}");
         }
@@ -834,17 +832,17 @@ mod tests {
         assert_eq!(p.cli().last().unwrap(), r#"/interface/ovpn-server/server/set [find name="ovpn1"] certificate=tik-ovpn-server"#);
         // the server lets go of the certificate before it is deleted
         assert_eq!(p.undo_cli()[0], r#"/interface/ovpn-server/server/set [find name="ovpn1"] certificate=none"#);
-        assert_eq!(p.undo_cli().last().unwrap(), r#"/certificate/remove [find comment="tik:ovpn-ca"]"#);
+        assert_eq!(p.undo_cli().last().unwrap(), r#"/certificate/remove [find name="tik-ovpn-ca"]"#);
     }
 
     #[test]
     fn ca_export_needs_our_ca_and_writes_only_the_public_certificate() {
         assert!(compile_value(&json!({"kind": "export-ovpn-ca"}), &mut Fake::default()).unwrap_err().contains("no tik-ovpn-ca"));
-        let mut f = certs(vec![row(&[("name", "tik-ovpn-ca"), ("comment", "tik:ovpn-ca")])]);
+        let mut f = certs(vec![row(&[("name", "tik-ovpn-ca")])]);
         let p = compile_value(&json!({"kind": "export-ovpn-ca"}), &mut f).unwrap();
-        assert_eq!(p.cli()[1], r#"/certificate/export-certificate [find comment="tik:ovpn-ca"] type=pem file-name=cert_export_tik-ovpn-ca"#);
+        assert_eq!(p.cli()[1], r#"/certificate/export-certificate [find name="tik-ovpn-ca"] type=pem file-name=cert_export_tik-ovpn-ca"#);
         assert_eq!(p.undo_cli(), [r#"/file/remove [find name="cert_export_tik-ovpn-ca.crt"]"#]);
-        assert_eq!(f.seen[0], ["/certificate/print", "=.proplist=name,comment", "?comment=tik:ovpn-ca"]);
+        assert_eq!(f.seen[0], ["/certificate/print", "=.proplist=name", "?name=tik-ovpn-ca"]);
         // unknown fields are refused, so nothing can ask for another file or a passphrase
         assert!(compile_value(&json!({"kind": "export-ovpn-ca", "file": "x.p12"}), &mut f).is_err());
     }
