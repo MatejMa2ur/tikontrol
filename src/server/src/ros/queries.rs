@@ -90,9 +90,15 @@ const QUERIES: &[Q] = &[
     one("dnsCfg", "/ip/dns/print", &["servers", "use-doh-server", "allow-remote-requests", "mdns-repeat-ifaces"]).arrays(&["servers", "mdns-repeat-ifaces"]),
     q("dnsCache", "/ip/dns/cache/print", &["name", "type", "data", "ttl"]),
     q("queues", "/queue/simple/print", &["name", "target", "max-limit", "disabled", "comment", "time"]).arrays(&["target"]),
-    q("queueTree", "/queue/tree/print", &["name", "parent", "packet-mark", "queue", "disabled", "comment"]),
+    // speed profiles and QoS rules are queue tree entries (tik:profile:<group>, tik:qos:<name>)
+    q("queueTree", "/queue/tree/print", &["name", "parent", "packet-mark", "queue", "priority", "max-limit", "comment", "disabled"]),
+    q("queueTypes", "/queue/type/print", &["name", "kind", "pcq-rate"]).query(&[("kind", "pcq")]),
     q("hotspot", "/ip/hotspot/print", &["name", "interface", "address-pool", "profile", "disabled"]),
     q("hotspotActive", "/ip/hotspot/active/print", &["server", "user", "address", "mac-address", "login-by", "uptime", "session-time-left", "bytes-in", "bytes-out"]),
+    q("hotspotProfiles", "/ip/hotspot/profile/print", &["name", "hotspot-address", "login-by", "html-directory", "trial-uptime-limit"]).arrays(&["login-by"]),
+    q("hotspotUserProfiles", "/ip/hotspot/user/profile/print", &["name", "session-timeout", "rate-limit", "shared-users"]),
+    // vouchers: never the password field
+    q("hotspotUsers", "/ip/hotspot/user/print", &["name", "profile", "limit-uptime", "uptime", "comment", "disabled"]),
     q("users", "/user/print", &["name", "group", "last-logged-in", "disabled", "comment"]),
     // fingerprints only, never the key itself (public, but not needed)
     q("sshKeys", "/user/ssh-keys/print", &["user", "key-type", "bits", "info", "fingerprint", "comment"]),
@@ -120,7 +126,7 @@ const QUERIES: &[Q] = &[
     q("poe", "/interface/ethernet/poe/print", &["name", "poe-out", "poe-priority", "poe-voltage"]),
     q("dot1x", "/interface/dot1x/server/print", &["interface", "auth-types", "disabled", "comment"]).arrays(&["auth-types"]),
     // never the RADIUS secret
-    q("radius", "/radius/print", &["service", "disabled"]).arrays(&["service"]),
+    q("radius", "/radius/print", &["address", "service", "comment", "disabled"]).arrays(&["service"]),
     one("discovery", "/ip/neighbor/discovery-settings/print", &["discover-interface-list", "protocol", "lldp-med-net-policy-vlan"]).arrays(&["protocol"]),
     q("bridgeVlans", "/interface/bridge/vlan/print", &["bridge", "vlan-ids", "tagged", "untagged"]).arrays(&["vlan-ids", "tagged", "untagged"]),
     q("listMembers", "/interface/list/member/print", &["list", "interface", "comment"]),
@@ -451,6 +457,11 @@ pub mod tests {
         assert_eq!(s["poeMon"][0]["poe-out-status"], "powered-on");
         let mon = f.seen.iter().find(|w| w[0] == "/interface/ethernet/poe/monitor").unwrap();
         assert!(mon.contains(&"=numbers=ether2,ether3".to_string()), "{mon:?}");
+        // RADIUS secret and hotspot user passwords are never asked for
+        for path in ["/radius/print", "/ip/hotspot/user/print"] {
+            let w = f.seen.iter().find(|w| w[0] == path).unwrap();
+            assert!(!w[1].contains("secret") && !w[1].contains("password"), "{w:?}");
+        }
     }
 
     #[test]

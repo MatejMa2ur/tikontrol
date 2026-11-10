@@ -1222,7 +1222,17 @@
    ]
   }
  ],
- "neighbors": [{"interface": "ether3,bridge", "address": "10.12.0.2", "mac-address": "02:AA:BB:00:10:01", "identity": "Office switch", "platform": "MikroTik", "board": "CSS610-8G-2S+", "version": "2.17"}],
+ "neighbors": [
+  {
+   "interface": "ether3,bridge",
+   "address": "10.12.0.2",
+   "mac-address": "02:AA:BB:00:10:01",
+   "identity": "Office switch",
+   "platform": "MikroTik",
+   "board": "CSS610-8G-2S+",
+   "version": "2.17"
+  }
+ ],
  "secProfiles": [
   {
    ".id": "*7D",
@@ -1883,6 +1893,118 @@
   {
    ".id": "*FFFFFFFE",
    "name": "default-encryption"
+  }
+ ],
+ "radius": [
+  {
+   ".id": "*1",
+   "address": "10.12.0.50",
+   "service": [
+    "wireless",
+    "dot1x"
+   ],
+   "comment": "tik:radius:10.12.0.50",
+   "disabled": false
+  }
+ ],
+ "queueTree": [
+  {
+   ".id": "*1",
+   "name": "tik-Kids-down",
+   "parent": "global",
+   "packet-mark": "tik-Kids-down",
+   "queue": "tik-Kids-down",
+   "priority": 8,
+   "max-limit": "0",
+   "comment": "tik:profile:Kids",
+   "disabled": false
+  },
+  {
+   ".id": "*2",
+   "name": "tik-Kids-up",
+   "parent": "global",
+   "packet-mark": "tik-Kids-up",
+   "queue": "tik-Kids-up",
+   "priority": 8,
+   "max-limit": "0",
+   "comment": "tik:profile:Kids",
+   "disabled": false
+  },
+  {
+   ".id": "*3",
+   "name": "tik-qos-voip",
+   "parent": "global",
+   "packet-mark": "tik-qos-voip",
+   "queue": "default",
+   "priority": 1,
+   "max-limit": "0",
+   "comment": "tik:qos:voip",
+   "disabled": false
+  }
+ ],
+ "queueTypes": [
+  {
+   ".id": "*a",
+   "name": "tik-Kids-down",
+   "kind": "pcq",
+   "pcq-rate": "20M"
+  },
+  {
+   ".id": "*b",
+   "name": "tik-Kids-up",
+   "kind": "pcq",
+   "pcq-rate": "5M"
+  }
+ ],
+ "hotspotProfiles": [
+  {
+   ".id": "*1",
+   "name": "default",
+   "hotspot-address": "",
+   "login-by": [
+    "cookie",
+    "http-chap"
+   ],
+   "html-directory": "hotspot",
+   "trial-uptime-limit": "30m"
+  }
+ ],
+ "hotspotUserProfiles": [
+  {
+   ".id": "*1",
+   "name": "default",
+   "session-timeout": "",
+   "rate-limit": "",
+   "shared-users": 1
+  }
+ ],
+ "hotspotUsers": [
+  {
+   ".id": "*1",
+   "name": "K7QX2MPA",
+   "profile": "default",
+   "limit-uptime": "1d",
+   "uptime": "2h14m",
+   "comment": "tik:voucher:K7QX2MPA",
+   "disabled": false
+  },
+  {
+   ".id": "*2",
+   "name": "R4TNW8EZ",
+   "profile": "default",
+   "limit-uptime": "1d",
+   "uptime": "0s",
+   "comment": "tik:voucher:K7QX2MPA",
+   "disabled": false
+  },
+  {
+   ".id": "*3",
+   "name": "H9BVD3LC",
+   "profile": "default",
+   "limit-uptime": "1d",
+   "uptime": "0s",
+   "comment": "tik:voucher:K7QX2MPA",
+   "disabled": false
   }
  ]
 }
