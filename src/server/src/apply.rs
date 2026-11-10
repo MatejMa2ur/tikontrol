@@ -232,6 +232,10 @@ pub fn compile(i: &Intent, current: &mut dyn Router) -> Result<Plan, String> {
             let mac = norm_mac(mac)?;
             let kind = if matches!(i, UnblockClient { .. }) { "block" } else { "pause" };
             let c = format!("tik:{kind}:{mac}");
+            // nothing to undo: refuse, or the revert would add a drop rule that was never there
+            if current.run(&Cmd::new("/ip/firewall/filter/print").proplist(&["comment"]).query("comment", &c))?.is_empty() {
+                return Err(format!("{mac} is not {}", if kind == "block" { "blocked" } else { "paused" }));
+            }
             let mut undo = vec![drop_mac(current, &mac, &c)?];
             // in the revert script an `.id` from now may be gone; append instead
             undo[0].args.retain(|(k, _)| *k != "place-before");
@@ -836,6 +840,19 @@ mod tests {
         let v = serde_json::json!({"kind": "block-domain", "domain": "example.com"});
         assert!(compile_value(&v, &mut Fake::default()).unwrap().title.contains("example.com"));
         assert!(compile_value(&serde_json::json!({"kind": "nope"}), &mut Fake::default()).is_err());
+    }
+
+    #[test]
+    fn unblock_and_resume_need_something_to_undo() {
+        // a no-op unblock must not be accepted: its revert would block the client
+        let mut f = Fake::default();
+        for k in ["unblock-client", "resume-client"] {
+            let e = compile_value(&serde_json::json!({"kind": k, "mac": "02:00:00:AA:BB:01"}), &mut f).unwrap_err();
+            assert!(e.contains("is not"), "{e}");
+        }
+        f.answers.insert("/ip/firewall/filter/print".into(), Ok(vec![crate::ros::queries::tests::row(&[("comment", "tik:block:02:00:00:AA:BB:01")])]));
+        let p = compile_value(&serde_json::json!({"kind": "unblock-client", "mac": "02:00:00:AA:BB:01"}), &mut f).unwrap();
+        assert_eq!(p.cli(), [r#"/ip/firewall/filter/remove [find comment="tik:block:02:00:00:AA:BB:01"]"#]);
     }
 
     #[test]
