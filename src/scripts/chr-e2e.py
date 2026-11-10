@@ -674,7 +674,7 @@ def file_count(prefix):
 
 
 def sc_backups(c, data):
-    """export-config, download it through /tools/export (as the reader), .backup and other names refused,
+    """export-config, download it through /tools/export (as the writer: /file/read needs ftp), .backup and other names refused,
     save-backup, remove-backup-file both. Files are not in /export, so the files themselves are checked."""
     f = Flow(c, "scenario backups: export, download, delete", ROWS["export-config"])
     pw = open(os.path.join(DIR, "admin.pw")).read().strip()
@@ -687,7 +687,7 @@ def sc_backups(c, data):
         f.need(file_count("tik-e2e.rsc") == "1", "tik-e2e.rsc was not written")
         time.sleep(2.2)  # one download per 2 s per session
         s, body, h = c.raw("GET", "/api/v1/tools/export?name=tik-e2e.rsc")
-        hint = " (the reader may lack the policy /file/read needs: note which one)" if s == 404 else ""
+        hint = " (the writer needs the ftp policy for /file/read)" if s == 404 else ""
         f.need(s == 200 and b"/ip" in body, f"download: {s} {body[:120]!r}{hint}")
         cd = {k.lower(): v for k, v in h.items()}.get("content-disposition", "")
         f.need("tik-e2e.rsc" in cd, f"download has no attachment file name: {cd!r}")
