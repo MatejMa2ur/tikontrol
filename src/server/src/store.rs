@@ -130,7 +130,11 @@ pub struct RouterCfg {
     pub writer: Option<Cred>,
 }
 
-#[derive(Serialize, Deserialize, Clone, Debug, Default, PartialEq)]
+fn default_wide() -> Vec<String> {
+    vec!["activity".into()]
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
 #[serde(default, rename_all = "camelCase")]
 pub struct Prefs {
     pub aliases: BTreeMap<String, String>,
@@ -142,8 +146,27 @@ pub struct Prefs {
     /// dashboard layout: card ids in display order, and the hidden ones
     pub card_order: Vec<String>,
     pub hidden_cards: Vec<String>,
+    /// card ids drawn full width (anything else is the default width)
+    #[serde(default = "default_wide")]
+    pub wide_cards: Vec<String>,
     /// named port templates (name, native VLAN, tagged VLANs) applied per port from the Ports page
     pub port_profiles: Vec<serde_json::Value>,
+}
+
+impl Default for Prefs {
+    fn default() -> Self {
+        Prefs {
+            aliases: Default::default(),
+            icons: Default::default(),
+            notes: Default::default(),
+            groups: Default::default(),
+            hidden: Default::default(),
+            card_order: Default::default(),
+            hidden_cards: Default::default(),
+            wide_cards: default_wide(),
+            port_profiles: Default::default(),
+        }
+    }
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, Default)]

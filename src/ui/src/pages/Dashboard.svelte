@@ -94,6 +94,8 @@
     ;[o[i], o[i + d]] = [o[i + d], o[i]]
     prefs.cardOrder = o
   }
+  const wide = (id: Card) => prefs.wideCards.includes(id)
+  const resize = (id: Card) => { const w = prefs.wideCards; prefs.wideCards = w.includes(id) ? w.filter((x) => x !== id) : [...w, id] }
   const toggle = (id: Card) => (prefs.hiddenCards = prefs.hiddenCards.includes(id) ? prefs.hiddenCards.filter((x) => x !== id) : [...prefs.hiddenCards, id])
   const q = signalQuality(wifiClients.reduce((s, c) => s + (c.signal ?? 0), 0) / (wifiClients.length || 1))
 </script>
@@ -175,8 +177,8 @@
   <div class="cards">
     <div class="layout-bar row small">
       {#if editing}
-        <span class="muted">Hide, show and reorder the cards.</span>
-        <button class="btn" onclick={() => { prefs.cardOrder = []; prefs.hiddenCards = [] }}>Reset layout</button>
+        <span class="muted">Hide, show, reorder and resize the cards.</span>
+        <button class="btn" onclick={() => { prefs.cardOrder = []; prefs.hiddenCards = []; prefs.wideCards = ['activity'] }}>Reset layout</button>
         <button class="btn primary" onclick={() => (editing = false)}>Done</button>
       {:else}
         <button class="btn" onclick={() => (editing = true)}><Icon name="settings" size={13} /> Edit layout</button>
@@ -184,13 +186,14 @@
     </div>
     {#each visible as id, i (id)}
       {@const off = prefs.hiddenCards.includes(id)}
-      <div class="slot" class:wide={id === 'activity'} class:off>
+      <div class="slot" class:wide={wide(id)} class:off>
         {#if editing}
           <div class="edit row small" role="group" aria-label="{CARDS[id].title} card">
             <b>{CARDS[id].title}</b>{#if off}<span class="muted">Hidden</span>{/if}
             <span class="row">
               <button class="btn" disabled={i === 0} onclick={() => move(id, -1)} aria-label="Move {CARDS[id].title} up">↑ Up</button>
               <button class="btn" disabled={i === visible.length - 1} onclick={() => move(id, 1)} aria-label="Move {CARDS[id].title} down">↓ Down</button>
+              <button class="btn" onclick={() => resize(id)} aria-pressed={wide(id)} aria-label="{wide(id) ? 'Normal width' : 'Full width'} for {CARDS[id].title}">{wide(id) ? '⇤ Normal' : '⇔ Wide'}</button>
               <button class="btn" onclick={() => toggle(id)} aria-pressed={!off} aria-label="{off ? 'Show' : 'Hide'} {CARDS[id].title}">{off ? 'Show' : 'Hide'}</button>
             </span>
           </div>

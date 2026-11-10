@@ -12,7 +12,7 @@ Clean-room: we copy the behaviour, never the assets.
 **Backing:** `ROS` = RouterOS API on the router · `CMR` = MikroTik CMR server · `tik` = our own logic/DB · `✗` = nothing can back it
 
 <!-- progress:start -->
-**Progress:** 119 ✅ · 106 🟨 · 0 🎨 · 1 ⬜ · 9 ➖ (235 items, 53% done) · 37 🔌 waiting for a hardware test ([list](HARDWARE_TESTS.md))
+**Progress:** 120 ✅ · 105 🟨 · 0 🎨 · 1 ⬜ · 9 ➖ (235 items, 53% done) · 37 🔌 waiting for a hardware test ([list](HARDWARE_TESTS.md))
 <!-- progress:end -->
 
 ---
@@ -69,7 +69,7 @@ Clean-room: we copy the behaviour, never the assets.
 | Recent critical events | ROS log + tik | 1 | 🟨 |
 | Firmware update available banner | ROS / CMR | 2 | 🟨 |
 | Speed test (run + history) | tik server (HTTPS, Cloudflare by default, opt-in) | 3 | 🟨 |
-| Customisable widgets / layout | tik | 4 | 🟨 |
+| Customisable widgets / layout (reorder, hide/show, normal or full width per card; stored on the server and checked in a browser) | tik | 4 | ✅ |
 
 ## UniFi Devices / Topology
 | Feature | Backing | Phase | Status |
