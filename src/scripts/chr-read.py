@@ -7,14 +7,18 @@ API keys (GET only) and MCP (read tools, privacy mode, no secrets). tikontrol ch
 script adds a throwaway PPP secret and hotspot user over SSH (to check their passwords never reach the snapshot)
 and removes them again. It enables MCP and creates an API key in tikontrol and removes both again.
 
-    CHR_DIR=~/.cache/tikontrol-chr-ui python3 src/scripts/chr-read.py [https://127.0.0.1:9643]
+    CHR_DIR=~/.cache/tikontrol-chr-ui python3 src/scripts/chr-read.py [--prep] [https://127.0.0.1:9643]
+
+--prep first adds that fictional activity to the CHR over SSH (idempotent; it stays for the next run).
 
 Expects the fictional activity this repo's CHR notes describe: static leases "Living room TV"
 (02:00:00:AA:BB:20 / 192.168.88.20), a netwatch, a WireGuard peer, a backup, a failed login among the last 40 log lines.
 """
 import http.cookiejar, json, os, re, ssl, subprocess, sys, time, urllib.error, urllib.request
 
-BASE = sys.argv[1] if len(sys.argv) > 1 else "https://127.0.0.1:9643"
+PREP = "--prep" in sys.argv
+ARGS = [a for a in sys.argv[1:] if a != "--prep"]
+BASE = ARGS[0] if ARGS else "https://127.0.0.1:9643"
 DIR = os.path.expanduser(os.environ.get("CHR_DIR", "~/.cache/tikontrol-chr"))
 PW = open(os.path.join(DIR, "admin.pw")).read().strip()
 CTX = ssl._create_unverified_context()
@@ -53,6 +57,38 @@ class Client:
         return s, d
 
 
+def ros(cmd):
+    return subprocess.run([os.path.join(DIR, "ssh-chr.sh"), cmd], capture_output=True, text=True, timeout=60).stdout
+
+
+# the fictional activity the checks below expect (documentation addresses and a made-up key only)
+FIXTURES = [
+    ':if ([:len [/ip/dhcp-server/lease/find mac-address=02:00:00:AA:BB:20]] = 0) do={ /ip/dhcp-server/lease/add mac-address=02:00:00:AA:BB:20 address=192.168.88.20 comment="Living room TV" }',
+    ':if ([:len [/tool/netwatch/find comment="test: gateway"]] = 0) do={ /tool/netwatch/add host=192.168.88.1 comment="test: gateway" }',
+    ':if ([:len [/tool/netwatch/find comment="test: dns"]] = 0) do={ /tool/netwatch/add host=192.0.2.53 comment="test: dns" }',
+    ':if ([:len [/interface/wireguard/find name=wg-test]] = 0) do={ /interface/wireguard/add name=wg-test listen-port=51820 }',
+    ':if ([:len [/interface/wireguard/peers/find comment="test: phone"]] = 0) do={ /interface/wireguard/peers/add interface=wg-test public-key="dGlrY29udHJvbC10ZXN0LXBlZXIta2V5LTAwMDAwMDA=" allowed-address=10.66.0.2/32 comment="test: phone" }',
+    ':if ([:len [/file/find name~"^test-backup"]] = 0) do={ /system/backup/save name=test-backup dont-encrypt=yes }',
+]
+
+
+def prep():
+    for cmd in FIXTURES:
+        ros(cmd)
+    # a failed login for the Security log: SSH as a user that doesn't exist, with an empty password
+    env = dict(os.environ, SSH_ASKPASS=os.path.join(DIR, "askpass-empty.sh"), SSH_ASKPASS_REQUIRE="force")
+    subprocess.run(["ssh", "-q", "-o", "StrictHostKeyChecking=no", "-o", "UserKnownHostsFile=/dev/null", "-o", "NumberOfPasswordPrompts=1",
+                    "-o", "PreferredAuthentications=password", "-p", "2222", "tik-nobody@127.0.0.1", "quit"], capture_output=True, timeout=30, env=env)
+    for _ in range(30):  # /system/backup/save takes a while on a CHR
+        if ros(':put [:len [/file/find name~"^test-backup"]]').strip() not in ("", "0"):
+            break
+        time.sleep(2)
+    time.sleep(35)  # the next poll picks the new rows up
+
+
+if PREP:
+    prep()
+
 c = Client()
 s, me = c.call("POST", "/api/v1/login", {"name": "admin", "password": PW})
 check(s == 200, "sign in with the MikroTik admin")
@@ -70,9 +106,6 @@ check(d.get("update", {}).get("installed-version") and d.get("resource", {}).get
 check(isinstance(d.get("latency"), dict), "latency kept between pings")
 check(not any(k in json.dumps(d) for k in ("private-key", PW)), "snapshot carries no private key or admin password")
 
-
-def ros(cmd):
-    return subprocess.run([os.path.join(DIR, "ssh-chr.sh"), cmd], capture_output=True, text=True, timeout=60).stdout
 
 
 # newer read queries: all answer on a CHR (lists, maybe empty) and never carry a password or secret field
