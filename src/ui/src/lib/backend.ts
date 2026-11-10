@@ -44,6 +44,18 @@ export class ApiError extends Error {
 }
 
 export async function api<T = any>(path: string, opts: { method?: string; body?: unknown } = {}): Promise<T> {
+  try {
+    return await call<T>(path, opts)
+  } catch (e) {
+    // tikontrol restarted and the "keep me signed in" cookie opened a new session with a new CSRF token:
+    // fetch it once and retry, instead of failing the change with "missing or wrong CSRF token"
+    if (!(e instanceof ApiError && e.status === 403 && /CSRF/.test(e.message))) throw e
+    session.csrf = (await call<Me>('/me')).csrf
+    return call<T>(path, opts)
+  }
+}
+
+async function call<T>(path: string, opts: { method?: string; body?: unknown }): Promise<T> {
   const method = opts.method ?? 'GET'
   const headers: Record<string, string> = {}
   if (opts.body !== undefined) headers['content-type'] = 'application/json'
