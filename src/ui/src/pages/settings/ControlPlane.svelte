@@ -6,6 +6,7 @@
   import Section from '../../lib/ui/Section.svelte'
   import Field from '../../lib/ui/Field.svelte'
   import Toggle from '../../lib/ui/Toggle.svelte'
+  import { cmr, loadCmr } from '../../lib/cmr.svelte'
 
   const users: any[] = raw.users ?? []
   const backups: any[] = raw.backups ?? []
@@ -43,6 +44,18 @@
     } catch (e) { err = (e as Error).message }
   }
   loadAdmins()
+
+  // optional CMR controller (src/server/src/cmr.rs): a second RouterOS running the cmr package
+  $effect(() => { loadCmr() })
+  let ctl = $state({ host: '', port: 8729, pin: '', ruser: '', rpass: '', wuser: '', wpass: '', confirm: false })
+  let ctlMsg = $state('')
+  async function ctlRun(f: () => Promise<unknown>, ok: string) {
+    ctlMsg = ''
+    try { await f(); ctlMsg = ok; cmr.data = null; loadCmr() } catch (e) { ctlMsg = (e as Error).message }
+  }
+  const ctlProbe = () => ctlRun(async () => { ctl.pin = (await api<{ pin: string }>('/router/probe', { method: 'POST', body: { host: ctl.host, port: ctl.port } })).pin }, 'Certificate read: compare the fingerprint with the controller\'s before saving.')
+  const ctlSave = () => ctlRun(() => api('/controller', { method: 'POST', body: { host: ctl.host, port: ctl.port, pin: ctl.pin, reader: { user: ctl.ruser, password: ctl.rpass }, ...(ctl.wuser ? { writer: { user: ctl.wuser, password: ctl.wpass }, confirm_write: ctl.confirm } : {}) } }), 'Controller saved.')
+  const ctlRemove = () => ctlRun(() => api('/controller', { method: 'DELETE' }), 'Controller removed: CMR is read from the router again.')
 
   let channel = $state<string>(router.channel ?? 'stable')
   const today = () => new Date().toISOString().slice(0, 10)
@@ -172,6 +185,25 @@
       <p class="muted small">Adding opens the connect page for the new router. Your MikroTik sign-in only works on the main router: give other routers a stored writer user to make changes there.</p>
     {/if}
     {#if siteErr}<div class="err small" role="alert">{siteErr}</div>{/if}
+  </Section>
+
+  <Section title="CMR controller" desc="MikroTik CMR (RouterOS 7.26+ cmr package) manages other MikroTik devices: adoption, labels, Wi-Fi, upgrades, alerts, app traffic. If it runs on this router, nothing to set. If it runs elsewhere (a CHR VM, a bigger router), connect it here with its own users: a reader in a group with read,api,test only, and optionally a writer with read,write,api,test,reboot (pairing and upgrades need reboot).">
+    {#if cmr.data?.controller}
+      <p class="small">Connected to <b class="mono">{cmr.data.controller.host}:{cmr.data.controller.port}</b> as {cmr.data.controller.reader}{cmr.data.controller.writer ? `, changes as ${cmr.data.controller.writer}` : ' (read-only)'}.
+        {#if cmr.data.available === false}<span class="err">{cmr.data.error}</span>{:else}{cmr.data.devices.length} devices.{/if}</p>
+      {#if isAdmin}<button class="btn" onclick={ctlRemove}>Remove controller</button>{/if}
+    {:else}
+      <p class="small">{cmr.data?.available === false ? 'This router has no CMR server.' : cmr.data ? `This router is the CMR server (${cmr.data.devices.length} devices).` : ''}</p>
+      {#if isAdmin}
+        <Field label="Controller address"><input type="text" bind:value={ctl.host} placeholder="192.168.88.5" /><input type="number" bind:value={ctl.port} aria-label="API-SSL port" /><button class="btn small" disabled={!ctl.host} onclick={ctlProbe}>Read certificate</button></Field>
+        {#if ctl.pin}<Field label="Certificate SHA-256"><span class="mono small">{ctl.pin}</span></Field>{/if}
+        <Field label="Reader" help="read,api,test only: tikontrol refuses more"><input type="text" bind:value={ctl.ruser} placeholder="user" autocomplete="off" /><input type="password" bind:value={ctl.rpass} placeholder="password" autocomplete="off" /></Field>
+        <Field label="Writer (optional)" help="For adoption, labels, upgrade rules and alerts through Safe apply"><input type="text" bind:value={ctl.wuser} placeholder="user" autocomplete="off" /><input type="password" bind:value={ctl.wpass} placeholder="password" autocomplete="off" /></Field>
+        {#if ctl.wuser}<label class="small"><input type="checkbox" bind:checked={ctl.confirm} /> I understand the writer can change every device the controller manages</label>{/if}
+        <div class="r"><button class="btn primary" disabled={!ctl.pin || !ctl.ruser || !ctl.rpass || (!!ctl.wuser && !ctl.confirm)} onclick={ctlSave}>Connect controller</button></div>
+      {/if}
+    {/if}
+    {#if ctlMsg}<p class="small" role="status">{ctlMsg}</p>{/if}
   </Section>
 
   <Section title="tikontrol users" desc="Who can sign in to tikontrol. Viewers see everything but change nothing.">

@@ -9,6 +9,7 @@
   import Section from '../lib/ui/Section.svelte'
   import ActivityChart from '../lib/ActivityChart.svelte'
   import { prefs } from '../lib/live.svelte'
+  import { cmr, loadCmr, type CmrApp } from '../lib/cmr.svelte'
 
   let { tab = 'apps' }: { tab?: string } = $props()
   const flowOn = !!raw.trafficFlow?.enabled
@@ -42,6 +43,19 @@
   const countryName = (cc: string) => { try { return cc === '??' ? 'Unknown' : new Intl.DisplayNames(undefined, { type: 'region' }).of(cc) ?? cc } catch { return cc } }
   const nameOfIp = (ip: string) => { const c = clients.find((x) => x.ip === ip); return c ? displayName(c) : ip }
 
+  // CMR app classifier (src/server/src/cmr.rs): fleet-wide totals per application, [down, up] per period
+  $effect(() => { if (tab === 'apps') loadCmr() })
+  type Period = 'minute' | 'hour' | 'day' | 'week'
+  let period = $state<Period>(kept('insights.period', 'hour') as Period)
+  $effect(() => { keep('insights.period', period) })
+  const PERIODS: [Period, string][] = [['minute', 'Last minute'], ['hour', 'Last hour'], ['day', 'Last day'], ['week', 'Last week']]
+  // RouterOS drops the widest periods from its 80-column table; offer only those it sent
+  const periods = $derived(PERIODS.filter(([p]) => cmr.data?.apps?.some((a) => a[p])))
+  const dn = (a: CmrApp) => a[period]?.[0] ?? 0
+  const up = (a: CmrApp) => a[period]?.[1] ?? 0
+  const apps = $derived([...(cmr.data?.apps ?? [])].filter((a) => a[period]).sort((a, b) => dn(b) + up(b) - dn(a) - up(a)))
+  const appMax = $derived(Math.max(1, ...apps.map((a) => dn(a) + up(a))))
+  const byCat = $derived(Object.entries(apps.reduce((m: Record<string, number>, a) => ((m[a.category ?? 'Unclassified'] = (m[a.category ?? 'Unclassified'] ?? 0) + dn(a) + up(a)), m), {})).sort((a, b) => b[1] - a[1]))
   const CATS = ['Streaming', 'Social', 'Gaming', 'Web', 'Cloud & storage', 'Messaging', 'Updates', 'Other']
   $effect(() => { keep('insights.q', dq) })
 </script>
@@ -51,7 +65,22 @@
   <Tabs base="insights" active={tab} tabs={[{ id: 'apps', label: 'Applications' }, { id: 'clients', label: 'Clients' }, { id: 'domains', label: 'Domains', count: domains.length }, { id: 'flows', label: 'Flows' }, { id: 'countries', label: 'Countries' }]} />
 
   {#if tab === 'apps'}
-    <Section title="Traffic by application" desc="Per-app and per-category traffic (last minute / hour / day / week) comes from MikroTik CMR's classifier on the gateway." ros="/cmr/device/apptraffic">
+    <Section title="Traffic by application" desc="Per-app and per-category traffic (last minute / hour / day / week) from MikroTik CMR's classifier, across every device it runs on (CMR apptraffic-devices)." ros="/cmr/device/apptraffic [find] once">
+      {#if cmr.data?.apps?.length}
+        <div class="row"><select bind:value={period} aria-label="Period">{#each periods as [p, label]}<option value={p}>{label}</option>{/each}</select></div>
+        {#each apps as a}
+          <div class="bar-row">
+            <span class="who">{a.name}{#if a.category}<span class="muted small"> · {a.category}</span>{/if}</span>
+            <span class="track"><i class="d" style="width:{(dn(a) / appMax) * 100}%"></i><i class="u" style="width:{(up(a) / appMax) * 100}%"></i></span>
+            <span class="mono small">{bytes(dn(a) + up(a))}</span><span class="mono small muted">{bytes(dn(a))} / {bytes(up(a))}</span>
+          </div>
+        {/each}
+        <div class="row small muted legend"><span><i class="sw d"></i> Download</span><span><i class="sw u"></i> Upload</span></div>
+        <h3 class="small">By category</h3>
+        <div class="cats">{#each byCat as [c, n]}<span class="pill">{c} · {bytes(n)}</span>{/each}</div>
+      {:else if cmr.data && cmr.data.available !== false}
+        <div class="muted small">The CMR server reports no application traffic yet{cmr.data.apptrafficDevices ? ` (classifier on: ${cmr.data.apptrafficDevices})` : ''}. It classifies on the gateway by default; <code>/cmr set apptraffic-devices=all</code> adds every device.</div>
+      {:else}
       <div class="empty">
         <Icon name="traffic" size={28} />
         <b>Application identification needs the CMR server</b>
@@ -59,6 +88,7 @@
         <div class="cats">{#each CATS as c}<span class="pill">{c}</span>{/each}</div>
         <a class="btn primary" href="#/devices/list">Set up CMR…</a>
       </div>
+      {/if}
     </Section>
   {:else if tab === 'clients'}
     <Section title="Internet activity" desc="Client count and throughput over time.">

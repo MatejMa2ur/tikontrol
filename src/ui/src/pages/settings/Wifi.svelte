@@ -8,6 +8,7 @@
   import Toggle from '../../lib/ui/Toggle.svelte'
   import Modal from '../../lib/ui/Modal.svelte'
   import Qr from '../../lib/ui/Qr.svelte'
+  import { cmr, loadCmr } from '../../lib/cmr.svelte'
 
   const legacy = hw.wifiPackage !== 'wifi'
   const pkg = legacy ? 'wireless' : 'wifi'
@@ -30,6 +31,9 @@
     const lim = rows.length && (+w0['default-ap-tx-limit'] || +w0['default-client-tx-limit']) ? `${mbit(w0['default-ap-tx-limit'])}/${mbit(w0['default-client-tx-limit'])}` : ''
     return { name: s.ssid, password: '', security: secOf(w0.auth), bands: s.radios.map((r) => r.band), ifaces: s.radios.map((r) => r.name), network: w0.name ? pvidOf(w0.name) : 1, hidden: !!w0['hide-ssid'], isolation: w0['default-forwarding'] === false, guest: String(w0.comment ?? '').startsWith('tik:guest'), schedule: !!(w0.name && sched(w0.name, true)), from: (w0.name && sched(w0.name, true)) || '07:00', to: (w0.name && sched(w0.name, false)) || '23:00', limit: lim, macFilter: (raw.accessList ?? []).length > 0, ft: w0.ft === true, steer: w0.steering !== false, passpoint: String(w0.interworking ?? '').startsWith('tik-passpoint-') }
   }
+  // CMR networks select APs by label (src/server/src/cmr.rs resolves the selector)
+  $effect(() => { loadCmr() })
+  const cmrAps = (ssid: string) => cmr.data?.wifi?.find((w) => w.ssid === ssid)
   let list = $state(ssids.map(fromRouter))
   let edit = $state<Ssid | null>(null)
   let editIdx = $state(-1)
@@ -150,7 +154,12 @@
     <Field label="Security"><select bind:value={edit.security}><option value="wpa2">WPA2</option><option value="wpa2-wpa3">WPA2/WPA3</option><option value="wpa3">WPA3</option><option value="open">Open</option></select></Field>
     <Field label="Bands" help={editIdx < 0 ? 'A new network starts on one radio' : 'Unticking a band turns that radio off; ticking one renames the SSID that radio broadcasts'}>{#each phys as r}<label class="chk"><input type="checkbox" checked={edit.bands.includes(r.band)} onchange={() => (edit!.bands = edit!.bands.includes(r.band) ? edit!.bands.filter((b) => b !== r.band) : [...edit!.bands, r.band])} /> {r.band}</label>{/each}{#if !hw.bands.includes('6 GHz')}<label class="chk na" title="No 6 GHz radio on this router"><input type="checkbox" disabled /> 6 GHz</label>{/if}</Field>
     <Field label="Network" help={editIdx < 0 ? 'Set it after creating the network' : 'Bridge VLAN (PVID) for this SSID'}><select bind:value={edit.network} disabled={editIdx < 0}>{#each networks as n}<option value={n.id}>{n.name}{n.id > 1 ? ` (VLAN ${n.id})` : ''}</option>{/each}</select></Field>
-    <Field label="Broadcasting APs" na="Only this router: more APs need MikroTik CMR/CAPsMAN"><span class="muted small">{router.identity}</span></Field>
+    {@const cw = cmrAps(edit.name)}
+    {#if cw}
+      <Field label="Broadcasting APs" help="CMR network: labels {(cw.labels ?? ['all']).join(', ')} select these adopted devices (only those with a radio broadcast it)"><span class="small">{cw.aps.join(', ') || 'none'}</span></Field>
+    {:else}
+      <Field label="Broadcasting APs" na="Only this router: more APs need MikroTik CMR/CAPsMAN"><span class="muted small">{router.identity}</span></Field>
+    {/if}
     <Field label="Guest network" help="Isolated, internet only, optional portal"><Toggle bind:checked={edit.guest} disabled={editIdx >= 0} label="Guest" /></Field>
     <Field label="Client isolation" help="Clients can't see each other"><Toggle bind:checked={edit.isolation} label="Isolation" /></Field>
     <Field label="Hide SSID"><Toggle bind:checked={edit.hidden} label="Hide" /></Field>
