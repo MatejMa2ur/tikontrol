@@ -8,6 +8,7 @@ Read-only checks first; test anything that writes on a spare router or CHR, neve
 
 - [ ] **Topology** 🟨: a real downstream MikroTik switch and AP heard over MNDP/LLDP
 - [ ] **Settings → Networks (every control sends an intent: DHCP range/lease, options, mDNS, IGMP, VLAN filtering, remove)** 🟨: toggle IGMP and VLAN filtering on a CHR and let the 5-minute revert undo a lockout
+- [ ] **Settings → Security / CyberSecure (all sections on real data and intents)** 🟨: run the security checks below on a CHR
 - [ ] **Settings → Routing (add and remove port forwards, routes, DNS records)** 🟨: add, remove and revert each on a CHR; hand-made rows must have no Remove
 
 ## Dashboard
@@ -48,6 +49,12 @@ Read-only checks first; test anything that writes on a spare router or CHR, neve
 ## Internet (WAN)
 
 - [ ] **ISP status / outage history (uptime % and outages from 7 days of minute samples; "down" = WAN link not running)** 🟨: pull the WAN cable for 2+ minutes: an outage with the right length appears and uptime drops
+
+## Security / CyberSecure
+
+- [ ] **Simple app blocking (saved state, several apps in one batch, unblock)** 🟨: block and revert the 4 YouTube domains as one change; check apps really stop
+- [ ] **Content filtering (family, adult): add, enable/disable and remove ad-lists by URL; no built-in presets** 🟨: `set-adlist` on an https list; a blocked name stops resolving
+- [ ] **Security audit (insecure services, unrestricted management services, open DNS resolver, default admin user, UPnP, outdated RouterOS)** 🟨: check that an unrestricted service's empty `address` comes back over the API and the finding clears once restricted
 
 ## Control plane / System
 

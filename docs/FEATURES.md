@@ -12,7 +12,7 @@ Clean-room: we copy the behaviour, never the assets.
 **Backing:** `ROS` = RouterOS API on the router · `CMR` = MikroTik CMR server · `tik` = our own logic/DB · `✗` = nothing can back it
 
 <!-- progress:start -->
-**Progress:** 114 ✅ · 108 🟨 · 3 🎨 · 1 ⬜ · 8 ➖ (234 items, 50% done) · 21 🔌 waiting for a hardware test ([list](HARDWARE_TESTS.md))
+**Progress:** 114 ✅ · 109 🟨 · 2 🎨 · 1 ⬜ · 8 ➖ (234 items, 50% done) · 25 🔌 waiting for a hardware test ([list](HARDWARE_TESTS.md))
 <!-- progress:end -->
 
 ---
@@ -37,7 +37,7 @@ Clean-room: we copy the behaviour, never the assets.
 | P14 | Settings → Networks (every control sends an intent: DHCP range/lease, options, mDNS, IGMP, VLAN filtering, remove) 🔌 toggle IGMP and VLAN filtering on a CHR and let the 5-minute revert undo a lockout | Settings · Networks | 3 | 🟨 |
 | P15 | Settings → Internet | Settings · Internet | 3 |🟨 |
 | P16 | Settings → VPN | Settings · VPN | 2 | 🟨 |
-| P17 | Settings → Security / CyberSecure | Settings · Security | 3 |🎨 |
+| P17 | Settings → Security / CyberSecure (all sections on real data and intents) 🔌 run the security checks below on a CHR | Settings · Security | 3 | 🟨 |
 | P18 | Settings → Routing (add and remove port forwards, routes, DNS records) 🔌 add, remove and revert each on a CHR; hand-made rows must have no Remove | Settings · Routing | 2 | 🟨 |
 | P19 | Settings → Profiles | Settings · Profiles | 3 |🎨 |
 | P20 | Settings → Control Plane (admins, backups, updates, integrations, console) | Settings · System | 2 | 🟨 |
@@ -233,17 +233,17 @@ Clean-room: we copy the behaviour, never the assets.
 |---|---|---|---|
 | Zone-based firewall (zone matrix) | ROS interface-lists → filter rules | 3 | ✅ |
 | Firewall policies (custom rules) | ROS filter | 3 | ✅ |
-| Simple app blocking | ROS tls-host + DNS · CMR app classes | 3 | 🟨 |
+| Simple app blocking (saved state, several apps in one batch, unblock) 🔌 block and revert the 4 YouTube domains as one change; check apps really stop | ROS tls-host + DNS · CMR app classes | 3 | 🟨 |
 | Traffic rules (block/limit by client, app, time) | ROS filter + queues + scheduler | 3 | ✅ |
 | Ad blocking | ROS `/ip/dns/adlist` | 2 | ✅ |
-| Content filtering (family, adult) | ROS adlist / DNS | 2 | 🟨 |
+| Content filtering (family, adult): add, enable/disable and remove ad-lists by URL; no built-in presets 🔌 `set-adlist` on an https list; a blocked name stops resolving | ROS adlist / DNS | 2 | 🟨 |
 | Region (country) blocking | ROS address-lists + tik feed | 4 | ✅ |
 | IP groups / port groups | ROS address-lists | 3 | ✅ |
 | Device isolation (per client) | ROS bridge filter | 4 | ✅ |
 | IDS/IPS (signature-based) | ✗ | – | ➖ |
 | Honeypot | ✗ | – | ➖ |
 | Threat intelligence feeds (CyberSecure) | tik blocklist into address-list (partial) | 4 | ✅ |
-| Security audit (telnet/ftp/http on, default creds) | tik | 2 | 🟨 |
+| Security audit (insecure services, unrestricted management services, open DNS resolver, default admin user, UPnP, outdated RouterOS) 🔌 check that an unrestricted service's empty `address` comes back over the API and the finding clears once restricted | tik | 2 | 🟨 |
 
 ## Routing
 | Feature | Backing | Phase | Status |
