@@ -28,6 +28,10 @@ pub fn extra(app: &Arc<App>, req: &Req, s: &Session) -> Option<Resp> {
             Resp::json(200, &lock(&app.live.history).series(&range))
         }
         ("GET", "/api/v1/health/internet") => Resp::json(200, &json!(lock(&app.live.history).health())),
+        ("GET", "/api/v1/health/isp") => {
+            let pts: Vec<crate::live::Point> = lock(&app.live.history).minutes.iter().copied().collect();
+            Resp::json(200, &crate::live::isp_status(&pts, now()))
+        }
         ("GET", "/api/v1/history/client") => {
             let mac = req.param("mac").unwrap_or_default().to_ascii_uppercase();
             let h = lock(&app.live.history);

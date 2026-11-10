@@ -139,6 +139,8 @@ paths:
       responses: { '200': { description: '{ found: number of devices that answered }' }, '403': { description: not admin }, '429': { description: too soon or already running (retry-after) } }
   /api/v1/health/internet:
     get: { summary: 'Last 12 h in 48 slots: ok | warn | bad | none', responses: { '200': { description: ok } } }
+  /api/v1/health/isp:
+    get: { summary: 'ISP status over the stored minute history (up to 7 days). Only sampled minutes count; a gap ends an outage. Down = WAN link not running', responses: { '200': { description: '{ since (unix s or null), minutes (sampled), downMinutes, uptime (% or null without samples), count (outages), outages[{ start, secs, ongoing }] newest first, max 20 }' } } }
   /api/v1/history/client:
     get:
       summary: Hourly bytes, first/last seen and events of one client

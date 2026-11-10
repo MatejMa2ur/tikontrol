@@ -188,6 +188,35 @@ impl History {
     }
 }
 
+/// ISP status: WAN uptime and outages over the stored minute history (up to 7 days).
+/// Only minutes tikontrol sampled count: a gap (tikontrol not running) is unknown, neither up nor down,
+/// and it ends an outage. An outage is a run of consecutive minutes in which the WAN link was down.
+/// `points` must be in time order (as `History::minutes` is); `end` is now, for an outage still going on.
+pub fn isp_status(points: &[Point], end: u64) -> Value {
+    let down = points.iter().filter(|p| p.down).count();
+    // (first down minute, end of the last down minute)
+    let mut outages: Vec<(u64, u64)> = vec![];
+    for p in points.iter().filter(|p| p.down) {
+        match outages.last_mut() {
+            Some(o) if p.t == o.1 => o.1 = p.t + 60,
+            _ => outages.push((p.t, p.t + 60)),
+        }
+    }
+    let last = points.last().map(|p| p.t);
+    let list: Vec<Value> = outages
+        .iter()
+        .rev()
+        .take(20)
+        .map(|&(start, stop)| {
+            // still down: it reaches the last sampled minute and the sampler is current (within 2 min)
+            let ongoing = last == Some(stop - 60) && end.saturating_sub(stop) < 120;
+            json!({ "start": start, "secs": if ongoing { end.max(stop) - start } else { stop - start }, "ongoing": ongoing })
+        })
+        .collect();
+    let uptime = (!points.is_empty()).then(|| ((points.len() - down) as f64 / points.len() as f64 * 10000.0).round() / 100.0);
+    json!({ "since": points.first().map(|p| p.t), "minutes": points.len(), "downMinutes": down, "uptime": uptime, "count": outages.len(), "outages": list })
+}
+
 fn push<T>(q: &mut VecDeque<T>, v: T, cap: usize) {
     q.push_back(v);
     while q.len() > cap {
@@ -538,6 +567,31 @@ mod tests {
         assert!(s["rx"].as_array().unwrap().iter().all(Value::is_null), "no data is a gap, not a zero");
         assert_eq!(h.health().len(), 48);
         assert!(h.health().iter().all(|x| *x == "none"));
+    }
+
+    #[test]
+    fn isp_status_counts_sampled_minutes_and_outages() {
+        let m = |t: u64, down: bool| Point { t, down, ..Default::default() };
+        assert_eq!(isp_status(&[], 1000)["uptime"], Value::Null);
+        // 10 sampled minutes: a 2-minute outage, a gap (not counted), then a 1-minute outage
+        let mut pts: Vec<Point> = (0..6).map(|i| m(6000 + i * 60, i == 2 || i == 3)).collect();
+        pts.extend((0..4).map(|i| m(9000 + i * 60, i == 1)));
+        let s = isp_status(&pts, 9300);
+        assert_eq!(s["minutes"], 10);
+        assert_eq!(s["downMinutes"], 3);
+        assert_eq!(s["uptime"], 70.0);
+        assert_eq!(s["since"], 6000);
+        assert_eq!(s["count"], 2);
+        assert_eq!(s["outages"][0], json!({ "start": 9060, "secs": 60, "ongoing": false }), "newest first");
+        assert_eq!(s["outages"][1], json!({ "start": 6120, "secs": 120, "ongoing": false }));
+        // a gap inside a down stretch splits it: tikontrol doesn't know what happened meanwhile
+        assert_eq!(isp_status(&[m(0, true), m(600, true)], 700)["count"], 2);
+        // still down at the last sample: ongoing, measured up to now
+        let s = isp_status(&[m(0, false), m(60, true), m(120, true)], 200);
+        assert_eq!(s["outages"][0], json!({ "start": 60, "secs": 140, "ongoing": true }));
+        assert_eq!(s["uptime"], 33.33);
+        // the sampler stopped long ago: not claimed as ongoing
+        assert_eq!(isp_status(&[m(60, true)], 100_000)["outages"][0]["ongoing"], false);
     }
 
     #[test]

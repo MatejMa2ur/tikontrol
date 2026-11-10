@@ -158,5 +158,14 @@ function synth(range: Range) {
 }
 // Internet health bar (-12h → now): 48 slots of 15 min. From stored samples with the server ('none' = no data yet).
 export const health = $state<string[]>(Array.from({ length: 48 }, (_, i) => (isBackend ? 'none' : i === 7 ? 'warn' : 'ok')))
-const refreshHealth = () => api<string[]>('/health/internet').then((h) => health.splice(0, health.length, ...h)).catch(() => {})
+// ISP status: WAN uptime % and outages over stored minutes (server: live::isp_status). Mockup: made-up demo values.
+export type Isp = { since: number | null; minutes: number; downMinutes: number; uptime: number | null; count: number; outages: { start: number; secs: number; ongoing: boolean }[] }
+const demoT = Math.floor(Date.now() / 1000 / 60) * 60
+export const isp = $state<Isp>(isBackend
+  ? { since: null, minutes: 0, downMinutes: 0, uptime: null, count: 0, outages: [] }
+  : { since: demoT - 7 * 86400, minutes: 10080, downMinutes: 6, uptime: 99.94, count: 2, outages: [{ start: demoT - 9 * 3600, secs: 240, ongoing: false }, { start: demoT - 3 * 86400, secs: 120, ongoing: false }] })
+const refreshHealth = () => {
+  api<Isp>('/health/isp').then((v) => Object.assign(isp, v)).catch(() => {})
+  return api<string[]>('/health/internet').then((h) => health.splice(0, health.length, ...h)).catch(() => {})
+}
 if (isBackend) { refreshHealth(); setInterval(refreshHealth, 5 * 60_000) }

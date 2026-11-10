@@ -1,6 +1,6 @@
 <script lang="ts">
   import { clients, internet, router, insights, radios, wifiTech, connectivity, adblock, signalQuality, bytes, bps, dur, hw } from '../lib/data'
-  import { live, displayName, activity, health, type Range } from '../lib/live.svelte'
+  import { live, displayName, activity, health, isp, type Range } from '../lib/live.svelte'
   import ActivityChart from '../lib/ActivityChart.svelte'
   import Donut from '../lib/Donut.svelte'
   import DeviceFace from '../lib/DeviceFace.svelte'
@@ -118,7 +118,9 @@
     <div class="kv">
       <span>Internet</span><span class="row isp"><Icon name="globe" size={13} /> {internet.doubleNat ? 'Behind NAT' : 'Direct'}</span>
       {#if internet.publicIp}<span>Public IP</span><span class="mono">{internet.publicIp}</span>{/if}
-      <span>Uptime</span><span class="good">100%</span>
+      <span title="WAN link up, share of the minutes tikontrol sampled">Uptime</span>
+      {#if isp.uptime == null}<span class="muted" title="No samples yet: recorded while tikontrol runs">—</span>
+      {:else}<a href="#/settings/internet" class={isp.uptime >= 99.9 ? 'good' : isp.uptime >= 99 ? 'warn' : 'bad'} title="Last {dur(isp.minutes * 60)} sampled · {isp.count} outage{isp.count === 1 ? '' : 's'}">{isp.uptime}%</a>{/if}
       <span>Activity</span><span><span class="down">↓ {bps(live.rx.at(-1) ?? 0)}</span> <span class="up">↑ {bps(live.tx.at(-1) ?? 0)}</span></span>
       <span title="Highest 1-minute average in tikontrol's stored history">Peak</span><span><span class="down">↓ {bps(hist.peakAll.rx)}</span> <span class="up">↑ {bps(hist.peakAll.tx)}</span></span>
     </div>

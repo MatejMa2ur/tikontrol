@@ -1,6 +1,7 @@
 <script lang="ts">
-  import { internet, raw, bps, ports } from '../../lib/data'
+  import { internet, raw, bps, ports, dur } from '../../lib/data'
   import { review } from '../../lib/apply.svelte'
+  import { isp } from '../../lib/live.svelte'
   import Icon from '../../lib/Icon.svelte'
   import Section from '../../lib/ui/Section.svelte'
   import Field from '../../lib/ui/Field.svelte'
@@ -23,6 +24,8 @@
   const servers = Array.isArray(dns.servers) ? dns.servers : String(dns.servers ?? '').split(',').filter(Boolean)
   let d = $state({ servers: servers.join(', '), doh: dns['use-doh-server'] ?? '', ddns: cloud['ddns-enabled'] === true || cloud['ddns-enabled'] === 'yes' || !!cloud['dns-name'] })
   const v6Was = (raw.ipv6Pools ?? []).some((p: any) => p.name === 'tik-v6')
+  // tagged WANs tikontrol created (remove-wan-vlan only removes tik:wanvlan:<id>)
+  const wanVlans: any[] = (raw.vlans ?? []).filter((v: any) => String(v.comment ?? '') === `tik:wanvlan:${v['vlan-id']}`)
   let v6 = $state({ on: v6Was, pd: 56 })
 
   // the interface the connection type applies to: the tagged VLAN when one is set
@@ -49,6 +52,9 @@
     <input type="number" min="1" max="4094" bind:value={wan.vlan} placeholder="none" />
     <button class="btn" disabled={!wan.vlan} onclick={() => review(`Tagged WAN VLAN ${wan.vlan}`, [`/interface/vlan/add name=wan-vlan${wan.vlan} interface=${internet.wanIf} vlan-id=${wan.vlan}`, `/interface/list/member/add list=WAN interface=wan-vlan${wan.vlan}`], { kind: 'wan-vlan', interface: internet.wanIf, vlan_id: +wan.vlan })}>Add VLAN</button>
   </Field>
+  {#each wanVlans as v}
+    <div class="muted small">Tagged WAN: <span class="mono">{v.name}</span> (VLAN {v['vlan-id']} on {v.interface}). <button class="btn small" onclick={() => review(`Remove tagged WAN VLAN ${v['vlan-id']}`, [`/interface/list/member/remove [find comment="tik:wanvlan:${v['vlan-id']}"]`, `/interface/vlan/remove [find comment="tik:wanvlan:${v['vlan-id']}"]`], { kind: 'remove-wan-vlan', vlan_id: +v['vlan-id'] })}>Remove</button></div>
+  {/each}
   <Field label="Connection type" help={`Applies to ${wanIf}`}><div class="seg">{#each [['dhcp', 'DHCP'], ['static', 'Static'], ['pppoe', 'PPPoE']] as [v, l]}<button class:on={wan.type === v} onclick={() => (wan.type = v)}>{l}</button>{/each}</div></Field>
   {#if wan.type === 'static'}<Field label="IP / prefix"><input type="text" bind:value={wan.ip} placeholder="203.0.113.10/24" /></Field><Field label="Gateway"><input type="text" bind:value={wan.gw} placeholder="203.0.113.1" /></Field>{/if}
   {#if wan.type === 'pppoe'}<Field label="Username"><input type="text" bind:value={wan.user} autocomplete="off" /></Field><Field label="Password" help="Sent to the router only, never stored or shown"><input type="password" bind:value={wan.pass} autocomplete="new-password" /></Field>{/if}
@@ -103,8 +109,24 @@
   {:else if v6Was}<div class="r"><button class="btn" onclick={() => review('Turn off IPv6 WAN', ['/ipv6/address/remove [find comment="tik:v6wan"]', '/ipv6/dhcp-client/remove [find comment="tik:v6wan"]'], { kind: 'remove-ipv6-wan' })}>Turn off</button></div>{/if}
 </Section>
 
-<Section title="ISP status" desc="Outages and latency history are recorded once tikontrol runs continuously.">
-  <div class="muted small">No outages recorded. Latency now: {internet.latency.map((l) => `${l.name} ${l.ms ?? '—'} ms`).join(' · ')}</div>
+<Section title="ISP status" desc="WAN link uptime and outages, from the minutes tikontrol sampled (up to 7 days). Time tikontrol wasn't running counts as unknown.">
+  {#if isp.uptime == null}
+    <div class="muted small">Nothing recorded yet: tikontrol records this while it runs.</div>
+  {:else}
+    <div class="kv small">
+      <span class="muted">Uptime</span><span><b>{isp.uptime}%</b> of {dur(isp.minutes * 60)} sampled</span>
+      <span class="muted">Since</span><span>{new Date(isp.since! * 1000).toLocaleString()}</span>
+      <span class="muted">Outages</span><span>{isp.count} · {dur(isp.downMinutes * 60)} down in total</span>
+    </div>
+    {#if isp.outages.length}
+      <table class="small">
+        <thead><tr><th>Started</th><th>Duration</th></tr></thead>
+        <tbody>{#each isp.outages as o}<tr><td>{new Date(o.start * 1000).toLocaleString()}</td><td>{dur(o.secs)}{#if o.ongoing} <span class="pill bad">ongoing</span>{/if}</td></tr>{/each}</tbody>
+      </table>
+      {#if isp.count > isp.outages.length}<div class="muted small">Showing the latest {isp.outages.length}.</div>{/if}
+    {:else}<div class="muted small">No outages recorded.</div>{/if}
+  {/if}
+  <div class="muted small">Latency now: {internet.latency.map((l) => `${l.name} ${l.ms ?? '—'} ms`).join(' · ')}</div>
 </Section>
 
 <style>
