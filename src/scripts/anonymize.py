@@ -141,7 +141,10 @@ d["pppSecrets"] = [
     {".id": "*2", "name": "tablet-user", "service": "ovpn", "profile": "default-encryption", "disabled": False, "comment": "tik:vpn-user:tablet-user"},
 ]
 d["pppActive"] = [{".id": "*1", "name": "laptop-user", "service": "l2tp", "caller-id": "203.0.113.25", "address": "10.12.0.100", "uptime": "1h12m5s", "encoding": "cbc(aes) + hmac(sha1)"}]
-d["pppProfiles"] = [{".id": "*0", "name": "default"}, {".id": "*FFFFFFFE", "name": "default-encryption"}]
+# certificate common names are often the DDNS name or public IP: never publish them
+d["certificates"] = []
+d["ovpn"] = [{".id": "*1", "name": "ovpn1", "disabled": True, "port": 1194, "protocol": "tcp", "certificate": "none", "auth": ["sha1", "sha256"], "cipher": ["aes128-cbc", "aes256-cbc", "aes256-gcm"], "mode": "ip", "require-client-certificate": False}]
+d["pppProfiles"] =[{".id": "*0", "name": "default"}, {".id": "*FFFFFFFE", "name": "default-encryption"}]
 
 sys.stdout.reconfigure(encoding="utf-8")
 sys.stdout.write(json.dumps(d, indent=1, ensure_ascii=False))

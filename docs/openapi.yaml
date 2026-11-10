@@ -233,9 +233,9 @@ paths:
       responses: { '200': { description: '{ tool, command, rows[{ address, ssid, channel, signal | signal-strength, noise-floor, snr, security, radio-name }], note }' }, '400': { description: not confirmed, bad duration or interface }, '403': { description: not admin or read-only mode }, '429': { description: too soon }, '502': { description: the router refused (e.g. no such interface) } }
   /api/v1/tools/export:
     get:
-      summary: Download one of tikontrol's own configuration exports (tik-*.rsc, no secrets) from the router (admin). Full .backup files are never downloaded
-      parameters: [{ name: name, in: query, required: true, schema: { type: string, pattern: '^([A-Za-z0-9_-]+/)?tik-[A-Za-z0-9_-]{1,40}\.rsc$' } }]
-      responses: { '200': { description: text/plain attachment }, '400': { description: not a tik-*.rsc name }, '403': { description: not admin }, '404': { description: empty or unreadable }, '429': { description: too soon } }
+      summary: "Download one of tikontrol's own configuration exports (tik-*.rsc, no secrets) or exactly the public certificate of tikontrol's OpenVPN CA (cert_export_tik-ovpn-ca.crt, written by the ovpn-certificates / export-ovpn-ca intents without a passphrase) from the router (admin). Full .backup files, .key and .p12 files are never downloaded; the .crt is only handed out if it holds nothing but PEM certificates"
+      parameters: [{ name: name, in: query, required: true, schema: { type: string, pattern: '^(([A-Za-z0-9_-]+/)?tik-[A-Za-z0-9_-]{1,40}\.rsc|cert_export_tik-ovpn-ca\.crt)$' } }]
+      responses: { '200': { description: 'text/plain attachment (.rsc) or application/x-pem-file attachment (.crt)' }, '400': { description: not an allowed name }, '403': { description: not admin }, '404': { description: empty or unreadable }, '429': { description: too soon }, '502': { description: 'router error (e.g. the file does not exist), or the .crt is not plain PEM certificates' } }
   /api/v1/floorplan:
     get: { summary: 'Coverage map: the saved floor plan { image (data URL), aps[{ label, x, y }] } or null. No RF model', responses: { '200': { description: ok } } }
     put:

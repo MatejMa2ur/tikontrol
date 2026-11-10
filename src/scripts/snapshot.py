@@ -93,6 +93,8 @@ Q = {
     "accessList": "[/interface/wireless/access-list/print as-value proplist=mac-address,interface,signal-range,authentication,forwarding,comment]",
     "trafficFlow": '({"enabled"=[/ip/traffic-flow/get enabled]})',
     "ovpn": "[/interface/ovpn-server/server/print as-value]",
+    # names and dates only, never key material
+    "certificates": "[/certificate/print as-value proplist=name,common-name,invalid-after,trusted,comment]",
     # never ipsec-secret
     "l2tp": '({"enabled"=[/interface/l2tp-server/server/get enabled];"use-ipsec"=[/interface/l2tp-server/server/get use-ipsec]})',
     "pppActive": "[/ppp/active/print as-value proplist=name,service,caller-id,address,uptime,encoding]",
@@ -138,7 +140,7 @@ if isinstance(snap.get("etherMon"), list):
 if isinstance(snap.get("poeMon"), list):
     snap["poeMon"] = [{k: r.get(k) for k in ("name", "poe-out-status", "poe-out-voltage", "poe-out-current", "poe-out-power")} for r in snap["poeMon"]]
 if isinstance(snap.get("ovpn"), list):
-    snap["ovpn"] = [{k: r.get(k) for k in ("name", "disabled", "enabled", "port", "protocol", "certificate")} for r in snap["ovpn"]]
+    snap["ovpn"] = [{k: r.get(k) for k in ("name", "disabled", "enabled", "port", "protocol", "certificate", "auth", "cipher", "mode", "require-client-certificate")} for r in snap["ovpn"]]
 if isinstance(snap.get("dnsCache"), list):
     snap["dnsCache"] = [c for c in snap["dnsCache"] if c.get("type") in ("A", "AAAA")][:300]
 # monitor output is huge; keep only what the UI shows

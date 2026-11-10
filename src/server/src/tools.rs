@@ -11,6 +11,7 @@ use crate::app::{lock, App, As};
 use crate::auth::Session;
 use crate::http::{Req, Resp};
 use crate::intents::system::host;
+use crate::intents::vpn::OVPN_CA_FILE;
 use crate::ros::cmd::Cmd;
 use crate::ros::conn::Row;
 use serde::Deserialize;
@@ -153,15 +154,19 @@ fn wifi_scan(app: &Arc<App>, req: &Req, s: &Session) -> Resp {
 pub const EXPORT_CHUNK: usize = 32 * 1024;
 pub const EXPORT_MAX: usize = 4 * 1024 * 1024;
 
-/// Only tikontrol's own text exports: `[disk/]tik-<name>.rsc`. Full `.backup` files hold passwords
-/// and keys, so they never leave the router through tikontrol.
+/// Only tikontrol's own text exports: `[disk/]tik-<name>.rsc`, and exactly the public certificate of
+/// tikontrol's OpenVPN CA (`cert_export_tik-ovpn-ca.crt`). Full `.backup` files, `.key` and `.p12` files
+/// hold passwords and keys, so they never leave the router through tikontrol.
 pub fn export_name(n: &str) -> Result<&str, String> {
+    if n == OVPN_CA_FILE {
+        return Ok(n);
+    }
     let (dir, file) = n.rsplit_once('/').map_or(("", n), |(d, f)| (d, f));
     let dir_ok = dir.is_empty() || (dir.len() <= 32 && dir.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'-' || b == b'_'));
     let stem = file.strip_prefix("tik-").and_then(|f| f.strip_suffix(".rsc"));
     match stem {
         Some(st) if dir_ok && !st.is_empty() && st.len() <= 40 && st.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'-' || b == b'_') => Ok(n),
-        _ => Err("only tikontrol's own exports (tik-*.rsc) can be downloaded".into()),
+        _ => Err(format!("only tikontrol's own exports (tik-*.rsc) and {OVPN_CA_FILE} can be downloaded")),
     }
 }
 
@@ -183,9 +188,18 @@ pub fn read_file(r: &mut dyn crate::ros::conn::Router, name: &str) -> Result<Vec
     }
 }
 
-/// GET /api/v1/tools/export?name=tik-auto.rsc: downloads one of tikontrol's configuration exports.
-/// Admin only, read over the reader connection. RouterOS leaves secrets out of `/export` unless
-/// `show-sensitive` is given, which tikontrol never does.
+/// A certificate download must be exactly PEM certificates: anything else (a private key, an encrypted
+/// key, a file someone replaced) is refused, so a key can't leave the router even by mistake.
+pub fn public_pem(b: &[u8]) -> bool {
+    let Ok(t) = std::str::from_utf8(b) else { return false };
+    let t = t.trim();
+    let armour = |l: &str| l == "-----BEGIN CERTIFICATE-----" || l == "-----END CERTIFICATE-----";
+    t.starts_with("-----BEGIN CERTIFICATE-----") && t.ends_with("-----END CERTIFICATE-----") && t.lines().map(str::trim).all(|l| armour(l) || l.bytes().all(|c| c.is_ascii_alphanumeric() || b"+/=".contains(&c)))
+}
+
+/// GET /api/v1/tools/export?name=tik-auto.rsc: downloads one of tikontrol's configuration exports, or
+/// the public certificate of its OpenVPN CA. Admin only, read over the reader connection. RouterOS
+/// leaves secrets out of `/export` unless `show-sensitive` is given, which tikontrol never does.
 fn export(app: &Arc<App>, req: &Req, s: &Session) -> Resp {
     if req.method != "GET" {
         return Resp::error(405, "use GET");
@@ -206,6 +220,8 @@ fn export(app: &Arc<App>, req: &Req, s: &Session) -> Resp {
     }
     match app.open(As::Reader).and_then(|mut r| read_file(&mut *r, &name)) {
         Ok(b) if b.is_empty() => Resp::error(404, "the file is empty or the reader may not read files"),
+        Ok(b) if name == OVPN_CA_FILE && !public_pem(&b) => Resp::error(502, "the file is not a plain PEM certificate, so it was not downloaded"),
+        Ok(b) if name == OVPN_CA_FILE => Resp::new(200, "application/x-pem-file", b).with("content-disposition", format!("attachment; filename=\"{OVPN_CA_FILE}\"")).with("cache-control", "no-store".into()).with("x-content-type-options", "nosniff".into()),
         Ok(b) => {
             let file = name.rsplit('/').next().unwrap_or("tik-export.rsc").to_string();
             Resp::new(200, "text/plain; charset=utf-8", b).with("content-disposition", format!("attachment; filename=\"{file}\"")).with("cache-control", "no-store".into()).with("x-content-type-options", "nosniff".into())
@@ -340,7 +356,8 @@ mod tests {
     fn exports_only_tik_rsc_files_and_read_in_chunks() {
         assert!(export_name("tik-auto.rsc").is_ok());
         assert!(export_name("usb1/tik-2026-11-10.rsc").is_ok());
-        for bad in ["tik-auto.backup", "user.rsc", "../tik-a.rsc", "a/b/tik-a.rsc", "tik-.rsc", "tik-a b.rsc", "tik-a\".rsc"] {
+        assert!(export_name("cert_export_tik-ovpn-ca.crt").is_ok());
+        for bad in ["tik-auto.backup", "user.rsc", "../tik-a.rsc", "a/b/tik-a.rsc", "tik-.rsc", "tik-a b.rsc", "tik-a\".rsc", "cert_export_tik-ovpn-ca.key", "cert_export_tik-ovpn-ca.p12", "cert_export_tik-ovpn-server.crt", "cert_export_other.crt", "usb1/cert_export_tik-ovpn-ca.crt", "cert_export_tik-ovpn-ca.crt.key", "Cert_export_tik-ovpn-ca.crt", "cert_export_tik-ovpn-ca.crt ", "../cert_export_tik-ovpn-ca.crt"] {
             assert!(export_name(bad).is_err(), "{bad}");
         }
         struct Files(Vec<String>);
@@ -362,6 +379,26 @@ mod tests {
         let (c, csrf) = admin_session(&app);
         assert_eq!(handle(&app, with_session(req("GET", "/api/v1/tools/export?name=tik-auto.backup", ""), &c, &csrf)).status, 400);
         assert_eq!(handle(&app, with_session(req("POST", "/api/v1/tools/export?name=tik-auto.rsc", ""), &c, &csrf)).status, 405);
+    }
+
+    #[test]
+    fn only_a_public_pem_certificate_is_handed_out() {
+        let cert = "-----BEGIN CERTIFICATE-----\nMIIBszCCAVmgAwIBAgIUZm9vYmFy\nZm9vYmFyYmF6+/==\n-----END CERTIFICATE-----\n";
+        assert!(public_pem(cert.as_bytes()));
+        assert!(public_pem(format!("{cert}{cert}").as_bytes()), "a chain is fine");
+        assert!(public_pem(cert.replace('\n', "\r\n").as_bytes()), "CRLF line ends");
+        let key = "-----BEGIN RSA PRIVATE KEY-----\nMIIEowIBAAKCAQEA\n-----END RSA PRIVATE KEY-----\n";
+        let bad: [String; 7] = [key.into(), format!("{cert}{key}"), format!("{key}{cert}"), "-----BEGIN ENCRYPTED PRIVATE KEY-----\nx\n-----END ENCRYPTED PRIVATE KEY-----".into(), "-----BEGIN CERTIFICATE-----\n<script>\n-----END CERTIFICATE-----".into(), "hello".into(), String::new()];
+        for b in bad {
+            assert!(!public_pem(b.as_bytes()), "{b}");
+        }
+        assert!(!public_pem(&[0xff, 0xfe]));
+        // .key and .p12 names are refused before anything reaches the router; signed-out callers too
+        let app = Arc::new(app_with_router("read,api,test", Mode::ReadOnly));
+        let (c, csrf) = admin_session(&app);
+        assert_eq!(handle(&app, with_session(req("GET", "/api/v1/tools/export?name=cert_export_tik-ovpn-ca.key", ""), &c, &csrf)).status, 400);
+        assert_eq!(handle(&app, with_session(req("GET", "/api/v1/tools/export?name=cert_export_tik-ovpn-ca.p12", ""), &c, &csrf)).status, 400);
+        assert_eq!(handle(&app, req("GET", "/api/v1/tools/export?name=cert_export_tik-ovpn-ca.crt", "")).status, 401);
     }
 
     #[test]

@@ -1,6 +1,8 @@
 <script lang="ts">
-  import { raw, internet, clients, parseUptime, dur } from '../../lib/data'
+  import { raw, internet, clients, parseUptime, dur, isBackend } from '../../lib/data'
   import { review } from '../../lib/apply.svelte'
+  import { api, ApiError } from '../../lib/backend'
+  import { CA_CERT, CA_FILE, CN_RE, SERVER_CERT, ovpnProfile, profileName, remoteHost, validHost } from '../../lib/ovpn'
   import Icon from '../../lib/Icon.svelte'
   import Section from '../../lib/ui/Section.svelte'
   import Field from '../../lib/ui/Field.svelte'
@@ -52,6 +54,57 @@
   const noCert = (o: any) => !o.certificate || o.certificate === 'none'
   let ovpn = $state({ on: ovpns.some(ovpnOn) })
   const ovpnMissing = $derived(ovpns.length === 0 ? 'There is no OpenVPN server on this router yet.' : ovpns.every(noCert) ? 'The OpenVPN server has no certificate, so it can\'t accept connections. It needs a certificate authority (CA) and a server certificate signed by it.' : '')
+
+  // tikontrol's own certificates (ovpn-certificates intent): a CA and a server certificate, tagged tik:ovpn-*.
+  // Names that exist without our tag were made by hand: tikontrol leaves them alone.
+  const certs: any[] = raw.certificates ?? []
+  const ourCert = (name: string, tag: string) => certs.find((c) => c.name === name && c.comment === tag)
+  const ovpnCa = ourCert(CA_CERT, 'tik:ovpn-ca')
+  const ovpnSrvCert = ourCert(SERVER_CERT, 'tik:ovpn-server')
+  const certClash = !(ovpnCa && ovpnSrvCert) && certs.some((c) => [CA_CERT, SERVER_CERT].includes(c.name) || ['tik:ovpn-ca', 'tik:ovpn-server'].includes(c.comment))
+  // the server the profile is for: the one using our certificate, else the first
+  const ovpnSrv: any = ovpns.find((o) => o.certificate === SERVER_CERT) ?? ovpns[0] ?? {}
+  const usesOurs = ovpns.some((o) => o.certificate === SERVER_CERT)
+  const guessHost = remoteHost(raw.cloud)
+  let cert = $state({ cn: guessHost, keySize: 2048, use: ovpns.length > 0 && ovpns.every(noCert) })
+  const certErr = $derived(cert.cn && !CN_RE.test(cert.cn) ? 'Name: letters, digits, . and - only (the router\'s DDNS name or public address)' : '')
+  const useOn = (name: string) => ({ kind: 'ovpn-server-certificate', name })
+  const useCmd = (name: string) => `/interface/ovpn-server/server/set ${name ? `[find name="${name}"] ` : ''}certificate=${SERVER_CERT}`
+  function certReview() {
+    const make = { kind: 'ovpn-certificates', common_name: cert.cn, key_size: +cert.keySize }
+    const cmds = [
+      `/certificate/add name=${CA_CERT} common-name=tikontrol-ovpn-ca key-size=${cert.keySize} days-valid=3650 key-usage=key-cert-sign,crl-sign comment=tik:ovpn-ca`,
+      `/certificate/sign [find comment="tik:ovpn-ca"]`,
+      `/certificate/add name=${SERVER_CERT} common-name=${cert.cn} key-size=${cert.keySize} days-valid=3650 key-usage=digital-signature,key-encipherment,tls-server comment=tik:ovpn-server`,
+      `/certificate/sign [find comment="tik:ovpn-server"] ca=${CA_CERT}`,
+      `/certificate/export-certificate [find comment="tik:ovpn-ca"] type=pem file-name=cert_export_${CA_CERT}`,
+    ]
+    if (cert.use && ovpns.length) review('OpenVPN certificates', [...cmds, useCmd(ovpnName)], { kind: 'batch', title: 'OpenVPN certificates', intents: [make, useOn(ovpnName)] })
+    else review('OpenVPN certificates', cmds, make)
+  }
+
+  // client profile: built here from the server settings and the CA's public certificate (fetched from
+  // the router through tikontrol), then offered as a download. It holds no password and no key.
+  let prof = $state({ remote: guessHost, err: '', busy: false, missing: false })
+  async function downloadProfile() {
+    prof.err = ''
+    prof.missing = false
+    prof.busy = true
+    try {
+      const pem = await api<string>(`/tools/export?name=${encodeURIComponent(CA_FILE)}`)
+      const text = ovpnProfile({ remote: prof.remote, server: ovpnSrv, caPem: typeof pem === 'string' ? pem : '' })
+      const a = document.createElement('a')
+      a.href = URL.createObjectURL(new Blob([text], { type: 'application/x-openvpn-profile' }))
+      a.download = profileName(prof.remote)
+      a.click()
+      setTimeout(() => URL.revokeObjectURL(a.href), 10_000)
+    } catch (e) {
+      prof.err = (e as Error).message
+      // the router couldn't read the file (deleted, or never written): offer to write it again
+      prof.missing = e instanceof ApiError && (e.status === 404 || e.status === 502)
+    } finally { prof.busy = false }
+  }
+  const reexport = () => review(`Export the public certificate of ${CA_CERT}`, [`/file/remove [find name="${CA_FILE}"]`, `/certificate/export-certificate [find comment="tik:ovpn-ca"] type=pem file-name=cert_export_${CA_CERT}`], { kind: 'export-ovpn-ca' })
 
   // L2TP always runs over IPsec: enabling sets use-ipsec=required with a pre-shared secret.
   // Secrets are typed or generated here, sent once in the intent, and masked in every preview.
@@ -153,20 +206,40 @@
   <div class="r"><button class="btn primary" disabled={!l2Ok} onclick={l2Review}>Review L2TP</button></div>
 </Section>
 
-<Section title="OpenVPN server" desc="For devices with an OpenVPN app. It needs a certificate on the router before it can accept connections." ros="/interface/ovpn-server/server/print">
+<Section title="OpenVPN server" desc="For devices with an OpenVPN app. It needs a certificate on the router before it can accept connections." ros="/interface/ovpn-server/server/print proplist=name,disabled,enabled,port,protocol,certificate,auth,cipher,mode,require-client-certificate; /certificate/print proplist=name,common-name,invalid-after,trusted,comment">
   {#each ovpns as o}
     <Field label={o.name ? `Server ${o.name}` : 'Server'}><span class="pill" class:ok={ovpnOn(o) && !noCert(o)}>{ovpnOn(o) ? 'On' : 'Off'}</span> <span class="muted small">{o.protocol ?? 'tcp'} {o.port ?? 1194} · certificate: {noCert(o) ? 'none' : o.certificate}</span></Field>
   {/each}
   {#if ovpnMissing}
-    <div class="note" role="note">
-      <b>What's missing:</b> {ovpnMissing}
-      tikontrol doesn't create certificates yet. In RouterOS: add a CA certificate and a server certificate under System → Certificates, sign the CA, then sign the server certificate with it, and pick the server certificate on the OpenVPN server. Devices then need the CA certificate (export it) and a VPN user below.
-      <details><summary>Example commands</summary><pre class="cmds">/certificate/add name=vpn-ca common-name=vpn-ca key-usage=key-cert-sign,crl-sign days-valid=3650
-/certificate/sign vpn-ca
-/certificate/add name=vpn-server common-name=vpn.example.com key-usage=digital-signature,key-encipherment,tls-server days-valid=3650
-/certificate/sign vpn-server ca=vpn-ca
-/interface/ovpn-server/server/set certificate=vpn-server require-client-certificate=no</pre></details>
-    </div>
+    <div class="note" role="note"><b>What's missing:</b> {ovpnMissing}{#if ovpns.length && !(ovpnCa && ovpnSrvCert)} tikontrol can create them below.{/if}</div>
+  {/if}
+  {#if ovpnCa && ovpnSrvCert}
+    <Field label="Certificates"><span class="mono small">{CA_CERT}</span> <span class="muted small">and</span> <span class="mono small">{SERVER_CERT}</span> <span class="muted small">for {ovpnSrvCert['common-name'] ?? '—'}{#if ovpnSrvCert['invalid-after']}, valid until {ovpnSrvCert['invalid-after']}{/if}</span></Field>
+    {#if ovpns.length && !usesOurs}
+      <div class="r"><button class="btn" onclick={() => review(`Use ${SERVER_CERT} on the OpenVPN server`, [useCmd(ovpnName)], useOn(ovpnName))}>Use <span class="mono">{SERVER_CERT}</span> on the server</button></div>
+    {/if}
+    {#if ovpns.length}
+      <Field label="Server address" help="The router's DDNS name or public address, as devices reach it from the internet">
+        <input type="text" bind:value={prof.remote} placeholder="vpn.example.net" aria-label="OpenVPN server address" aria-invalid={!!prof.remote && !validHost(prof.remote.trim())} />
+      </Field>
+      {#if ovpnSrv['require-client-certificate']}<div class="muted small" role="note">The server requires client certificates; this profile logs in with a VPN user only. Set require-client-certificate=no in RouterOS for it to connect.</div>{/if}
+      {#if prof.err}<div class="muted small" role="alert">{prof.err}{#if prof.missing} <button class="btn small" onclick={reexport}>Export the CA certificate again</button>{/if}</div>{/if}
+      <div class="r">
+        {#if !isBackend}<span class="muted small">Downloads need the tikontrol server. </span>{/if}
+        <button class="btn primary" disabled={!isBackend || prof.busy || !validHost(prof.remote.trim())} onclick={downloadProfile}><Icon name="download" size={14} /> Download client profile</button>
+      </div>
+      <div class="muted small">A .ovpn file with the server address, its settings and the CA's public certificate. It holds no password: the OpenVPN app asks for a VPN user (below) when connecting.</div>
+    {/if}
+  {:else if certClash}
+    <div class="note" role="note">This router has certificates named <span class="mono">{CA_CERT}</span> or <span class="mono">{SERVER_CERT}</span> that tikontrol didn't create, so it doesn't touch them. Remove or rename them in RouterOS (/certificate) to create new ones here, or pick a certificate on the server in RouterOS.</div>
+  {:else}
+    <Field label="Server name" help="Common name of the server certificate: the router's DDNS name or public address. Letters, digits, . and -">
+      <input type="text" bind:value={cert.cn} placeholder="vpn.example.net" aria-label="Server certificate common name" aria-invalid={!!certErr} />
+    </Field>
+    <Field label="Key size" help="4096 bits can take minutes to sign on small routers"><select bind:value={cert.keySize} aria-label="Key size"><option value={2048}>2048 bits</option><option value={4096}>4096 bits</option></select></Field>
+    {#if ovpns.length}<Field label="Use it on the server" help={ovpnName ? `Sets the certificate on ${ovpnName} in the same change` : 'Sets the certificate on the OpenVPN server in the same change'}><Toggle bind:checked={cert.use} label="Use on the server" /></Field>{/if}
+    {#if certErr}<div class="muted small" role="alert">{certErr}</div>{/if}
+    <div class="r"><button class="btn primary" disabled={!cert.cn || !!certErr} onclick={certReview}>Create certificates</button></div>
   {/if}
   {#if ovpns.length}
     <Field label="OpenVPN"><Toggle bind:checked={ovpn.on} label="OpenVPN" /></Field>
@@ -251,7 +324,6 @@
   .small { font-size: 12px; } .tiny { font-size: 11px; word-break: break-all; }
   .nowrap { white-space: nowrap; }
   .note { border: 1px solid var(--line); border-radius: 8px; padding: 10px; font-size: 13px; line-height: 1.5; margin: 8px 0; }
-  .note summary { cursor: pointer; margin-top: 6px; }
   .sr { position: absolute; left: 0; top: 0; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
   @media (max-width: 800px) { .cols { grid-template-columns: minmax(0, 1fr); } }
 </style>

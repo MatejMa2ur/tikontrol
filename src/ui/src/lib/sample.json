@@ -1248,7 +1248,28 @@
  "trafficFlow": {
   "enabled": false
  },
- "ovpn": [],
+ "ovpn": [
+  {
+   ".id": "*1",
+   "name": "ovpn1",
+   "disabled": true,
+   "port": 1194,
+   "protocol": "tcp",
+   "certificate": "none",
+   "auth": [
+    "sha1",
+    "sha256"
+   ],
+   "cipher": [
+    "aes128-cbc",
+    "aes256-cbc",
+    "aes256-gcm"
+   ],
+   "mode": "ip",
+   "require-client-certificate": false
+  }
+ ],
+ "certificates": [],
  "l2tp": {
   "enabled": false,
   "use-ipsec": "no"

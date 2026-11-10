@@ -140,7 +140,10 @@ const QUERIES: &[Q] = &[
     q("health", "/system/health/print", &["name", "value", "type"]),
     one("trafficFlow", "/ip/traffic-flow/print", &["enabled"]),
     // 7.17+ lists several servers with `disabled`; older versions have one with `enabled`
-    q("ovpn", "/interface/ovpn-server/server/print", &["name", "disabled", "enabled", "port", "protocol", "certificate"]),
+    // auth, cipher and mode shape the client profile the VPN page builds
+    q("ovpn", "/interface/ovpn-server/server/print", &["name", "disabled", "enabled", "port", "protocol", "certificate", "auth", "cipher", "mode", "require-client-certificate"]).arrays(&["auth", "cipher"]),
+    // names and dates only (never key material); the VPN page looks for tikontrol's tik-ovpn-* pair
+    q("certificates", "/certificate/print", &["name", "common-name", "invalid-after", "trusted", "comment"]),
     // never ipsec-secret
     one("l2tp", "/interface/l2tp-server/server/print", &["enabled", "use-ipsec"]),
     // connected L2TP/OpenVPN users; names and caller-id come from remote devices: plain text only

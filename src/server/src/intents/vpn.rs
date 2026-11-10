@@ -7,6 +7,12 @@
 //! sent to the router once: they are masked in every CLI text (`apply::SECRET_KEYS`), never echoed in
 //! errors, and never part of an inverse. tikontrol never reads them back, so an inverse that would need
 //! an old secret restores only the non-secret fields, and removing a VPN user can't be reverted.
+//!
+//! OpenVPN certificates (`ovpn-certificates`): a CA and a server certificate are created and signed on
+//! the router, so their private keys never leave it; only the CA's public certificate is exported (no
+//! passphrase, so RouterOS writes no key) for the client profile the VPN page builds. The plan is
+//! revertible: nothing else can use the new certificates before the change is kept, so the inverse
+//! removes the export and both certificates by their tik: tags (refused if those names or tags exist).
 
 use crate::apply::{cidr, dns_name, ipv4, plan, ros_name, wg_key, yn, Op, Plan, Risk};
 use crate::ros::cmd::Cmd;
@@ -72,17 +78,43 @@ enum V {
         endpoint_port: u16,
         remote_subnets: Vec<String>,
     },
+    /// A CA (`tik-ovpn-ca`) and a server certificate (`tik-ovpn-server`) for the OpenVPN server, signed
+    /// on the router, plus an export of the CA's public certificate for client profiles.
+    OvpnCertificates {
+        common_name: String,
+        #[serde(default)]
+        ca_common_name: String,
+        #[serde(default = "rsa_bits")]
+        key_size: u16,
+        #[serde(default = "ten_years")]
+        days_valid: u16,
+    },
+    /// Points an OpenVPN server at `tik-ovpn-server`; usually batched after `ovpn-certificates`.
+    OvpnServerCertificate {
+        #[serde(default)]
+        name: String,
+    },
+    /// Writes the CA's public certificate to `cert_export_tik-ovpn-ca.crt` again (it was deleted).
+    ExportOvpnCa {},
 }
 
 fn yes() -> bool {
     true
 }
 
+fn rsa_bits() -> u16 {
+    2048
+}
+
+fn ten_years() -> u16 {
+    3650
+}
+
 fn default_profile() -> String {
     "default-encryption".into()
 }
 
-const KINDS: &[&str] = &["wireguard-server", "remove-wireguard-peer", "wireguard-peer-enabled", "back-to-home", "vpn-server", "wireguard-client", "site-to-site", "vpn-user", "remove-vpn-user"];
+const KINDS: &[&str] = &["wireguard-server", "remove-wireguard-peer", "wireguard-peer-enabled", "back-to-home", "vpn-server", "wireguard-client", "site-to-site", "vpn-user", "remove-vpn-user", "ovpn-certificates", "ovpn-server-certificate", "export-ovpn-ca"];
 
 pub fn compile(v: &Value, r: &mut dyn Router) -> Option<Result<Plan, String>> {
     let kind = v.get("kind")?.as_str()?;
@@ -144,7 +176,34 @@ fn accept_udp(r: &mut dyn Router, port: &str, c: &str) -> Result<Op, String> {
 }
 
 const SECRETS: &str = "/ppp/secret";
-const NO_CERT: &str = "the OpenVPN server has no certificate, so it can't accept connections: create and sign a CA and a server certificate in RouterOS (/certificate) and pick it on the server first";
+const NO_CERT: &str = "the OpenVPN server has no certificate, so it can't accept connections: create the certificates first (VPN, OpenVPN server, Create certificates)";
+
+const CERTS: &str = "/certificate";
+pub const OVPN_CA: &str = "tik-ovpn-ca";
+pub const OVPN_SERVER_CERT: &str = "tik-ovpn-server";
+const OVPN_CA_TAG: &str = "tik:ovpn-ca";
+const OVPN_SERVER_TAG: &str = "tik:ovpn-server";
+/// What `/certificate/export-certificate tik-ovpn-ca file-name=cert_export_tik-ovpn-ca` writes (PEM, `.crt`
+/// added by RouterOS). Without `export-passphrase` only the public certificate is written, never the key.
+pub const OVPN_CA_FILE: &str = "cert_export_tik-ovpn-ca.crt";
+
+/// Certificate common names: 1-64 letters, digits, `.` and `-`, starting and ending with a letter or digit
+/// (a host name, an IPv4 address or a plain label).
+fn common_name(s: &str) -> Result<String, String> {
+    let s = s.trim();
+    let b = s.as_bytes();
+    let ok = (1..=64).contains(&b.len()) && b.iter().all(|c| c.is_ascii_alphanumeric() || *c == b'.' || *c == b'-') && b[0].is_ascii_alphanumeric() && b[b.len() - 1].is_ascii_alphanumeric();
+    ok.then(|| s.to_string()).ok_or_else(|| "invalid common name (1-64 letters, digits, . and -)".into())
+}
+
+/// The CA export: an old file of ours is removed first (export-certificate won't overwrite it), then the
+/// public certificate is written in PEM. Never `export-passphrase`: with one, RouterOS also writes the key.
+fn export_ca_ops() -> Vec<Op> {
+    vec![
+        Op::on("/file", "remove", "name", OVPN_CA_FILE, vec![]),
+        Op::on(CERTS, "export-certificate", "comment", OVPN_CA_TAG, vec![("type", "pem".into()), ("file-name", OVPN_CA_FILE.trim_end_matches(".crt").into())]),
+    ]
+}
 
 /// VPN user names: 1-32 of [A-Za-z0-9._-], starting with a letter or digit.
 fn vpn_user(s: &str) -> Result<String, String> {
@@ -406,6 +465,78 @@ fn build(x: V, r: &mut dyn Router) -> Result<Plan, String> {
             p.warnings.push("The other side needs this router's public key (shown after the change) and the same tunnel subnet.".into());
             Ok(p)
         }
+        V::OvpnCertificates { common_name: cn, ca_common_name, key_size, days_valid } => {
+            let cn = common_name(&cn)?;
+            let ca_cn = if ca_common_name.trim().is_empty() { "tikontrol-ovpn-ca".to_string() } else { common_name(&ca_common_name)? };
+            if !matches!(key_size, 2048 | 4096) {
+                return Err("key size must be 2048 or 4096".into());
+            }
+            if !(30..=3650).contains(&days_valid) {
+                return Err("days valid must be 30-3650".into());
+            }
+            // the undo removes by tag, so a certificate that already has our name or tag (made by hand,
+            // renamed, or left from an earlier run) must not exist: it would be deleted on revert
+            let have = r.run(&Cmd::new("/certificate/print").proplist(&["name", "comment"]))?;
+            let ours = [OVPN_CA, OVPN_SERVER_CERT, OVPN_CA_TAG, OVPN_SERVER_TAG];
+            if have.iter().any(|c| ["name", "comment"].iter().any(|k| c.get(*k).is_some_and(|v| ours.contains(&v.as_str())))) {
+                return Err(format!("certificates {OVPN_CA} / {OVPN_SERVER_CERT} already exist on this router: use them, or remove them in RouterOS (/certificate) first"));
+            }
+            let (bits, days) = (key_size.to_string(), days_valid.to_string());
+            let cert = |name: &str, cn: &str, usage: &str, tag: &str| Op::add(CERTS, vec![("name", name.into()), ("common-name", cn.into()), ("key-size", bits.clone()), ("days-valid", days.clone()), ("key-usage", usage.into()), ("comment", tag.into())]);
+            let mut ops = vec![
+                cert(OVPN_CA, &ca_cn, "key-cert-sign,crl-sign", OVPN_CA_TAG),
+                Op::on(CERTS, "sign", "comment", OVPN_CA_TAG, vec![]),
+                cert(OVPN_SERVER_CERT, &cn, "digital-signature,key-encipherment,tls-server", OVPN_SERVER_TAG),
+                Op::on(CERTS, "sign", "comment", OVPN_SERVER_TAG, vec![("ca", OVPN_CA.into())]),
+            ];
+            ops.extend(export_ca_ops());
+            // the server certificate goes before its CA
+            let undo = vec![Op::on("/file", "remove", "name", OVPN_CA_FILE, vec![]), rm(CERTS, OVPN_SERVER_TAG), rm(CERTS, OVPN_CA_TAG)];
+            let mut p = plan(format!("OpenVPN certificates for {cn}"), Risk::Medium, ops, undo);
+            p.warnings.push(format!("Creates a private certificate authority ({OVPN_CA}) and a server certificate ({OVPN_SERVER_CERT}, valid {days_valid} days) on the router. Their private keys stay on the router; only the CA's public certificate is written to {OVPN_CA_FILE} for client profiles."));
+            p.warnings.push(if key_size > 2048 { "Signing 4096-bit keys can take minutes on small routers: keep this page open until it finishes, and keep the change soon after.".to_string() } else { "Signing takes a few seconds per certificate, longer on small routers.".to_string() });
+            p.warnings.push("If the change isn't kept, the automatic revert deletes both certificates and their keys: client profiles downloaded in the meantime stop working, and new certificates must be created again (signing can't be undone in any other way).".into());
+            Ok(p)
+        }
+        V::OvpnServerCertificate { name } => {
+            let path = "/interface/ovpn-server/server";
+            let rows = r.run(&Cmd::new("/interface/ovpn-server/server/print").proplist(&["name", "certificate", "require-client-certificate"]))?;
+            let named = rows.iter().any(|x| x.contains_key("name"));
+            let (cur, find) = if named {
+                let n = ifname(&name).map_err(|_| "pick the OpenVPN server by name")?;
+                (rows.iter().find(|x| x.get("name") == Some(&n)).ok_or("no OpenVPN server with that name")?, Some(n))
+            } else {
+                (rows.first().ok_or("no OpenVPN server on this router")?, None)
+            };
+            let old = cur.get("certificate").filter(|c| !c.is_empty()).cloned().unwrap_or_else(|| "none".into());
+            if old == OVPN_SERVER_CERT {
+                return Err(format!("the OpenVPN server already uses {OVPN_SERVER_CERT}"));
+            }
+            let needs_client_cert = cur.get("require-client-certificate").is_some_and(|v| is_true(v));
+            let set = |c: String| match &find {
+                Some(n) => Op::on(path, "set", "name", n, vec![("certificate", c)]),
+                None => Op { path, verb: "set", find: None, args: vec![("certificate", c)] },
+            };
+            let label = find.as_ref().map_or("the OpenVPN server".to_string(), |n| format!("OpenVPN server {n}"));
+            let mut p = plan(format!("Use {OVPN_SERVER_CERT} on {label}"), Risk::Medium, vec![set(OVPN_SERVER_CERT.into())], vec![set(old.clone())]);
+            if old != "none" {
+                p.warnings.push(format!("Replaces the certificate {old}: devices that trust only its CA need a new profile."));
+            }
+            p.warnings.push("Users connected over OpenVPN may be disconnected while the server switches certificates.".into());
+            if needs_client_cert {
+                p.warnings.push("The server requires client certificates, but tikontrol's client profile logs in with a VPN user only: set require-client-certificate=no in RouterOS, or devices can't connect.".into());
+            }
+            Ok(p)
+        }
+        V::ExportOvpnCa {} => {
+            let have = r.run(&Cmd::new("/certificate/print").proplist(&["name", "comment"]).query("comment", OVPN_CA_TAG))?;
+            if !have.iter().any(|c| c.get("name").is_some_and(|n| n == OVPN_CA)) {
+                return Err(format!("there is no {OVPN_CA} certificate created by tikontrol on this router"));
+            }
+            let mut p = plan(format!("Export the public certificate of {OVPN_CA}"), Risk::Low, export_ca_ops(), vec![Op::on("/file", "remove", "name", OVPN_CA_FILE, vec![])]);
+            p.warnings.push(format!("Writes only the public certificate to {OVPN_CA_FILE}, never the private key."));
+            Ok(p)
+        }
     }
 }
 
@@ -594,6 +725,128 @@ mod tests {
         assert!(p.cli()[2].contains("allowed-address=10.255.0.0/30,10.0.1.0/24"));
         assert!(p.cli().iter().any(|c| c == "/ip/route/add dst-address=10.0.1.0/24 gateway=s2s comment=tik:s2s:s2s"));
         assert_eq!(p.risk, Risk::High);
+    }
+
+    fn certs(rows: Vec<Row>) -> Fake {
+        let mut f = Fake::default();
+        f.answers.insert("/certificate/print".into(), Ok(rows));
+        f
+    }
+
+    #[test]
+    fn ovpn_certificates_are_created_signed_exported_and_removed_on_revert() {
+        let mut f = certs(vec![row(&[("name", "other-cert"), ("comment", "made by hand")])]);
+        let p = compile_value(&json!({"kind": "ovpn-certificates", "common_name": "vpn.example.net"}), &mut f).unwrap();
+        assert_eq!(
+            p.cli(),
+            [
+                "/certificate/add name=tik-ovpn-ca common-name=tikontrol-ovpn-ca key-size=2048 days-valid=3650 key-usage=key-cert-sign,crl-sign comment=tik:ovpn-ca",
+                r#"/certificate/sign [find comment="tik:ovpn-ca"]"#,
+                "/certificate/add name=tik-ovpn-server common-name=vpn.example.net key-size=2048 days-valid=3650 key-usage=digital-signature,key-encipherment,tls-server comment=tik:ovpn-server",
+                r#"/certificate/sign [find comment="tik:ovpn-server"] ca=tik-ovpn-ca"#,
+                r#"/file/remove [find name="cert_export_tik-ovpn-ca.crt"]"#,
+                r#"/certificate/export-certificate [find comment="tik:ovpn-ca"] type=pem file-name=cert_export_tik-ovpn-ca"#,
+            ]
+        );
+        // server before CA, the exported file too
+        assert_eq!(p.undo_cli(), [r#"/file/remove [find name="cert_export_tik-ovpn-ca.crt"]"#, r#"/certificate/remove [find comment="tik:ovpn-server"]"#, r#"/certificate/remove [find comment="tik:ovpn-ca"]"#]);
+        assert!(p.revertible);
+        assert_eq!(p.risk, Risk::Medium);
+        assert!(p.warnings.iter().any(|w| w.contains("deletes both certificates")));
+        // the key is never exported: no passphrase anywhere
+        assert!(p.cli().iter().all(|c| !c.contains("passphrase")));
+        assert!(revert_script("c", &p).is_ok());
+        // the existence check reads names and tags only
+        assert_eq!(f.seen[0], ["/certificate/print", "=.proplist=name,comment"]);
+        let p = compile_value(&json!({"kind": "ovpn-certificates", "common_name": "203.0.113.7", "ca_common_name": "Home-CA", "key_size": 4096, "days_valid": 825}), &mut Fake::default()).unwrap();
+        assert!(p.cli()[0].contains("common-name=Home-CA key-size=4096 days-valid=825"));
+        assert!(p.warnings.iter().any(|w| w.contains("minutes")));
+    }
+
+    #[test]
+    fn ovpn_certificates_refuse_existing_names_or_tags() {
+        for existing in [row(&[("name", "tik-ovpn-ca")]), row(&[("name", "tik-ovpn-server")]), row(&[("name", "renamed"), ("comment", "tik:ovpn-ca")]), row(&[("name", "renamed"), ("comment", "tik:ovpn-server")])] {
+            let e = compile_value(&json!({"kind": "ovpn-certificates", "common_name": "vpn.example.net"}), &mut certs(vec![existing])).unwrap_err();
+            assert!(e.contains("already exist"), "{e}");
+        }
+        // no /certificate menu: the read error is passed on, nothing is planned
+        let mut f = Fake::default();
+        f.answers.insert("/certificate/print".into(), Err("no such command prefix".into()));
+        assert!(compile_value(&json!({"kind": "ovpn-certificates", "common_name": "vpn.example.net"}), &mut f).is_err());
+    }
+
+    #[test]
+    fn ovpn_certificate_input_is_validated() {
+        let bad = [
+            json!({"kind": "ovpn-certificates", "common_name": ""}),
+            json!({"kind": "ovpn-certificates", "common_name": "vpn example"}),
+            json!({"kind": "ovpn-certificates", "common_name": "vpn\" key-usage=x"}),
+            json!({"kind": "ovpn-certificates", "common_name": "vpn;/system/reboot"}),
+            json!({"kind": "ovpn-certificates", "common_name": "vpn_host"}),
+            json!({"kind": "ovpn-certificates", "common_name": "-vpn"}),
+            json!({"kind": "ovpn-certificates", "common_name": "vpn."}),
+            json!({"kind": "ovpn-certificates", "common_name": "ünï.example"}),
+            json!({"kind": "ovpn-certificates", "common_name": "a".repeat(65)}),
+            json!({"kind": "ovpn-certificates", "common_name": "vpn", "ca_common_name": "CA [x]"}),
+            json!({"kind": "ovpn-certificates", "common_name": "vpn", "key_size": 1024}),
+            json!({"kind": "ovpn-certificates", "common_name": "vpn", "key_size": 8192}),
+            json!({"kind": "ovpn-certificates", "common_name": "vpn", "days_valid": 0}),
+            json!({"kind": "ovpn-certificates", "common_name": "vpn", "days_valid": 3651}),
+            json!({"kind": "ovpn-certificates", "common_name": "vpn", "export_passphrase": "x"}),
+        ];
+        for b in bad {
+            assert!(compile_value(&b, &mut Fake::default()).is_err(), "{b}");
+        }
+    }
+
+    #[test]
+    fn ovpn_server_certificate_restores_the_old_one() {
+        let mut f = Fake::default();
+        f.answers.insert("/interface/ovpn-server/server/print".into(), Ok(vec![row(&[("name", "ovpn1"), ("certificate", "none"), ("require-client-certificate", "false")])]));
+        let p = compile_value(&json!({"kind": "ovpn-server-certificate", "name": "ovpn1"}), &mut f).unwrap();
+        assert_eq!(p.cli(), [r#"/interface/ovpn-server/server/set [find name="ovpn1"] certificate=tik-ovpn-server"#]);
+        assert_eq!(p.undo_cli(), [r#"/interface/ovpn-server/server/set [find name="ovpn1"] certificate=none"#]);
+        assert!(!p.warnings.iter().any(|w| w.contains("require-client-certificate")));
+        assert!(compile_value(&json!({"kind": "ovpn-server-certificate", "name": "nope"}), &mut f).unwrap_err().contains("no OpenVPN server"));
+        assert!(compile_value(&json!({"kind": "ovpn-server-certificate", "name": "ovpn1", "certificate": "other"}), &mut f).is_err(), "only tik-ovpn-server");
+        // before 7.17: one unnamed server
+        let mut f = Fake::default();
+        f.answers.insert("/interface/ovpn-server/server/print".into(), Ok(vec![row(&[("certificate", "old-cert"), ("require-client-certificate", "true")])]));
+        let p = compile_value(&json!({"kind": "ovpn-server-certificate"}), &mut f).unwrap();
+        assert_eq!((p.cli()[0].as_str(), p.undo_cli()[0].as_str()), ("/interface/ovpn-server/server/set certificate=tik-ovpn-server", "/interface/ovpn-server/server/set certificate=old-cert"));
+        assert!(p.warnings.iter().any(|w| w.contains("require-client-certificate=no")));
+        assert!(p.warnings.iter().any(|w| w.contains("Replaces the certificate old-cert")));
+        f.answers.insert("/interface/ovpn-server/server/print".into(), Ok(vec![row(&[("certificate", "tik-ovpn-server")])]));
+        assert!(compile_value(&json!({"kind": "ovpn-server-certificate"}), &mut f).unwrap_err().contains("already uses"));
+        assert!(compile_value(&json!({"kind": "ovpn-server-certificate"}), &mut Fake::default()).is_err());
+    }
+
+    #[test]
+    fn certificates_and_server_switch_batch_and_revert_in_order() {
+        let mut f = Fake::default();
+        f.answers.insert("/interface/ovpn-server/server/print".into(), Ok(vec![row(&[("name", "ovpn1"), ("certificate", "none")])]));
+        let v = json!({"kind": "batch", "title": "OpenVPN certificates", "intents": [
+            {"kind": "ovpn-certificates", "common_name": "vpn.example.net"},
+            {"kind": "ovpn-server-certificate", "name": "ovpn1"},
+        ]});
+        let p = compile_value(&v, &mut f).unwrap();
+        assert!(p.revertible);
+        assert_eq!(p.cli().last().unwrap(), r#"/interface/ovpn-server/server/set [find name="ovpn1"] certificate=tik-ovpn-server"#);
+        // the server lets go of the certificate before it is deleted
+        assert_eq!(p.undo_cli()[0], r#"/interface/ovpn-server/server/set [find name="ovpn1"] certificate=none"#);
+        assert_eq!(p.undo_cli().last().unwrap(), r#"/certificate/remove [find comment="tik:ovpn-ca"]"#);
+    }
+
+    #[test]
+    fn ca_export_needs_our_ca_and_writes_only_the_public_certificate() {
+        assert!(compile_value(&json!({"kind": "export-ovpn-ca"}), &mut Fake::default()).unwrap_err().contains("no tik-ovpn-ca"));
+        let mut f = certs(vec![row(&[("name", "tik-ovpn-ca"), ("comment", "tik:ovpn-ca")])]);
+        let p = compile_value(&json!({"kind": "export-ovpn-ca"}), &mut f).unwrap();
+        assert_eq!(p.cli()[1], r#"/certificate/export-certificate [find comment="tik:ovpn-ca"] type=pem file-name=cert_export_tik-ovpn-ca"#);
+        assert_eq!(p.undo_cli(), [r#"/file/remove [find name="cert_export_tik-ovpn-ca.crt"]"#]);
+        assert_eq!(f.seen[0], ["/certificate/print", "=.proplist=name,comment", "?comment=tik:ovpn-ca"]);
+        // unknown fields are refused, so nothing can ask for another file or a passphrase
+        assert!(compile_value(&json!({"kind": "export-ovpn-ca", "file": "x.p12"}), &mut f).is_err());
     }
 
     #[test]

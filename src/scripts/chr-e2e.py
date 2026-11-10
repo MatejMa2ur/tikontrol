@@ -110,6 +110,10 @@ CASES = [
     ({"kind": "vpn-user", "name": "tik-vpn-test2", "password": "not-a-real-secret-3", "service": "ovpn", "profile": "no-such-profile"}, None, "error"),
     ({"kind": "remove-vpn-user", "name": "tik-not-ours"}, None, "error"),
     ({"kind": "vpn-server", "server": "ovpn", "enabled": True, "name": "ovpn-test"}, None, "ok"),
+    # /certificate and /file are not in the compared export: check by hand that the revert removed tik-ovpn-* and the .crt
+    ({"kind": "ovpn-certificates", "common_name": "vpn.example.net"}, None, "noop"),
+    ({"kind": "batch", "title": "OpenVPN certificates", "intents": [{"kind": "ovpn-certificates", "common_name": "vpn.example.net"}, {"kind": "ovpn-server-certificate", "name": "ovpn-test"}]}, None, "ok"),
+    ({"kind": "export-ovpn-ca"}, None, "error"),  # reverted above: there is no tik-ovpn-ca
     ({"kind": "wireguard-client", "name": "wg-vpn", "address": "10.66.0.2/32", "public_key": WGKEY, "endpoint": "vpn.example.com", "endpoint_port": 51820, "sources": ["192.168.88.80"]}, None, "ok"),
     ({"kind": "site-to-site", "name": "wg-s2s", "listen_port": 13232, "address": "10.77.0.1/30", "public_key": WGKEY2, "endpoint": "office.example.com", "endpoint_port": 13232, "remote_subnets": ["10.200.0.0/24"]}, None, "ok"),
     ({"kind": "back-to-home", "enabled": True}, None, "ok"),
