@@ -1,5 +1,6 @@
 // End-to-end browser test of tikontrol-only features that need no router: client rename, icon and notes, and the
-// floor-plan coverage map (upload, keyboard move, save, reload in a fresh browser, remove). Works on the demo server:
+// floor-plan coverage map (upload, keyboard move, scale, a wall, the predicted heatmap and its summary, a measured
+// point, save, reload in a fresh browser, remove). Works on the demo server:
 //   (cd src/server && TIK_DEMO=../ui/src/lib/sample.json TIK_LISTEN=off TIK_HTTP=127.0.0.1:8099 cargo run)
 //   SETUP_PW_FILE=admin.pw node src/scripts/ui-e2e.mjs http://127.0.0.1:8099
 // It changes tikontrol's own prefs and floor plan (not the router); run it on a test instance.
@@ -33,6 +34,22 @@ let href;
   const png = await p.evaluate(() => { const c = document.createElement('canvas'); c.width = 900; c.height = 600; const g = c.getContext('2d'); g.fillStyle = '#fff'; g.fillRect(0, 0, 900, 600); g.lineWidth = 6; g.strokeRect(20, 20, 860, 560); g.beginPath(); g.moveTo(450, 20); g.lineTo(450, 580); g.stroke(); return c.toDataURL('image/png').split(',')[1] })
   await p.locator('input[type=file]').setInputFiles({ name: 'plan.png', mimeType: 'image/png', buffer: Buffer.from(png, 'base64') }); await p.waitForTimeout(800)
   const pin = p.locator('button.ap').first(); await pin.focus(); for (let i = 0; i < 5; i++) await p.keyboard.press('ArrowRight')
+  // RF prediction: scale by typing the plan width, draw one wall down the middle, hover, record a measured point
+  await p.getByLabel('Plan width').fill('18'); await p.getByRole('button', { name: 'Use width' }).click()
+  await p.locator('.summary').waitFor({ timeout: 5000 })
+  assert.match(await p.locator('.summary').innerText(), /of the plan is predicted at −67 dBm or better/, 'coverage summary')
+  assert.equal(await p.locator('.plan canvas').count(), 1, 'heatmap drawn')
+  // clicks on the plan at a fraction of its size (the box is read each time: tool buttons can scroll the page)
+  const at = async (x, y) => { await p.locator('.plan img').scrollIntoViewIfNeeded(); const b = await p.locator('.plan').boundingBox(); await p.mouse.click(b.x + b.width * x, b.y + b.height * y); await p.waitForTimeout(150) }
+  const xy = async (x, y) => { const b = await p.locator('.plan').boundingBox(); return [b.x + b.width * x, b.y + b.height * y] }
+  await p.getByRole('button', { name: 'Draw walls', exact: true }).click()
+  await at(0.75, 0.3); await at(0.75, 0.7); await p.getByRole('button', { name: 'Finish line' }).click()
+  assert.ok(await p.getByText('Walls (1)').count(), 'wall drawn')
+  await p.getByRole('button', { name: 'Measure', exact: true }).click()
+  await at(0.9, 0.5); await p.getByRole('spinbutton', { name: 'Signal' }).fill('-71'); await p.getByRole('button', { name: 'Record' }).click()
+  assert.ok(await p.getByText('Measured vs predicted (1)').count(), 'measurement recorded')
+  await p.getByRole('button', { name: 'Move', exact: true }).click()
+  await p.locator('.plan img').scrollIntoViewIfNeeded(); await p.mouse.move(...await xy(0.3, 0.4)); assert.match(await p.locator('.readout').innerText(), /At the cursor: -?\d+ dBm/, 'hover readout')
   await p.getByRole('button', { name: 'Save' }).click(); await p.waitForTimeout(800)
   assert.equal(await p.getByRole('status').filter({ hasText: 'Saved' }).count(), 1, 'plan saved')
   await p.context().close()
@@ -46,6 +63,10 @@ let href;
   assert.equal(await p.locator('img[alt="Floor plan"]').count(), 1, 'plan persisted')
   const left = await p.locator('button.ap').first().evaluate(e => e.style.left)
   assert.equal(left, '55%', 'pin moved with the keyboard and saved: ' + left)
+  assert.ok(await p.getByText('Walls (1)').count() && await p.getByText('Measured vs predicted (1)').count(), 'walls and measurements persisted')
+  await p.locator('.summary').waitFor({ timeout: 5000 }) // the scale persisted, so the prediction runs again
+  await p.getByRole('button', { name: 'Delete wall 1' }).click()
+  assert.ok(await p.getByText('Walls (0)').count(), 'wall deleted from the list')
   await p.getByRole('button', { name: 'Remove plan' }).click(); await p.waitForTimeout(500)
   await p.reload(); await p.waitForTimeout(1500)
   assert.equal(await p.locator('img[alt="Floor plan"]').count(), 0, 'plan removed')

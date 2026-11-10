@@ -34,6 +34,84 @@ components:
         policies: { type: [object, 'null'], properties: { user: { type: string }, group: { type: string }, policy: { type: array, items: { type: string } } } }
         error: { type: [string, 'null'] }
     Cred: { type: object, required: [user, password], properties: { user: { type: string, maxLength: 64 }, password: { type: string, maxLength: 256 } } }
+    Band: { type: string, enum: ['2.4', '5', '6'] }
+    Percent: { type: number, minimum: 0, maximum: 100 }
+    Floorplan:
+      type: object
+      required: [image, aps]
+      additionalProperties: false
+      properties:
+        image: { type: string, maxLength: 200000 }
+        aps:
+          type: array
+          maxItems: 32
+          items:
+            type: object
+            required: [label, x, y]
+            additionalProperties: false
+            properties:
+              label: { type: string, minLength: 1, maxLength: 32 }
+              x: { $ref: '#/components/schemas/Percent' }
+              y: { $ref: '#/components/schemas/Percent' }
+              gain: { type: number, minimum: -5, maximum: 20, description: antenna gain, dBi (default 2 in the UI) }
+              bands:
+                type: array
+                maxItems: 3
+                description: one entry per band at most; missing = plan saved before the RF model
+                items:
+                  type: object
+                  required: [band, tx]
+                  additionalProperties: false
+                  properties:
+                    band: { $ref: '#/components/schemas/Band' }
+                    tx: { type: number, minimum: 0, maximum: 36, description: transmit power, dBm }
+                    radio: { type: string, minLength: 1, maxLength: 32, description: router radio the power was taken from (display only) }
+        scale:
+          type: object
+          required: [x1, y1, x2, y2, meters, mpu]
+          additionalProperties: false
+          description: reference line on the plan and its real length; mpu = metres per plan unit (1 % of the image width)
+          properties:
+            x1: { $ref: '#/components/schemas/Percent' }
+            y1: { $ref: '#/components/schemas/Percent' }
+            x2: { $ref: '#/components/schemas/Percent' }
+            y2: { $ref: '#/components/schemas/Percent' }
+            meters: { type: number, minimum: 0.1, maximum: 2000 }
+            mpu: { type: number, minimum: 0.001, maximum: 50 }
+        walls:
+          type: array
+          maxItems: 500
+          items:
+            type: object
+            required: [x1, y1, x2, y2, m]
+            additionalProperties: false
+            description: one wall segment; its two ends must differ
+            properties:
+              x1: { $ref: '#/components/schemas/Percent' }
+              y1: { $ref: '#/components/schemas/Percent' }
+              x2: { $ref: '#/components/schemas/Percent' }
+              y2: { $ref: '#/components/schemas/Percent' }
+              m: { type: string, enum: [drywall, glass, wood, brick, concrete, metal] }
+        measurements:
+          type: array
+          maxItems: 200
+          items:
+            type: object
+            required: [x, y, band, dbm]
+            additionalProperties: false
+            properties:
+              x: { $ref: '#/components/schemas/Percent' }
+              y: { $ref: '#/components/schemas/Percent' }
+              band: { $ref: '#/components/schemas/Band' }
+              dbm: { type: number, minimum: -120, maximum: 0 }
+              label: { type: string, maxLength: 32 }
+        model:
+          type: object
+          required: [n, cell]
+          additionalProperties: false
+          properties:
+            n: { type: number, minimum: 1.5, maximum: 4, description: path-loss exponent }
+            cell: { type: number, minimum: 0.25, maximum: 2, description: grid cell size, metres }
     Intent:
       type: object
       required: [kind]
@@ -237,12 +315,12 @@ paths:
       parameters: [{ name: name, in: query, required: true, schema: { type: string, pattern: '^(([A-Za-z0-9_-]+/)?tik-[A-Za-z0-9_-]{1,40}\.rsc|cert_export_tik-ovpn-ca\.crt)$' } }]
       responses: { '200': { description: 'text/plain attachment (.rsc) or application/x-pem-file attachment (.crt)' }, '400': { description: not an allowed name }, '403': { description: not admin }, '404': { description: empty or unreadable }, '429': { description: too soon }, '502': { description: 'router error (e.g. the file does not exist), or the .crt is not plain PEM certificates' } }
   /api/v1/floorplan:
-    get: { summary: 'Coverage map: the saved floor plan { image (data URL), aps[{ label, x, y }] } or null. No RF model', responses: { '200': { description: ok } } }
+    get: { summary: 'Coverage map: the saved floor plan (same shape as PUT) or null. Plans saved before the RF fields come back without them. The RF prediction runs in the browser', responses: { '200': { description: ok, content: { application/json: { schema: { oneOf: [{ $ref: '#/components/schemas/Floorplan' }, { type: 'null' }] } } } } } }
     put:
       security: [{ session: [], csrf: [] }]
-      summary: 'Save the floor plan (admin). image is a PNG/JPEG/WebP data URL (no SVG; magic bytes checked), at most 200000 characters; up to 32 APs, label 1-32 chars, x/y in percent 0-100'
-      requestBody: { content: { application/json: { schema: { type: object, required: [image, aps], additionalProperties: false, properties: { image: { type: string, maxLength: 200000 }, aps: { type: array, maxItems: 32, items: { type: object, required: [label, x, y], properties: { label: { type: string }, x: { type: number }, y: { type: number } } } } } } } } }
-      responses: { '200': { description: ok }, '400': { description: invalid image or pins }, '403': { description: not admin } }
+      summary: 'Save the floor plan (admin). image is a PNG/JPEG/WebP data URL (no SVG; magic bytes checked), at most 200000 characters. Positions are percent of the image width (x) and height (y). Labels are printable (no control or bidi/zero-width characters). Unknown fields are rejected'
+      requestBody: { content: { application/json: { schema: { $ref: '#/components/schemas/Floorplan' } } } }
+      responses: { '200': { description: ok }, '400': { description: invalid image, pins, scale, walls, measurements or model }, '403': { description: not admin }, '413': { description: body over 256 KiB } }
     delete: { security: [{ session: [], csrf: [] }], summary: Remove the floor plan (admin), responses: { '200': { description: ok }, '403': { description: not admin } } }
   /api/v1/retention:
     get: { summary: "Days of tikontrol's own history kept (traffic, events, per-client usage)", responses: { '200': { description: '{ days, max }' } } }
