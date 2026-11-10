@@ -1,7 +1,7 @@
 // Run from the repo root: node --test tests/topology.test.ts
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
-import { groupByNeighbor } from '../src/ui/src/lib/topology.ts'
+import { groupByNeighbor, inSubnet } from '../src/ui/src/lib/topology.ts'
 
 const c = (mac: string, port: string | undefined, wired = true) => ({ mac, port, wired })
 
@@ -27,4 +27,11 @@ test('the neighbor itself is not also a client, chains and junk are handled', ()
   assert.deepEqual(devices[0].devices.map((d) => d.label), ['AP attic'])
   assert.deepEqual(devices[0].clients.map((x) => x.mac), ['02:00:00:00:00:09'])
   assert.deepEqual(direct, [])
+})
+
+test('inSubnet: a switch finds its gateway inside its own bridge subnet', () => {
+  assert.equal(inSubnet('192.0.2.1', '192.0.2.7/24'), true)
+  assert.equal(inSubnet('198.51.100.1', '192.0.2.7/24'), false)
+  assert.equal(inSubnet('192.0.2.130', '192.0.2.7/25'), false)
+  assert.equal(inSubnet('192.0.2.7', '192.0.2.7/32'), true)
 })

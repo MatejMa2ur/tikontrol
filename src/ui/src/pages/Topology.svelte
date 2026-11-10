@@ -33,13 +33,24 @@
     // the bridge only knows the router's port, which is the switch's uplink: no port label for clients behind it
     children: [...d.devices.map(devNode), ...withVms(d.clients).map((n) => ({ ...n, link: undefined }))],
   })
-  const neighborNodes = grouped.devices.map(devNode)
+  // A switch/AP (internet.behind): the neighbour at the default gateway is upstream, so it goes above this
+  // router, and what sits behind it (the rest of the network) is not drawn here.
+  const up = internet.behind ? grouped.devices.find((d) => d.sub === internet.behind) : undefined
+  const neighborNodes = grouped.devices.filter((d) => d !== up).map(devNode)
   const topWired = withVms(grouped.direct.filter((c) => c.wired))
   const wireless = grouped.direct.filter((c) => !c.wired).sort((a, b) => (a.band ?? '').localeCompare(b.band ?? '')).map(clientNode)
   // Wi-Fi is a different medium: its clients hang off one Wi-Fi node, set apart from the wired side
   const wifiHub: N[] = wireless.length ? [{ id: 'wifi', label: 'Wi-Fi', sub: `${wireless.length} client${wireless.length === 1 ? '' : 's'}`, icon: 'wifi', kind: 'net', wireless: true, link: 'Wireless', children: wireless }] : []
 
-  const tree: N = {
+  const self: N = {
+    id: 'gw', label: router.identity, sub: [router.board, internet.gatewayIp].filter(Boolean).join(' · '), icon: 'devices', kind: 'dev', href: '#/devices', children: [...neighborNodes, ...topWired, ...wifiHub],
+  }
+  const tree: N = internet.behind ? {
+    id: 'internet', label: 'Internet', icon: 'globe', kind: 'net', children: [{
+      id: up?.id ?? 'upstream', label: up?.label ?? 'Upstream router', sub: [up?.board, internet.behind].filter(Boolean).join(' · '), icon: 'devices', kind: 'dev',
+      children: [{ ...self, link: up ? `Uplink · Port ${up.port.replace('ether', '')}${speed(up.port) ? ` · ${speed(up.port)}` : ''}` : 'Uplink' }],
+    }],
+  } : {
     id: 'internet', label: 'Internet', sub: internet.publicIp, icon: 'globe', kind: 'net', children: [{
       id: 'upstream', label: internet.doubleNat ? 'Upstream router' : 'Modem', sub: internet.gateway, icon: 'devices', kind: 'dev', link: `WAN · Port ${internet.wanPort}${speed(internet.wanIf) ? ` · ${speed(internet.wanIf)}` : ''}`, children: [{
         id: 'gw', label: router.identity, sub: `${router.board} · ${internet.gatewayIp}`, icon: 'devices', kind: 'dev', href: '#/devices', link: speed(internet.wanIf), children: [...neighborNodes, ...topWired, ...wifiHub],

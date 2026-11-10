@@ -8,6 +8,7 @@ import { preload } from './backend'
 import { catOf, guessDevice, isPrivateMac, makerOf, type Kind } from './identify'
 import { guestTest } from './guest'
 import { securityAudit, type Insight } from './security'
+import { inSubnet } from './topology'
 export type { Kind, Insight }
 
 const files = import.meta.glob('./*.json', { eager: true, import: 'default' }) as Record<string, any>
@@ -110,9 +111,19 @@ const bandLogOf = (mac: string) => log.flatMap((l) => {
 })
 const roamCount = (mac: string) => log.filter((l) => l.message?.startsWith(mac) && /connected/.test(l.message)).length
 
+// A switch or AP behind another router: no DHCP client, and the default route points into one of its own bridge
+// subnets. Then the internet is upstream (behind that gateway) and every MAC on its bridge is a client.
+const bridgeNames = new Set<string>((raw.bridges ?? []).map((b: any) => b.name).concat('bridge'))
+const bridgeNets = (raw.addresses ?? []).filter((a: any) => bridgeNames.has(a.interface) && a.address).map((a: any) => a.address as string)
+const defaultGw: string | undefined = (raw.routes ?? []).find((r: any) => r['dst-address'] === '0.0.0.0/0' && String(r.disabled) !== 'true' && String(r.active) !== 'false' && /^\d+\.\d+\.\d+\.\d+$/.test(r.gateway ?? ''))?.gateway
+const behind = !(raw.wan ?? []).length && !!defaultGw && bridgeNets.some((n: string) => inSubnet(defaultGw, n)) ? defaultGw : undefined
+
 const macs = new Set<string>([...leases.map((l) => l['mac-address']), ...stations.map((s) => s['mac-address'])])
 // ARP-only devices (static IP, no lease) still count as clients if reachable
-for (const a of arp) if (a.status === 'reachable' && a.interface === 'bridge') macs.add(a['mac-address'])
+for (const a of arp) if (a.status === 'reachable' && bridgeNames.has(a.interface)) macs.add(a['mac-address'])
+// ...except what sits on the uplink port: that is the rest of the network, upstream of this switch
+const upPort = String(neighbors.find((n: any) => n.address === behind)?.interface ?? '').split(',')[0]
+if (behind) for (const h of hosts) if (h['on-interface'] !== upPort) macs.add(h['mac-address'])
 
 const isGuest = guestTest(raw)
 const clients: Client[] = [...macs].filter(Boolean).map((mac) => {
@@ -200,7 +211,9 @@ const internet = {
   bth: raw.cloud?.['back-to-home-vpn'] === 'enabled',
   rx: raw.wanTraffic?.['rx-bits-per-second'] ?? 0,
   tx: raw.wanTraffic?.['tx-bits-per-second'] ?? 0,
-  gatewayIp: (raw.addresses ?? []).find((a: any) => a.interface === 'bridge')?.address?.split('/')[0],
+  gatewayIp: bridgeNets[0]?.split('/')[0],
+  /** set when this router is a switch/AP: the address of the router it hangs off */
+  behind,
   wanPort: (wan.interface ?? 'ether1').replace('ether', ''),
   bytesDown: (raw.wanStats ?? [])[0]?.['rx-byte'] ?? 0,
   bytesUp: (raw.wanStats ?? [])[0]?.['tx-byte'] ?? 0,

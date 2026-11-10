@@ -51,3 +51,11 @@ export function groupByNeighbor<C extends Placeable>(clients: C[], neighbors: Ne
   }
   return { devices, direct }
 }
+
+/** IPv4 `ip` inside `cidr` ("192.0.2.1/24") */
+export function inSubnet(ip: string, cidr: string): boolean {
+  const n = (v: string) => v.split('.').reduce((a, o) => a * 256 + (+o), 0)
+  const [net, bits] = cidr.split('/')
+  const size = 2 ** (32 - Math.min(32, +bits || 32))
+  return Math.floor(n(ip) / size) === Math.floor(n(net) / size)
+}
