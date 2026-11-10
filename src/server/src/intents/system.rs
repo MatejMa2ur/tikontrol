@@ -432,14 +432,20 @@ fn build(i: &SystemIntent, r: &mut dyn Router) -> Result<Plan, String> {
                 return Err(format!("interval must be one of {}", INTERVALS.join(", ")));
             }
             let path = "/system/scheduler";
-            let have = r.run(&Cmd::new("/system/scheduler/print").proplist(&["interval"]).query("name", BACKUP_JOB))?;
-            let job = |iv: &str| Op::add(path, vec![("name", BACKUP_JOB.into()), ("interval", iv.to_string()), ("on-event", "/export file=tik-auto".into()), ("policy", "read,write,test".into()), ("comment", "tik: scheduled backup".into())]);
+            let have = r.run(&Cmd::new("/system/scheduler/print").proplist(&["interval", "start-date", "start-time"]).query("name", BACKUP_JOB))?;
+            let job = |iv: &str, start: Vec<(&'static str, String)>| {
+                let mut args = vec![("name", BACKUP_JOB.into()), ("interval", iv.to_string()), ("on-event", "/export file=tik-auto".into()), ("policy", "read,write,test".into()), ("comment", "tik: scheduled backup".into())];
+                args.extend(start);
+                Op::add(path, args)
+            };
             let remove = Op::on(path, "remove", "name", BACKUP_JOB, vec![]);
             let was = have.first().map(|row| row.get("interval").cloned().unwrap_or_else(|| "7d".into()));
+            // putting a stopped job back keeps its start, or RouterOS would start it "now" and shift every run
+            let start: Vec<(&'static str, String)> = have.first().map(|row| ["start-date", "start-time"].into_iter().filter_map(|k| row.get(k).filter(|v| !v.is_empty()).map(|v| (k, v.clone()))).collect()).unwrap_or_default();
             match (enabled, was) {
-                (true, None) => plan(format!("Back up every {interval}"), Risk::Low, vec![job(interval)], vec![remove]),
+                (true, None) => plan(format!("Back up every {interval}"), Risk::Low, vec![job(interval, vec![])], vec![remove]),
                 (true, Some(iv)) => plan(format!("Back up every {interval}"), Risk::Low, vec![Op::on(path, "set", "name", BACKUP_JOB, vec![("interval", interval.clone())])], vec![Op::on(path, "set", "name", BACKUP_JOB, vec![("interval", iv)])]),
-                (false, Some(iv)) => plan("Stop scheduled backups".into(), Risk::Low, vec![remove], vec![job(&iv)]),
+                (false, Some(iv)) => plan("Stop scheduled backups".into(), Risk::Low, vec![remove], vec![job(&iv, start)]),
                 (false, None) => return Err("scheduled backups are already off".into()),
             }
         }

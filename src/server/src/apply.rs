@@ -690,6 +690,10 @@ mod tests {
         f.answers.insert("/system/scheduler/print".into(), Ok(vec![row(&[("interval", "1d")])]));
         let p = c(serde_json::json!({"kind": "backup-schedule", "enabled": false}), &mut f).unwrap();
         assert!(p.undo_cli()[0].contains("interval=1d"), "turning it off can be undone with the same interval");
+        // ... and the same start, or every later run would shift to the time of the revert (seen on CHR)
+        f.answers.insert("/system/scheduler/print".into(), Ok(vec![row(&[("interval", "1w"), ("start-date", "2026-01-05"), ("start-time", "03:10:00")])]));
+        let p = c(serde_json::json!({"kind": "backup-schedule", "enabled": false}), &mut f).unwrap();
+        assert!(p.undo_cli()[0].ends_with("start-date=2026-01-05 start-time=03:10:00"), "{:?}", p.undo_cli());
         assert!(c(serde_json::json!({"kind": "backup-schedule", "enabled": true, "interval": "5m"}), &mut Fake::default()).is_err());
         assert!(c(serde_json::json!({"kind": "restore-backup", "name": "x.rsc"}), &mut Fake::default()).is_err());
         assert!(c(serde_json::json!({"kind": "restore-backup", "name": "x.backup"}), &mut Fake::default()).unwrap_err().contains("no such file"));
