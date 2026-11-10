@@ -8,18 +8,26 @@
 # shifts every forwarded port by CHR_OFFSET (ssh 2322, api-ssl 8829, ...). Extra forwards go in CHR_FWD, e.g.
 # CHR_FWD=,hostfwd=tcp:127.0.0.1:54321-:54321 for CMR: the other VM reaches it at 10.0.2.2:54321.
 # Usage: src/scripts/chr.sh [version]   (fresh disk each run: delete $DIR/disk.img to reset)
-# Needs: qemu (brew install qemu). Runs under TCG emulation: with HVF on Apple Silicon the CHR kernel panics ("No working init found").
+# Needs: qemu (brew install qemu, or apt install qemu-system-x86). On an arm64 Mac it boots the arm64 CHR under TCG
+# emulation (with HVF the CHR kernel panics: "No working init found"). On an x86_64 host (or CHR_ARCH=x86) it boots
+# the x86 CHR, with KVM when /dev/kvm is usable and TCG otherwise (about a minute to boot).
 set -eu
 VER=${1:-$(curl -fsS https://upgrade.mikrotik.com/routeros/NEWESTa7.stable | cut -d' ' -f1)}
 DIR=${CHR_DIR:-$HOME/.cache/tikontrol-chr}
 O=${CHR_OFFSET:-0}
 mkdir -p "$DIR" && cd "$DIR"
-img=chr-$VER-arm64.img
+ARCH=${CHR_ARCH:-$( [ "$(uname -m)" = x86_64 ] && echo x86 || echo arm64 )}
+if [ "$ARCH" = x86 ]; then img=chr-$VER.img; else img=chr-$VER-arm64.img; fi
 [ -f "$img" ] || { [ -f "$img.zip" ] || curl -fsSLO "https://download.mikrotik.com/routeros/$VER/$img.zip"; unzip -oq "$img.zip"; }
 [ -f disk.img ] || cp "$img" disk.img
-fw=$(dirname "$(command -v qemu-system-aarch64)")/../share/qemu/edk2-aarch64-code.fd
-exec qemu-system-aarch64 -M virt -accel tcg -cpu cortex-a72 -m 512 -nographic \
-  -bios "$fw" -drive file=disk.img,format=raw,if=virtio \
+if [ "$ARCH" = x86 ]; then
+  accel=tcg; [ -w /dev/kvm ] && accel=kvm
+  set -- qemu-system-x86_64 -accel $accel -smp 2 -m 512 -nographic -drive file=disk.img,format=raw,if=virtio
+else
+  fw=$(dirname "$(command -v qemu-system-aarch64)")/../share/qemu/edk2-aarch64-code.fd
+  set -- qemu-system-aarch64 -M virt -accel tcg -cpu cortex-a72 -m 512 -nographic -bios "$fw" -drive file=disk.img,format=raw,if=virtio
+fi
+exec "$@" \
   -netdev user,id=n0,hostfwd=tcp:127.0.0.1:$((2222 + O))-:22,hostfwd=tcp:127.0.0.1:$((8728 + O))-:8728,hostfwd=tcp:127.0.0.1:$((8729 + O))-:8729,hostfwd=tcp:127.0.0.1:$((8080 + O))-:80,hostfwd=tcp:127.0.0.1:$((8444 + O))-:443${CHR_FWD:-} \
   -device virtio-net-pci,netdev=n0 \
   -netdev user,id=n1,restrict=on -device virtio-net-pci,netdev=n1 \
