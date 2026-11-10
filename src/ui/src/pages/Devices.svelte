@@ -5,6 +5,7 @@
   import { live } from '../lib/live.svelte'
   import { review } from '../lib/apply.svelte'
   import { cmr, loadCmr, cmrOk, type CmrDevice } from '../lib/cmr.svelte'
+  import { cmpVersion } from '../lib/security'
   import Icon from '../lib/Icon.svelte'
   import DeviceFace from '../lib/DeviceFace.svelte'
   import Tabs from '../lib/ui/Tabs.svelte'
@@ -96,7 +97,11 @@
             </tr>
           {/each}
           {#each strangers as n}
-            <tr><td><b>{n.identity}</b></td><td>{n.board ?? n.platform}</td><td class="mono">{n.address}</td><td>{n.version}</td><td>—</td><td>—</td><td>—</td><td>—</td><td><span class="pill">Not adopted</span></td></tr>
+            {@const ver = (n.version ?? '').split(' ')[0]}
+            <tr><td><b>{n.identity}</b></td><td>{n.board ?? n.platform}</td><td class="mono">{n.address}</td>
+              <td>{ver}{#if ver && cmpVersion(ver, '7.18') < 0}<br /><span class="pill warn" title="tikontrol reads routers over the API from RouterOS 7.18. Update it first: /system/package/update/install">update to 7.18+</span>{/if}</td>
+              <td>—</td><td>—</td><td>—</td><td>—</td>
+              <td><span class="pill">Not adopted</span> <a class="btn small" href="#/settings/control" title="Add {n.identity} ({n.address}) under Routers: it needs an API-SSL certificate and its admin login">Add as router</a></td></tr>
           {/each}
         </tbody>
       </table>
