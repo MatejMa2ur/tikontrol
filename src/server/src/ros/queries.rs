@@ -90,6 +90,7 @@ const QUERIES: &[Q] = &[
     one("dnsCfg", "/ip/dns/print", &["servers", "use-doh-server", "allow-remote-requests", "mdns-repeat-ifaces"]).arrays(&["servers", "mdns-repeat-ifaces"]),
     q("dnsCache", "/ip/dns/cache/print", &["name", "type", "data", "ttl"]),
     q("queues", "/queue/simple/print", &["name", "target", "max-limit", "disabled", "comment", "time"]).arrays(&["target"]),
+    q("queueTree", "/queue/tree/print", &["name", "parent", "packet-mark", "queue", "disabled", "comment"]),
     q("hotspot", "/ip/hotspot/print", &["name", "interface", "address-pool", "profile", "disabled"]),
     q("hotspotActive", "/ip/hotspot/active/print", &["server", "user", "address", "mac-address", "login-by", "uptime", "session-time-left", "bytes-in", "bytes-out"]),
     q("users", "/user/print", &["name", "group", "last-logged-in", "disabled", "comment"]),

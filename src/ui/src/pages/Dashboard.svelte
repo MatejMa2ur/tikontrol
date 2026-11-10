@@ -31,6 +31,7 @@
 
   const online = clients.filter((c) => c.online)
   const wifiClients = online.filter((c) => !c.wired)
+  const guests = online.filter((c) => c.guest).length
   const COLORS = ['var(--accent)', '#2fb4f2', '#3ccf7a', '#f3b33d', '#b26cf5']
 
   // clock
@@ -287,7 +288,7 @@
           <span class="muted" title="Peak 1-minute average in this range">Peak <span class="down">↓ {bps(hist.peak.rx)}</span> <span class="up">↑ {bps(hist.peak.tx)}</span></span>
           <span class="down" title="Since boot">↓ {bytes(internet.bytesDown)}</span>
           <span class="up" title="Since boot">↑ {bytes(internet.bytesUp)}</span>
-          <span class="row muted"><Icon name="clients" size={13} /> {online.length}</span>
+          <span class="row muted" title="{wifiClients.length} Wi-Fi · {online.length - wifiClients.length} wired · {guests} guest{guests === 1 ? '' : 's'}"><Icon name="clients" size={13} /> {online.length}{#if guests} · {guests} guest{guests === 1 ? '' : 's'}{/if}</span>
           <div class="seg">{#each ['1H', '1D', '1W'] as const as r}<button class:on={range === r} onclick={() => (range = r)}>{r}</button>{/each}</div>
         </div>
       </header>

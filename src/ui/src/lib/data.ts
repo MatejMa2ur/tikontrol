@@ -6,6 +6,7 @@ import { simulateBe3 } from './be3'
 import { bandLabel, detectHardware, normalizeWifi, parseChannel, standardOf } from './hardware'
 import { preload } from './backend'
 import { catOf, guessDevice, isPrivateMac, makerOf, type Kind } from './identify'
+import { guestTest } from './guest'
 export type { Kind }
 
 const files = import.meta.glob('./*.json', { eager: true, import: 'default' }) as Record<string, any>
@@ -24,6 +25,7 @@ export type Client = {
   os?: string // best guess, e.g. 'Android 14'
   kind: Kind
   wired: boolean
+  guest: boolean // on a guest network (lib/guest.ts)
   port?: string // ether2… or wlan1/wlan2
   band?: '2.4 GHz' | '5 GHz' | '6 GHz'
   ssid?: string
@@ -111,6 +113,7 @@ const macs = new Set<string>([...leases.map((l) => l['mac-address']), ...station
 // ARP-only devices (static IP, no lease) still count as clients if reachable
 for (const a of arp) if (a.status === 'reachable' && a.interface === 'bridge') macs.add(a['mac-address'])
 
+const isGuest = guestTest(raw)
 const clients: Client[] = [...macs].filter(Boolean).map((mac) => {
   const lease = leases.find((l) => l['mac-address'] === mac)
   const st = stations.find((s) => s['mac-address'] === mac)
@@ -153,7 +156,7 @@ const clients: Client[] = [...macs].filter(Boolean).map((mac) => {
     // ponytail: the radio's best standard, the client may negotiate less. The registration table's `band` has the real one.
     standard: st ? standardOf(wifi.find((w) => w.name === st.interface)?.band) : undefined,
   }
-})
+}).map((c) => ({ ...c, guest: isGuest(c) }))
 
 const offline = [
   // ARP entries on the WAN side (the ISP's gateway) and failed ones without a MAC are not clients

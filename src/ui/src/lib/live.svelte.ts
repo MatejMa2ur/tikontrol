@@ -70,7 +70,8 @@ export const prefs = $state({
   showRos: load<boolean>('tik.showRos', false),
   icons: load<Record<string, string>>('tik.icons', {}),
   notes: load<Record<string, string>>('tik.notes', {}),
-  groups: load<{ name: string; limit: string; members: string[] }[]>('tik.groups', [{ name: 'Family', limit: '', members: [] }, { name: 'IoT', limit: '10M/10M', members: [] }]),
+  // example groups only without the server; with it the groups come from /prefs and a router starts with none
+  groups: isBackend ? [] as { name: string; limit: string; members: string[] }[] : load<{ name: string; limit: string; members: string[] }[]>('tik.groups', [{ name: 'Family', limit: '', members: [] }, { name: 'IoT', limit: '10M/10M', members: [] }]),
   hidden: load<string[]>('tik.hidden', []),
   // dashboard layout: card ids in order, and the hidden ones (pages/Dashboard.svelte)
   cardOrder: load<string[]>('tik.cardOrder', []),

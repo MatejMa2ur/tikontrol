@@ -54,6 +54,7 @@ Q = {
     "dnsCache": "[/ip/dns/cache/print as-value proplist=name,type,data,ttl]",
     "health": "[/system/health/print as-value proplist=name,value,type]",
     "queues": "[/queue/simple/print as-value proplist=name,target,max-limit,disabled,comment,time]",
+    "queueTree": "[/queue/tree/print as-value proplist=name,parent,packet-mark,queue,disabled,comment]",
     "hotspot": "[/ip/hotspot/print as-value proplist=name,interface,address-pool,profile,disabled]",
     "hotspotActive": "[/ip/hotspot/active/print as-value proplist=server,user,address,mac-address,login-by,uptime,session-time-left,bytes-in,bytes-out]",
     "users": "[/user/print as-value proplist=name,group,last-logged-in,disabled,comment]",
