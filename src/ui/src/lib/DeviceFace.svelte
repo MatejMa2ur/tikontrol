@@ -8,6 +8,11 @@
   const f = faceOf(hw)
   const rate = (n: string) => (raw.etherMon ?? []).find((m: any) => m.name === n)?.rate
   const ink = '#6a6d72' // printed labels on the case
+  // plug colour by link speed: slow links stand out, multi-gig gets the accent (CHR's virtual NICs report no rate)
+  const plug = (n: string) => {
+    const r = String(rate(n) ?? '')
+    return /^(10|100)Mbps/.test(r) ? 'var(--warn)' : /^(2\.5|5|10|25|40|100)Gbps/.test(r) ? 'var(--accent)' : 'var(--ok)'
+  }
 
   // left to right: DC jack, reset pinhole, USB, microSD, then ports 1…n, then the power LED
   type Part = { kind: 'dc' | 'reset' | 'A' | 'C' | 'sd'; x: number; w: number }
@@ -33,6 +38,15 @@
     <path class="jack" d="M{px} 19h26v17h-8v3h-10v-3h-8z" fill="#1f2124" />
     <rect x={px + 2} y="20.5" width="5" height="2.5" rx="0.5" fill={p.up ? 'var(--ok)' : '#4a4d52'} />
     <rect x={px + 19} y="20.5" width="5" height="2.5" rx="0.5" fill="#4a4d52" />
+    {#if p.up}
+      <!-- plugged in: the plug's boot fills the opening, its cable runs down out of the socket -->
+      <g class="plug" fill={plug(p.name)}>
+        <rect x={px + 2} y="24.5" width="22" height="10" rx="2" />
+        <rect x={px + 5} y="34" width="16" height="3.5" rx="1" opacity="0.85" />
+        <rect x={px + 9.5} y="37" width="7" height="5" rx="1.5" />
+        <rect x={px + 6} y="27" width="14" height="1.5" rx="0.75" fill="#00000033" />
+      </g>
+    {/if}
     <text x={px + 13} y="48" fill={p.wan ? 'var(--accent)' : ink} font-weight={p.wan ? 700 : 500}>{i + 1}{p.wan ? ' WAN' : ''}</text>
     {#if i === 0 && f.poeIn}<text x={px + 13} y="56" fill={ink}>PoE in</text>{/if}
   {/snippet}
