@@ -1,6 +1,6 @@
 <script lang="ts">
   import { keep, kept } from '../lib/keep'
-  import { router, internet, clients, radios, raw, bytes, dur, hw, isBackend } from '../lib/data'
+  import { router, internet, clients, radios, raw, bytes, dur, hw, isBackend, neighbors } from '../lib/data'
   import { api } from '../lib/backend'
   import { live } from '../lib/live.svelte'
   import { review } from '../lib/apply.svelte'
@@ -18,7 +18,6 @@
   import Radios from './Radios.svelte'
 
   let { tab = 'list' }: { tab?: string } = $props()
-  const neighbors: any[] = Array.isArray(raw.neighbors) ? raw.neighbors : []
   const memPct = $derived(live.mem ?? Math.round((1 - router.memFree / router.memTotal) * 100))
   // /system/health is feature-detected: missing menu or no sensor = no temperature (same rule as the server's live.rs)
   const health: { name: string; value: unknown }[] = Array.isArray(raw.health) ? raw.health : []

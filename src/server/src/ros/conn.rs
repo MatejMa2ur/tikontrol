@@ -200,6 +200,10 @@ fn collect(mut next: impl FnMut() -> Result<super::proto::Reply, String>) -> Res
     loop {
         let r = next()?;
         match r.kind {
+            // A `!re` that carries none of the asked-for fields (only `.section`/`.about`, or nothing) is
+            // not an item: RouterOS 7 sends such extra sentences for one entry in some menus (a neighbour
+            // seen on "ether3,bridge"), and kept as rows they became blank items in the UI.
+            Kind::Re if r.attrs.keys().all(|k| k == ".section" || k == ".about") => {}
             Kind::Re => rows.push(r.attrs),
             Kind::Trap => err = Some(r.attrs.get("message").cloned().unwrap_or_else(|| "router error".into())),
             Kind::Fatal => return Err(format!("router ended the session: {}", r.attrs.get("message").map_or("", |s| s))),
@@ -295,6 +299,24 @@ mod tests {
         // pre-7.18 style (just !done) and errors still work
         let mut q = std::collections::VecDeque::from([w(&["!trap", "=message=no such command"]), w(&["!done"])]);
         assert_eq!(collect(|| Ok(q.pop_front().unwrap())).unwrap_err(), "no such command");
+    }
+
+    #[test]
+    fn sentences_without_asked_fields_are_not_rows() {
+        let w = |v: &[&str]| parse_reply(&v.iter().map(|x| x.to_string()).collect::<Vec<_>>()).unwrap();
+        // one neighbour (fictional) followed by field-less extra sentences, as seen for a neighbour on "ether3,bridge"
+        let mut q = std::collections::VecDeque::from([
+            w(&["!re", "=interface=ether3,bridge", "=identity=office-ap", "=address=192.168.88.2"]),
+            w(&["!re", "=.section=1"]),
+            w(&["!re", ".section=2"]),
+            w(&["!re"]),
+            w(&["!re", "=.id=*1"]),
+            w(&["!done"]),
+        ]);
+        let rows = collect(|| Ok(q.pop_front().unwrap())).unwrap();
+        assert_eq!(rows.len(), 2, "the neighbour and the `.id`-only row stay, the blank ones go");
+        assert_eq!(rows[0]["interface"], "ether3,bridge");
+        assert_eq!(rows[1][".id"], "*1");
     }
 
     #[test]

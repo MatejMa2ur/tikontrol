@@ -96,7 +96,8 @@ const arp: any[] = raw.arp ?? []
 const wifi: any[] = raw.wifi ?? []
 const log: any[] = Array.isArray(raw.log) ? raw.log : []
 const lq: any[] = raw.linkQuality ?? []
-const neighbors: any[] = Array.isArray(raw.neighbors) ? raw.neighbors : []
+// a neighbour row with no identity, MAC or address can't be shown or set up: skip it
+const neighbors: any[] = (Array.isArray(raw.neighbors) ? raw.neighbors : []).filter((n: any) => n && (n.identity || n['mac-address'] || n.address))
 
 const bandOf = (ifname?: string) => {
   const w = wifi.find((x) => x.name === ifname)
@@ -286,7 +287,7 @@ const connectivity = [
   { name: 'DNS', pct: internet.latency.some((l) => l.ms != null) ? 100 : 0 },
 ]
 const adblock = (raw.adlist ?? []).filter((a: any) => !a.disabled).reduce((s: { names: number; hits: number }, a: any) => ({ names: s.names + a['name-count'], hits: s.hits + a['match-count'] }), { names: 0, hits: 0 })
-return { raw, hw, clients, offline, ports, router, internet, ssids, events, insights, radios, wifiTech, connectivity, adblock }
+return { raw, hw, clients, offline, ports, router, internet, ssids, events, insights, radios, wifiTech, connectivity, adblock, neighbors }
 }
 
 type Built = ReturnType<typeof build>
@@ -294,9 +295,9 @@ type Built = ReturnType<typeof build>
 export let raw: any, hw: Built['hw'], clients: Built['clients'], offline: Built['offline'], ports: Built['ports'],
   router: Built['router'], internet: Built['internet'], ssids: Built['ssids'], events: Built['events'],
   insights: Built['insights'], radios: Built['radios'], wifiTech: Built['wifiTech'], connectivity: Built['connectivity'],
-  adblock: Built['adblock']
+  adblock: Built['adblock'], neighbors: Built['neighbors']
 export function load(snapshot: any) {
-  ;({ raw, hw, clients, offline, ports, router, internet, ssids, events, insights, radios, wifiTech, connectivity, adblock } = build(normalizeWifi(snapshot)))
+  ;({ raw, hw, clients, offline, ports, router, internet, ssids, events, insights, radios, wifiTech, connectivity, adblock, neighbors } = build(normalizeWifi(snapshot)))
 }
 load(preload.snapshot ?? (simulated ? simulateBe3(files['./sample.json']) : files['./snapshot.json'] ?? files['./sample.json']))
 

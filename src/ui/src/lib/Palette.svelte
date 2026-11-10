@@ -1,6 +1,6 @@
 <script lang="ts">
   // ⌘K / Ctrl+K: jump to any page, settings page, client, device or SSID
-  import { clients, ssids, router, raw } from './data'
+  import { clients, ssids, router, neighbors } from './data'
   import { displayName } from './live.svelte'
   import Icon from './Icon.svelte'
 
@@ -11,7 +11,6 @@
 
   // ponytail: mirrors the tabs in pages/Settings.svelte; keep in sync when a settings page is added
   const settings = [['wifi', 'WiFi', 'wifi'], ['networks', 'Networks', 'topology'], ['internet', 'Internet', 'globe'], ['vpn', 'VPN', 'vpn'], ['security', 'Security', 'shield'], ['routing', 'Routing', 'route'], ['profiles', 'Profiles', 'gauge'], ['control', 'Control Plane', 'key'], ['system', 'System', 'settings']]
-  const neighbors: any[] = Array.isArray(raw.neighbors) ? raw.neighbors : []
   const items = $derived(
     [
       ...pages.map((p) => ({ label: p.label, hint: 'Page', icon: p.icon, href: `#/${p.id}`, extra: '' })),
