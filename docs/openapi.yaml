@@ -115,8 +115,8 @@ components:
     Intent:
       type: object
       required: [kind]
-      description: A Safe apply intent. `kind` selects the change; see src/server/src/apply.rs and src/server/src/intents/. `batch` groups up to 8 intents (`title`, `intents`) into one change, undone in reverse order.
-      properties: { kind: { type: string, examples: [block-client, dns-record, port-forward, traffic-rule, set-port-mirror, create-bond, ssh-key, remove-ssh-key, batch] } }
+      description: A Safe apply intent. `kind` selects the change; see src/server/src/apply.rs and src/server/src/intents/. `batch` groups up to 8 intents (`title`, `intents`) into one change, undone in reverse order. `switch-mode` (high risk) turns the router into a managed switch: `bridge`, `address` (a private address the bridge already has; refused otherwise), `gateway` (in that subnet), `dns`, `wifi` (`on`/`off`); it disables rather than deletes, tagging `tik:switch-off|<old comment>`, so `leave-switch-mode` (no fields) restores it exactly.
+      properties: { kind: { type: string, examples: [block-client, dns-record, port-forward, traffic-rule, set-port-mirror, create-bond, ssh-key, remove-ssh-key, switch-mode, leave-switch-mode, batch] } }
       additionalProperties: true
     Preview:
       type: object

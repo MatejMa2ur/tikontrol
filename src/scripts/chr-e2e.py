@@ -25,7 +25,8 @@ import argparse, functools, http.cookiejar, json, os, re, shutil, ssl, subproces
 
 DIR = os.path.expanduser(os.environ.get("CHR_DIR", "~/.cache/tikontrol-chr"))
 OFFSET = int(os.environ.get("CHR_OFFSET", "0"))
-API = 8729 + OFFSET
+# CHR_API: reach api-ssl another way, e.g. from the LAN side (chr.sh CHR_LAN), for switch mode
+API = int(os.environ.get("CHR_API", 8729 + OFFSET))
 HERE = os.path.dirname(os.path.abspath(__file__))
 PORT = 9443 + OFFSET
 BASE = f"https://127.0.0.1:{PORT}"
@@ -280,6 +281,7 @@ ROWS = {
     "group-limit": "Speed limit profiles / P19", "remove-group-limit": "Speed limit profiles / P19",
     "guest-hotspot": "P12 Guest portal", "remove-guest-hotspot": "P12 Guest portal", "hotspot-page": "Captive portal (branded page)", "remove-hotspot-page": "Captive portal (branded page)",
     "hotspot-vouchers": "Vouchers", "remove-hotspot-vouchers": "Vouchers",
+    "switch-mode": "Switch mode", "leave-switch-mode": "Switch mode",
     "remove-port-mirror": "Port mirroring", "set-port-mirror": "Port mirroring",
 }
 for k in ("wifi-radio-enabled", "wifi-guest", "remove-wifi-guest", "wifi-access-list", "remove-wifi-access-list", "wifi-signal-range", "remove-wifi-signal-range", "wifi-schedule", "remove-wifi-schedule"):
@@ -914,6 +916,20 @@ def sc_mcp(c, data):
     return f.done()
 
 
+SWITCH = {"kind": "switch-mode", "bridge": "bridge", "address": "192.168.88.1/24", "gateway": "192.168.88.254", "dns": "192.168.88.254", "wifi": "off"}
+
+
+def sc_switch_mode(c, data):
+    """switch-mode: apply+revert, then keep + leave-switch-mode, each restoring the export exactly. ether1 (tikontrol's
+    usual way in) joins the bridge, so this needs tikontrol on the LAN side: start chr.sh with CHR_LAN (see there), use
+    an ssh-chr.sh on the LAN forward, and set CHR_API to the LAN api-ssl port."""
+    if "CHR_API" not in os.environ:
+        return record("scenario switch-mode", "SKIP", "needs the LAN-side link: CHR_LAN + CHR_API (see chr.sh)", "Switch mode")
+    f = run_case(c, SWITCH, {"kind": "leave-switch-mode"}, "ok")
+    f += run_case(c, {**SWITCH, "address": "192.168.88.9/24"}, None, "error")  # not on the bridge: would cut tikontrol off
+    return f
+
+
 # name for --only, function, kinds it covers (for the coverage list)
 SCENARIOS = [
     ("backups", sc_backups, ["export-config", "save-backup", "remove-backup-file"]),
@@ -925,6 +941,7 @@ SCENARIOS = [
     ("hotspot-page", sc_hotspot_page, ["guest-hotspot", "hotspot-page", "remove-hotspot-page", "remove-guest-hotspot"]),
     ("secrets", sc_secrets_out_of_revert, ["vpn-server", "vpn-user", "radius-server", "wan-type"]),
     ("mcp", sc_mcp, ["dns-record"]),
+    ("switch-mode", sc_switch_mode, ["switch-mode", "leave-switch-mode"]),
 ]
 
 

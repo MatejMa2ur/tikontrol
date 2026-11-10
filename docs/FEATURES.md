@@ -12,7 +12,7 @@ Clean-room: we copy the behaviour, never the assets.
 **Backing:** `ROS` = RouterOS API on the router · `CMR` = MikroTik CMR server · `tik` = our own logic/DB · `✗` = nothing can back it
 
 <!-- progress:start -->
-**Progress:** 122 ✅ · 104 🟨 · 0 🎨 · 1 ⬜ · 9 ➖ (236 items, 54% done) · 105 🔌 waiting for a hardware test ([list](HARDWARE_TESTS.md))
+**Progress:** 122 ✅ · 105 🟨 · 0 🎨 · 1 ⬜ · 9 ➖ (237 items, 54% done) · 106 🔌 waiting for a hardware test ([list](HARDWARE_TESTS.md))
 <!-- progress:end -->
 
 ---
@@ -89,6 +89,7 @@ Clean-room: we copy the behaviour, never the assets.
 | Blueprints / config drift inspector (diff of the reader's structured prints, not `/export`: over the API with only `read` it returns an empty `!done`, and exports risk secrets) | tik (snapshot diff) | 4 | ✅ |
 | Device SSH credentials management (public keys only; writer needs the `policy` policy) | ROS `/user/ssh-keys` | 3 | ✅ |
 | Device LED control / Etherlighting 🔌 `set-leds` turns the LEDs off on a real board | ROS LED · Etherlighting ✗ (UI hw) | 4 | 🟨 |
+| Switch mode: turn a MikroTik router into a managed switch (every ethernet port on one bridge; DHCP, NAT, other addresses, WAN and optionally Wi-Fi turned off, not deleted; default route + DNS via the upstream router; LAN-only input firewall; management address kept; Leave switch mode restores) 🔌 check on a real small router (hAP lite: legacy `wireless`) | ROS bridge, `/ip/*`, `/interface/wireless` or `/interface/wifi` | 3 | 🟨 |
 | Shadow mode / gateway HA | ✗ (VRRP is possible but out of scope) | – | ➖ |
 
 ## Client Devices

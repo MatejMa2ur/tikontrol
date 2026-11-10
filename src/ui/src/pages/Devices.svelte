@@ -71,6 +71,21 @@
   const steps = $derived(guide ? setupSteps(guide.n, guide.ssl, guide.self) : [])
   const copy = (cmds: string[]) => navigator.clipboard?.writeText(cmds.filter((c) => !c.startsWith('#')).join('\n'))
   $effect(() => { keep('devices.tab', dtab) })
+
+  // switch mode (server: intents/switchmode.rs): management stays on an address the bridge already has
+  const bridges: string[] = (raw.bridges ?? []).map((b: any) => b.name)
+  const inSwitchMode = (raw.filter ?? []).some((r: any) => r.comment === 'tik:switch')
+  let sw = $state<{ bridge: string; address: string; gateway: string; dns: string; wifiOff: boolean } | null>(null)
+  const bridgeAddrs = (b: string): string[] => (raw.addresses ?? []).filter((a: any) => a.interface === b && !a.dynamic).map((a: any) => a.address)
+  function openSwitch() {
+    const bridge = bridges[0] ?? 'bridge'
+    sw = { bridge, address: bridgeAddrs(bridge)[0] ?? '', gateway: '', dns: '', wifiOff: true }
+  }
+  function reviewSwitch() {
+    const s = sw!
+    sw = null
+    review('Use as a switch', [`# all ports into ${s.bridge}, managed at ${s.address}, default route via ${s.gateway}`], { kind: 'switch-mode', bridge: s.bridge, address: s.address, gateway: s.gateway, dns: s.dns || s.gateway, wifi: s.wifiOff ? 'off' : 'on' })
+  }
 </script>
 
 <div class="grid">
@@ -251,6 +266,14 @@
       <Field label="LEDs"><Toggle bind:checked={led} label="LEDs" /><button class="btn small" onclick={() => review(led ? 'Turn the LEDs on' : 'Turn the LEDs off', [`/system/leds/settings/set all-leds-off=${led ? 'never' : 'immediate'}`], { kind: 'set-leds', all_leds_off: led ? 'never' : 'immediate' })}>Save</button></Field>
       <Field label="Device SSH" help="Key-based SSH for admins"><Toggle bind:checked={ssh} label="SSH" /></Field>
       <div class="r"><button class="btn" onclick={() => review('Device SSH', [`/ip/service/set ssh disabled=${ssh ? 'no' : 'yes'}`], { kind: 'set-service', name: 'ssh', enabled: ssh })}>Review & apply</button></div>
+      <h3 class="small">Switch mode</h3>
+      {#if inSwitchMode}
+        <p class="muted small">This router works as a switch. Leaving switch mode turns its DHCP, NAT, addresses and WAN port back on.</p>
+        <div class="r"><button class="btn" onclick={() => review('Leave switch mode', ['# turn back on what switch mode turned off'], { kind: 'leave-switch-mode' })}>Leave switch mode</button></div>
+      {:else}
+        <p class="muted small">Turn this router into a managed switch behind another router: every port on one bridge, no DHCP, NAT or routing.</p>
+        <div class="r"><button class="btn" onclick={openSwitch}>Use as a switch</button></div>
+      {/if}
     {/if}
   </aside>
 {/if}
@@ -299,6 +322,19 @@
         {/each}
       </ol>
     {/if}
+  </Modal>
+{/if}
+
+{#if sw}
+  <Modal title="Use {identity} as a switch" onclose={() => (sw = null)}>
+    <p class="small">Every ethernet port joins the bridge. DHCP servers and clients, NAT, the other addresses and the WAN port are turned off, not deleted. The preview lists each change; it reverts by itself unless you keep it.</p>
+    <Field label="Bridge"><select aria-label="Bridge" bind:value={sw.bridge} onchange={() => (sw!.address = bridgeAddrs(sw!.bridge)[0] ?? '')}>{#each bridges as b}<option>{b}</option>{/each}</select></Field>
+    <Field label="Management address" help="One the bridge already has: the one you reach this router on">
+      <select aria-label="Management address" bind:value={sw.address}>{#each bridgeAddrs(sw.bridge) as a}<option>{a}</option>{:else}<option value="">No address on this bridge</option>{/each}</select></Field>
+    <Field label="Gateway" help="The router that serves this network"><input type="text" aria-label="Gateway" bind:value={sw.gateway} placeholder="192.168.88.1" /></Field>
+    <Field label="DNS server" help="Empty: the gateway"><input type="text" aria-label="DNS server" bind:value={sw.dns} placeholder={sw.gateway || '192.168.88.1'} /></Field>
+    <Field label="Turn Wi-Fi off"><Toggle bind:checked={sw.wifiOff} label="Turn Wi-Fi off" /></Field>
+    <div class="r"><button class="btn primary" disabled={!sw.address || !sw.gateway} onclick={reviewSwitch}>Review</button></div>
   </Modal>
 {/if}
 

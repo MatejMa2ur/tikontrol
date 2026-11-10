@@ -43,6 +43,7 @@ Cross-cutting questions (dotted proplists, Safe apply under device mode or after
 - [ ] **Topology map (auto layout, wired + wireless links; MNDP/LLDP neighbours as intermediate switch/AP nodes with their port's clients)** 🟨: check with a real switch and AP behind the router, including a daisy chain
 - [ ] **Topology Spotlight (highlight/filter)** 🟨: check on a real multi-device topology
 - [ ] **Device LED control / Etherlighting** 🟨: `set-leds` turns the LEDs off on a real board
+- [ ] **Switch mode: turn a MikroTik router into a managed switch (every ethernet port on one bridge; DHCP, NAT, other addresses, WAN and optionally Wi-Fi turned off, not deleted; default route + DNS via the upstream router; LAN-only input firewall; management address kept; Leave switch mode restores)** 🟨: check on a real small router (hAP lite: legacy `wireless`)
 
 ## Client Devices
 

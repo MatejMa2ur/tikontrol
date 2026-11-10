@@ -9,6 +9,7 @@ pub mod ports;
 pub mod profiles;
 pub mod routing;
 pub mod security;
+pub mod switchmode;
 pub mod system;
 pub mod traffic;
 pub mod users;
