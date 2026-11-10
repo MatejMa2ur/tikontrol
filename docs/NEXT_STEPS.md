@@ -62,6 +62,23 @@ Driven through tikontrol's HTTP API, the same endpoints the UI calls. The UI its
   - Reverting a Fixed IP on a lease that was already static deleted that lease. tikontrol now refuses the change.
   - Kick only knew the legacy `wireless` path. It now also handles `wifi`.
   - The change history was ordered by random id instead of by time.
+- **Full intent suite** (`src/scripts/chr-e2e.py`, 2026-11): every intent kind the CHR can run is applied, reverted,
+  kept and its inverse checked against `/export`, plus scenarios for backups, the update window, DHCPv6, input-rule
+  order, ad-lists, the branded hotspot page, secrets staying out of the revert job and MCP proposals. After the
+  fixes below, every case passes; skipped cases need Wi-Fi, PoE, RouterBOOT or a restart (`HARDWARE_TESTS.md`).
+  Found and fixed:
+  - `/certificate` has no `comment`, and `/certificate/sign` takes `number`, not `numbers`: OpenVPN certificates
+    failed to create and sign.
+  - Undo bugs: the guest hotspot came back disabled, a disabled ad-list came back enabled, scheduled backups moved
+    their start time, a removed DHCP option left a dangling reference on its network, and a batch that unblocks
+    several domains lost or reordered rules and DNS entries (anchors are now looked up by tag when the undo runs,
+    and a rule whose anchor is gone is still added, at the end).
+  - Finished changes counted against the pending-preview limit, so long sessions got "too many pending changes".
+  - A busy router refuses logins with "too many concurrent logins": tikontrol retries that one refusal.
+  - A Wi-Fi schedule was accepted for an interface the router doesn't have.
+  - Permissions: `/file/read` needs `ftp` (downloads now go through the writer; the reader must not have it), and a
+    scheduled job only gets its creator's rights, so the update window can't check (`policy`) or install
+    (`policy`, `reboot`) with the least-privilege writer. The job now logs a warning instead of failing silently.
 
 ## Backend: still to test on RouterOS
 

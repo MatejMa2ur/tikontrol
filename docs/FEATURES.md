@@ -12,7 +12,7 @@ Clean-room: we copy the behaviour, never the assets.
 **Backing:** `ROS` = RouterOS API on the router · `CMR` = MikroTik CMR server · `tik` = our own logic/DB · `✗` = nothing can back it
 
 <!-- progress:start -->
-**Progress:** 120 ✅ · 105 🟨 · 0 🎨 · 1 ⬜ · 9 ➖ (235 items, 53% done) · 106 🔌 waiting for a hardware test ([list](HARDWARE_TESTS.md))
+**Progress:** 121 ✅ · 104 🟨 · 0 🎨 · 1 ⬜ · 9 ➖ (235 items, 54% done) · 105 🔌 waiting for a hardware test ([list](HARDWARE_TESTS.md))
 <!-- progress:end -->
 
 ---
@@ -38,7 +38,7 @@ Clean-room: we copy the behaviour, never the assets.
 | P15 | Settings → Internet 🔌 a real ISP line: DHCP/PPPoE/static, tagged WAN VLAN, failover, prefix delegation | Settings · Internet | 3 | 🟨 |
 | P16 | Settings → VPN 🔌 connect a phone over a real WAN with WireGuard and L2TP/IPsec | Settings · VPN | 2 | 🟨 |
 | P17 | Settings → Security / CyberSecure (all sections on real data and intents) 🔌 run the security checks below on a CHR | Settings · Security | 3 | 🟨 |
-| P18 | Settings → Routing (add and remove port forwards, routes, DNS records) 🔌 add, remove and revert each on a CHR; hand-made rows must have no Remove | Settings · Routing | 2 | 🟨 |
+| P18 | Settings → Routing (add and remove port forwards, routes, DNS records): add, remove and revert each verified on CHR, removing hand-made rows refused | Settings · Routing | 2 | ✅ |
 | P19 | Settings → Profiles (real speed profiles, QoS rules and RADIUS servers, with remove) 🔌 remove a speed profile, a QoS rule and a tagged RADIUS server on a CHR | Settings · Profiles | 3 | 🟨 |
 | P20 | Settings → Control Plane (admins, backups, updates, integrations, console) 🔌 backups, update window, console and API keys on a CHR | Settings · System | 2 | 🟨 |
 | P21 | Settings → System (site, logging, SNMP, device auth) 🔌 site settings, remote syslog, SNMP and service hardening on a CHR | Settings · System | 2 | 🟨 |
@@ -220,7 +220,7 @@ Clean-room: we copy the behaviour, never the assets.
 | Feature | Backing | Phase | Status |
 |---|---|---|---|
 | WireGuard server + peers + QR (enable/disable and remove peers) 🔌 a phone peer connects over a real WAN, disable stops it, remove + revert | ROS `/interface/wireguard` | 2 | 🟨 |
-| OpenVPN server (on/off, VPN users; refuses without a certificate and explains how to make one; generates its own CA and server certificate, signs them on the router and offers the CA for download) 🔌 older versions print `certificate=none`; log in with an ovpn VPN user | ROS ovpn-server | 4 | 🟨 |
+| OpenVPN server (on/off, VPN users; refuses without a certificate and explains how to make one; generates its own CA and server certificate, signs them on the router and offers the CA for download; certificates created, signed, exported and reverted on CHR) 🔌 older versions print `certificate=none`; log in with an ovpn VPN user | ROS ovpn-server | 4 | 🟨 |
 | L2TP/IPsec server (`use-ipsec=required` with a masked IPsec secret, VPN users add/remove) 🔌 enable with a secret, check the dynamic IPsec peer, log in from a phone, revert leaves `use-ipsec` as it was | ROS | 4 | 🟨 |
 | VPN client (to a provider) | ROS wg / ovpn client | 3 | ✅ |
 | Site-to-site (WireGuard / IPsec) | ROS | 3 | ✅ |
@@ -233,7 +233,7 @@ Clean-room: we copy the behaviour, never the assets.
 |---|---|---|---|
 | Zone-based firewall (zone matrix) | ROS interface-lists → filter rules | 3 | ✅ |
 | Firewall policies (custom rules) | ROS filter | 3 | ✅ |
-| Simple app blocking (saved state, several apps in one batch, unblock) 🔌 block and revert the 4 YouTube domains as one change; check apps really stop | ROS tls-host + DNS · CMR app classes | 3 | 🟨 |
+| Simple app blocking (saved state, several apps in one batch, unblock; a batch and its revert keep firewall rules and DNS entries in place, verified on CHR) 🔌 check the apps really stop on real clients | ROS tls-host + DNS · CMR app classes | 3 | 🟨 |
 | Traffic rules (block/limit by client, app, time) | ROS filter + queues + scheduler | 3 | ✅ |
 | Ad blocking | ROS `/ip/dns/adlist` | 2 | ✅ |
 | Content filtering (family, adult): presets (adult, gambling, family: third-party lists the router fetches, labelled), plus add, enable/disable and remove ad-lists by URL 🔌 add each preset: `name-count` > 0 and memory OK on a small router; `set-adlist` on an https list; a blocked name stops resolving | ROS adlist / DNS | 2 | 🟨 |
@@ -278,7 +278,7 @@ Clean-room: we copy the behaviour, never the assets.
 | Admin users + roles | tik (own users) + ROS `/user` | 2 | ✅ |
 | SSO / cloud account | ✗ local auth only | – | ➖ |
 | Sign in with MikroTik account (role from router group, password only in session memory, changes run as that user) 🔌 sign in with a router admin and a read-only user on a CHR | tik + ROS login | 2 | 🟨 |
-| Backups (scheduled, download, restore): list verified on CHR; tikontrol downloads its own `tik-*.rsc` exports (admin only, no secrets), full `.backup` files stay on the router 🔌 download a tik-*.rsc as the reader with `/file/read` (RouterOS 7.13+); check which policy the reader needs | ROS `/system/backup` + `/export` | 2 | 🟨 |
+| Backups (scheduled, download, restore): list verified on CHR; tikontrol downloads its own `tik-*.rsc` exports (admin only, no secrets) through the writer: `/file/read` needs the `ftp` policy, which the reader must not have (verified on CHR, read-only mode can't download); full `.backup` files stay on the router 🔌 restore a backup on a spare router (it restarts) | ROS `/system/backup` + `/export` | 2 | 🟨 |
 | Firmware/app updates (channel, auto-update window: daily or weekly check, optional install; on CHR the window fires and logs, and a job without the `policy` permission logs a warning instead of stopping silently: RouterOS gives a job only its creator's rights, and the check needs `policy`, install also `reboot`, which the least-privilege writer lacks) 🔌 on a spare router with internet: a real check and an install + restart, with a writer whose group has policy,reboot | ROS / CMR | 2 | 🟨 |
 | Integrations / local API (+ API keys) | tik REST | 4 | ✅ |
 | Console (terminal in browser) | ROS (SSH/API terminal) | 3 | ✅ |
