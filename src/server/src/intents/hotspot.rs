@@ -262,7 +262,8 @@ fn build(i: I, r: &mut dyn Router) -> Result<Plan, String> {
             undo.extend(readd(r, DHCPS, "name", NAME, &["name", "interface", "address-pool", "lease-time", "comment"])?);
             undo.extend(readd(r, UPROF, "name", NAME, &["name", "session-timeout", "rate-limit"])?);
             undo.extend(readd(r, HPROF, "name", NAME, &["name", "hotspot-address", "login-by", "trial-uptime-limit", "trial-user-profile", "html-directory"])?);
-            undo.extend(readd(r, HS, "name", NAME, &["name", "interface", "address-pool", "profile"])?);
+            // a hotspot is added disabled unless told otherwise (seen on CHR): the undo puts its state back too
+            undo.extend(readd(r, HS, "name", NAME, &["name", "interface", "address-pool", "profile", "disabled"])?);
             let mut ops = vec![rm(HS, "name", NAME), rm(HPROF, "name", NAME), rm(UPROF, "name", NAME), rm(DHCPS, "name", NAME), rm(NET, "comment", C), rm(POOL, "name", NAME), rm(ADDR, "comment", C)];
             // with the last hotspot gone they are meaningless; re-adding the hotspot on undo brings them back
             if r.run(&Cmd::new("/ip/hotspot/print").proplist(&["name"]))?.len() == 1 && placeholders(r)? {
@@ -457,9 +458,11 @@ mod tests {
     #[test]
     fn removing_the_last_hotspot_removes_the_placeholders() {
         let mut f = Fake::default();
-        f.answers.insert("/ip/hotspot/print".into(), Ok(vec![row(&[(".id", "*1"), ("name", "tik-guest")])]));
+        f.answers.insert("/ip/hotspot/print".into(), Ok(vec![row(&[(".id", "*1"), ("name", "tik-guest"), ("disabled", "false")])]));
         f.answers.insert("/ip/firewall/filter/print".into(), Ok(vec![row(&[(".id", "*9")])]));
         let p = ok(json!({"kind": "remove-guest-hotspot"}), &mut f);
+        // the undo puts the hotspot back enabled: RouterOS adds it disabled otherwise
+        assert!(p.undo_cli().iter().any(|c| c.starts_with("/ip/hotspot/add name=tik-guest") && c.ends_with("disabled=no")), "{:?}", p.undo_cli());
         assert!(p.cli().last().unwrap().contains("place hotspot rules here"), "{:?}", p.cli());
         f.answers.insert("/ip/hotspot/print".into(), Ok(vec![row(&[("name", "tik-guest")]), row(&[("name", "other")])]));
         let p = ok(json!({"kind": "remove-guest-hotspot"}), &mut f);
