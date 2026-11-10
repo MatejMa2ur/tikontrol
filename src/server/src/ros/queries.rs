@@ -113,6 +113,8 @@ const QUERIES: &[Q] = &[
     q("bonds", "/interface/bonding/print", &["name", "slaves", "mode", "running", "disabled", "comment"]).arrays(&["slaves"]),
     q("switches", "/interface/ethernet/switch/print", &["name", "type", "mirror-source", "mirror-target"]),
     q("switchPorts", "/interface/ethernet/switch/port/print", &["name", "storm-rate"]),
+    // optional: only boards with PoE-out have this menu; the others report an error (or nothing) for this key
+    q("poe", "/interface/ethernet/poe/print", &["name", "poe-out", "poe-priority", "poe-voltage"]),
     q("dot1x", "/interface/dot1x/server/print", &["interface", "auth-types", "disabled", "comment"]).arrays(&["auth-types"]),
     // never the RADIUS secret
     q("radius", "/radius/print", &["service", "disabled"]).arrays(&["service"]),
@@ -286,9 +288,13 @@ pub fn snapshot(r: &mut dyn Router, with_latency: bool) -> Value {
     let names = |key: &str| -> Vec<String> {
         out.get(key).and_then(Value::as_array).map(|a| a.iter().filter_map(|x| x["name"].as_str().map(String::from)).collect()).unwrap_or_default()
     };
-    let (eth, wl, wn) = (names("ethernet"), names("wifi"), names("wifiNew"));
+    let (eth, wl, wn, poe) = (names("ethernet"), names("wifi"), names("wifiNew"), names("poe"));
     if !eth.is_empty() {
         run(&mut out, "etherMon", Cmd::new("/interface/ethernet/monitor").arg("numbers", &eth.join(",")).arg("once", "").proplist(&["name", "status", "rate", "full-duplex", "auto-negotiation"]), Shape::List, &[]);
+    }
+    if !poe.is_empty() {
+        // ponytail: field names from the PoE-out manual, unverified over the API; missing ones are just absent
+        run(&mut out, "poeMon", Cmd::new("/interface/ethernet/poe/monitor").arg("numbers", &poe.join(",")).arg("once", "").proplist(&["name", "poe-out-status", "poe-out-voltage", "poe-out-current", "poe-out-power"]), Shape::List, &[]);
     }
     if !wl.is_empty() {
         run(&mut out, "radios", Cmd::new("/interface/wireless/monitor").arg("numbers", &wl.join(",")).arg("once", "").proplist(&["channel", "noise-floor", "overall-tx-ccq", "registered-clients", "status"]), Shape::List, &[]);
@@ -409,6 +415,26 @@ pub mod tests {
         let cloud = f.seen.iter().find(|w| w[0] == "/ip/cloud/print").unwrap();
         assert_eq!(cloud[1], "=.proplist=public-address,dns-name,back-to-home-vpn,ddns-enabled");
         assert!(!f.seen.iter().flatten().any(|w| w.contains("private-key") || w.contains("on-event") || w.contains("passphrase")));
+    }
+
+    #[test]
+    fn poe_is_optional_and_monitored_only_where_present() {
+        let mut f = Fake::default();
+        f.answers.insert("/interface/ethernet/poe/print".into(), Err("no such command prefix".into()));
+        let s = snapshot(&mut f, false);
+        assert!(s.get("poe").is_none() && s.get("poeMon").is_none());
+        assert!(s["_errors"].as_array().unwrap().iter().any(|e| e["key"] == "poe"));
+        assert!(s.get("resource").is_some(), "a board without PoE still gets the rest of the snapshot");
+        assert!(!f.seen.iter().any(|w| w[0] == "/interface/ethernet/poe/monitor"));
+
+        let mut f = Fake::default();
+        f.answers.insert("/interface/ethernet/poe/print".into(), Ok(vec![row(&[("name", "ether2"), ("poe-out", "auto-on")]), row(&[("name", "ether3"), ("poe-out", "off")])]));
+        f.answers.insert("/interface/ethernet/poe/monitor".into(), Ok(vec![row(&[("name", "ether2"), ("poe-out-status", "powered-on"), ("poe-out-power", "3.2")])]));
+        let s = snapshot(&mut f, false);
+        assert_eq!(s["poe"][1]["poe-out"], "off");
+        assert_eq!(s["poeMon"][0]["poe-out-status"], "powered-on");
+        let mon = f.seen.iter().find(|w| w[0] == "/interface/ethernet/poe/monitor").unwrap();
+        assert!(mon.contains(&"=numbers=ether2,ether3".to_string()), "{mon:?}");
     }
 
     #[test]

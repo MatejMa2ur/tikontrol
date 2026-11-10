@@ -20,13 +20,13 @@
 
   // port editor
   let edit = $state<string | null>(null)
-  let f = $state({ enabled: true, profile: 'all', pvid: 1, tagged: '', speed: 'auto', poe: false })
+  let f = $state({ enabled: true, profile: 'all', pvid: 1, tagged: '', speed: 'auto', poe: 'auto-on' })
   const eth = (p: string): any => (Array.isArray(raw.ethernet) ? raw.ethernet : []).find((e: any) => e.name === p) ?? {}
   const speedOf = (p: string) => (eth(p)['auto-negotiation'] === false ? String(eth(p).speed ?? 'auto') : 'auto')
   let start = { enabled: true, profile: 'all', pvid: 1, tagged: '', speed: 'auto' }
   function open(p: string) {
     const bp = bports.find((b) => b.interface === p)
-    f = { enabled: !eth(p).disabled, profile: bp ? (bp['frame-types'] === 'admit-only-vlan-tagged' ? 'trunk' : 'all') : 'wan', pvid: bp?.pvid ?? 1, tagged: '', speed: speedOf(p), poe: false }
+    f = { enabled: !eth(p).disabled, profile: bp ? (bp['frame-types'] === 'admit-only-vlan-tagged' ? 'trunk' : 'all') : 'wan', pvid: bp?.pvid ?? 1, tagged: '', speed: speedOf(p), poe: String(poeOf(p)?.['poe-out'] ?? 'auto-on') }
     start = { enabled: f.enabled, profile: f.profile, pvid: f.pvid, tagged: f.tagged, speed: f.speed }
     const others = ports.map((x) => x.name).filter((n) => n !== p)
     a = { mirrorTo: sw['mirror-target'] && sw['mirror-target'] !== 'none' ? sw['mirror-target'] : others.at(-1) ?? '', bondWith: others[0] ?? '', bondMode: '802.3ad', edge: bp?.edge ?? 'auto', bpduGuard: !!bp?.['bpdu-guard'], storm: swp(p)?.['storm-rate'] ?? 100 }
@@ -56,6 +56,16 @@
   const bonds = list(raw.bonds)
   const dot1x = list(raw.dot1x)
   const radiusDot1x = list(raw.radius).some((r) => list(r.service).includes('dot1x') && !r.disabled)
+  // PoE out: only ports the router lists under /interface/ethernet/poe (feature-detected; PoE-in-only boards have none)
+  const poeRows = list(raw.poe).filter((x) => x && typeof x.name === 'string')
+  const poeOf = (p: string) => poeRows.find((x) => x.name === p)
+  const poeMon = (p: string): any => list(raw.poeMon).find((x) => x?.name === p) ?? {}
+  const poeText = (p: string) => {
+    const c = poeOf(p), s = poeMon(p)
+    if (!c) return ''
+    const state = s['poe-out-status'] ? String(s['poe-out-status']).replace(/-/g, ' ') : String(c['poe-out'] ?? '?')
+    return s['poe-out-status'] === 'powered-on' && s['poe-out-power'] != null ? `${state} · ${s['poe-out-power']} W` : state
+  }
   const disc: any = raw.discovery && typeof raw.discovery === 'object' ? raw.discovery : null
   const UPLINK = 'High risk if this is the port tikontrol or your browser reaches the router through: a mistake cuts you off until the change reverts (5 min).'
   let a = $state({ mirrorTo: '', bondWith: '', bondMode: '802.3ad', edge: 'auto', bpduGuard: false, storm: 100 })
@@ -69,7 +79,7 @@
 
   <section class="card flush">
     <table>
-      <thead><tr><th>Port</th><th>Status</th><th>Speed</th>{#if !compact}<th>Role</th><th>Profile</th><th class="r">Traffic ↓ / ↑</th><th class="r">Errors</th>{/if}<th>Connected</th></tr></thead>
+      <thead><tr><th>Port</th><th>Status</th><th>Speed</th>{#if !compact && poeRows.length}<th>PoE out</th>{/if}{#if !compact}<th>Role</th><th>Profile</th><th class="r">Traffic ↓ / ↑</th><th class="r">Errors</th>{/if}<th>Connected</th></tr></thead>
       <tbody>
         {#each ports as p}
           {@const bp = bports.find((b) => b.interface === p.name)}
@@ -78,6 +88,7 @@
             <td><span class="pill {p.up ? 'ok' : ''}">{p.up ? 'Link up' : 'No link'}</span></td>
             <!-- virtual NICs (CHR) report no rate or duplex -->
             <td>{p.up && m(p.name).rate ? `${m(p.name).rate}${m(p.name)['full-duplex'] ? ' FD' : ' HD'}` : p.up ? 'Unknown' : '—'}</td>
+            {#if !compact && poeRows.length}<td class="muted">{poeText(p.name) || '—'}</td>{/if}
             {#if !compact}
               <td class="muted">{p.wan ? 'Internet (WAN)' : bp ? `LAN (${bp.bridge})` : 'Not in a bridge'}</td>
               <td class="muted">{bp ? `All · native VLAN ${bp.pvid}` : p.wan ? 'WAN' : '—'}</td>
@@ -96,7 +107,7 @@
     </table>
   </section>
   {#if !compact}
-    <section class="card small muted">Bridge <b>{bridge.name}</b> · STP mode <b>{bridge['protocol-mode']}</b> · VLAN filtering <b>{bridge['vlan-filtering'] ? 'on' : 'off'}</b> · IGMP snooping <b>{bridge['igmp-snooping'] ? 'on' : 'off'}</b> · PoE out: <b>not available on this model</b></section>
+    <section class="card small muted">Bridge <b>{bridge.name}</b> · STP mode <b>{bridge['protocol-mode']}</b> · VLAN filtering <b>{bridge['vlan-filtering'] ? 'on' : 'off'}</b> · IGMP snooping <b>{bridge['igmp-snooping'] ? 'on' : 'off'}</b> · PoE out: <b>{poeRows.length ? `${poeRows.length} port${poeRows.length === 1 ? '' : 's'}` : 'not reported by this router'}</b></section>
     <Ros cmd="/interface/ethernet/monitor [find] once; /interface/print stats where type=ether; /interface/bridge/port/print; /interface/bridge/host/print where !local" />
   {/if}
 </div>
@@ -113,7 +124,13 @@
     <Field label="Link speed"><select bind:value={f.speed}><option value="auto">Auto</option><option>1G-baseT-full</option><option>100M-baseT-full</option><option>10M-baseT-full</option></select></Field>
     <details><summary class="small">Advanced</summary>
       <p class="tiny warn">{UPLINK}</p>
-      <Field label="PoE output" na="Not available on {router.board} (PoE-in only)"><Toggle bind:checked={f.poe} disabled label="PoE" /></Field>
+      {#if edit && poeOf(edit)}
+        {@const pc = poeOf(edit)}
+        <Field label="PoE output" help="Now: {poeText(edit)}{pc['poe-priority'] != null ? ` · priority ${pc['poe-priority']}` : ''}{pc['poe-voltage'] ? ` · voltage ${pc['poe-voltage']}` : ''}">
+          <select bind:value={f.poe} aria-label="PoE output mode"><option value="auto-on">Auto (powers detected PoE devices)</option><option value="off">Off</option><option value="forced-on">Forced on</option></select>
+          <button class="btn" disabled={f.poe === pc['poe-out']} onclick={() => go(`PoE ${f.poe} on ${edit}`, `/interface/ethernet/poe/set [find name="${edit}"] poe-out=${f.poe}`, { kind: 'set-poe', interface: edit, mode: f.poe })}>Review</button>
+        </Field>
+      {:else}<Field label="PoE output" na="{router.board ?? 'This router'} reports no PoE output on {edit}"><span></span></Field>{/if}
       {#if mirrorOk}
         <Field label="Port mirroring" help={mirroring ? `Now: ${sw['mirror-source']} → ${sw['mirror-target']}` : `Copy ${edit}'s traffic to a capture port (switch chip ${sw.type ?? ''})`}>
           <select bind:value={a.mirrorTo} aria-label="Mirror target">{#each ports.filter((x) => x.name !== edit) as o}<option>{o.name}</option>{/each}</select>

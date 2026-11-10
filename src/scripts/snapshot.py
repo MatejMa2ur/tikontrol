@@ -92,6 +92,9 @@ Q = {
     "addressLists": "[/ip/firewall/address-list/print as-value proplist=list,address,dynamic,comment]",
     "etherStats": "[/interface/print stats as-value proplist=name,rx-byte,tx-byte,rx-error,tx-error,rx-drop,tx-drop where type=ether]",
     "etherMon": "[/interface/ethernet/monitor [find] once as-value]",
+    # optional: only boards with PoE-out have these menus (others give an error string, which the UI ignores)
+    "poe": "[/interface/ethernet/poe/print as-value proplist=name,poe-out,poe-priority,poe-voltage]",
+    "poeMon": "[/interface/ethernet/poe/monitor [find] once as-value]",
     "ipv6": '({"disable-ipv6"=[/ipv6/settings/get disable-ipv6]})',
     "ipv6Pools": "[/ipv6/pool/print as-value proplist=name,prefix,prefix-length]",
     "ipv6Addresses": "[/ipv6/address/print as-value proplist=address,interface,from-pool,advertise,dynamic,comment]",
@@ -119,6 +122,8 @@ for name, ip in [("Cloudflare", "1.1.1.1"), ("Google", "8.8.8.8"), ("Quad9", "9.
     snap["latency"][name] = {"ms": round(int(m[1] or 0) + int(m[2] or 0) / 1000, 1) if m else None, "loss": int(loss[1]) if loss else None}
 if isinstance(snap.get("etherMon"), list):
     snap["etherMon"] = [{k: r.get(k) for k in ("name", "status", "rate", "full-duplex", "auto-negotiation")} for r in snap["etherMon"]]
+if isinstance(snap.get("poeMon"), list):
+    snap["poeMon"] = [{k: r.get(k) for k in ("name", "poe-out-status", "poe-out-voltage", "poe-out-current", "poe-out-power")} for r in snap["poeMon"]]
 if isinstance(snap.get("ovpn"), list):
     snap["ovpn"] = [{k: r.get(k) for k in ("name", "disabled", "port", "protocol")} for r in snap["ovpn"]]
 if isinstance(snap.get("dnsCache"), list):

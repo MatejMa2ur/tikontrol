@@ -25,11 +25,11 @@
   // physical radios (virtual APs ride on their master); one checkbox per band
   const phys = radios.filter((r) => !W.find((w) => w.name === r.name)?.['master-interface'])
 
-  type Ssid = { name: string; password: string; security: string; bands: string[]; ifaces: string[]; network: number; hidden: boolean; isolation: boolean; guest: boolean; schedule: boolean; from: string; to: string; limit: string; macFilter: boolean; ft: boolean; steer: boolean; passpoint: boolean }
+  type Ssid = { name: string; password: string; security: string; bands: string[]; ifaces: string[]; network: number; hidden: boolean; isolation: boolean; guest: boolean; schedule: boolean; from: string; to: string; limit: string; ft: boolean; steer: boolean; passpoint: boolean }
   const fromRouter = (s: (typeof ssids)[number]): Ssid => {
     const rows = W.filter((w) => w.ssid === s.ssid), w0 = rows[0] ?? {}
     const lim = rows.length && (+w0['default-ap-tx-limit'] || +w0['default-client-tx-limit']) ? `${mbit(w0['default-ap-tx-limit'])}/${mbit(w0['default-client-tx-limit'])}` : ''
-    return { name: s.ssid, password: '', security: secOf(w0.auth), bands: s.radios.map((r) => r.band), ifaces: s.radios.map((r) => r.name), network: w0.name ? pvidOf(w0.name) : 1, hidden: !!w0['hide-ssid'], isolation: w0['default-forwarding'] === false, guest: String(w0.comment ?? '').startsWith('tik:guest'), schedule: !!(w0.name && sched(w0.name, true)), from: (w0.name && sched(w0.name, true)) || '07:00', to: (w0.name && sched(w0.name, false)) || '23:00', limit: lim, macFilter: (raw.accessList ?? []).length > 0, ft: w0.ft === true, steer: w0.steering !== false, passpoint: String(w0.interworking ?? '').startsWith('tik-passpoint-') }
+    return { name: s.ssid, password: '', security: secOf(w0.auth), bands: s.radios.map((r) => r.band), ifaces: s.radios.map((r) => r.name), network: w0.name ? pvidOf(w0.name) : 1, hidden: !!w0['hide-ssid'], isolation: w0['default-forwarding'] === false, guest: String(w0.comment ?? '').startsWith('tik:guest'), schedule: !!(w0.name && sched(w0.name, true)), from: (w0.name && sched(w0.name, true)) || '07:00', to: (w0.name && sched(w0.name, false)) || '23:00', limit: lim, ft: w0.ft === true, steer: w0.steering !== false, passpoint: String(w0.interworking ?? '').startsWith('tik-passpoint-') }
   }
   // CMR networks select APs by label (src/server/src/cmr.rs resolves the selector)
   $effect(() => { loadCmr() })
@@ -112,6 +112,24 @@
     ? `/interface/wifi/set [find name="${r.name}"] channel.frequency=${freqOf(r)} channel.width=${widthOf(r)}${r.power === 'default' ? '' : ` configuration.tx-power=${powerOf(r)}`}`
     : `/interface/wireless/set [find name="${r.name}"] frequency=${freqOf(r)} channel-width=${widthOf(r)}${r.power === 'default' ? ' tx-power-mode=default' : ` tx-power-mode=all-rates-fixed tx-power=${powerOf(r)}`}`
   const radioIntent = (r: Rf): Intent => ({ kind: 'wifi-radio', package: pkg, interface: r.name, frequency: freqOf(r), width: widthOf(r), tx_power: powerOf(r) })
+  // Access rules: tikontrol's own access-list entries (tik:acl / tik:sigrange) and schedules (tik-wifi-on/off-<if>).
+  // raw.accessList is already the right package's list (normalizeWifi). Only tik-tagged objects get a Remove button:
+  // the remove intents refuse anything else.
+  const acl: any[] = Array.isArray(raw.accessList) ? raw.accessList : []
+  const macRules = acl.filter((a) => String(a.comment ?? '').startsWith('tik:acl:'))
+  const allowed = (a: any) => (a.action != null ? a.action === 'accept' : a.authentication !== false)
+  const sigIfs = [...new Set(acl.map((a) => String(a.comment ?? '')).filter((c) => c.startsWith('tik:sigrange:')).map((c) => c.slice(13)))]
+  const sigMin = (ifn: string) => String(acl.find((a) => a.comment === `tik:sigrange:${ifn}` && a['signal-range'])?.['signal-range'] ?? '').split('..')[0]
+  const otherRules = acl.filter((a) => !String(a.comment ?? '').startsWith('tik:')).length
+  const schedIfs = (raw.scheduler ?? []).map((x: any) => String(x.name ?? '')).filter((n: string) => n.startsWith('tik-wifi-on-')).map((n: string) => n.slice(12))
+  const guestOf = (s: Ssid) => W.find((w) => w.ssid === s.name && String(w.comment ?? '').startsWith('tik:guest:') && w['master-interface'])
+  let mf = $state({ mac: '', allow: false, iface: '' })
+  const macOk = $derived(/^([0-9a-f]{2}[:-]){5}[0-9a-f]{2}$/i.test(mf.mac.trim()))
+  function reviewMac() {
+    const mac = mf.mac.trim().toUpperCase().replaceAll('-', ':')
+    const i: Intent = { kind: 'wifi-access-list', package: pkg, mac, allow: mf.allow, ...(mf.iface ? { interface: mf.iface } : {}) }
+    review(`${mf.allow ? 'Allow' : 'Deny'} ${mac} on Wi-Fi`, [`${pkgPath}/access-list/add mac-address=${mac}${mf.iface ? ` interface=${mf.iface}` : ''} ${legacy ? `authentication=${mf.allow ? 'yes' : 'no'} forwarding=${mf.allow ? 'yes' : 'no'}` : `action=${mf.allow ? 'accept' : 'reject'}`} comment=tik:acl:${mac}`], i)
+  }
   const channels = (band: string) => (band.startsWith('2') ? ['auto', '1', '6', '11'] : band.startsWith('6') ? ['auto', '5', '37', '69', '101', '133', '165', '197'] : ['auto', '36', '44', '52', '100', '116', '132', '149'])
 </script>
 
@@ -127,7 +145,10 @@
           <td>{s.bands.join(' + ')}</td>
           <td>{netName(s.network)}</td>
           <td>{clients.filter((c) => c.ssid === s.name).length}</td>
-          <td class="r"><button class="btn small" onclick={(e) => { e.stopPropagation(); qr = s; qrPass = '' }}>QR code</button></td>
+          <td class="r">
+            <button class="btn small" onclick={(e) => { e.stopPropagation(); qr = s; qrPass = '' }}>QR code</button>
+            {#if guestOf(s)}{@const g = guestOf(s)}<button class="btn small" onclick={(e) => { e.stopPropagation(); review(`Remove guest network ${s.name}`, [`${pkgPath}/remove [find comment="${g.comment}"]`, ...(legacy ? [`/interface/wireless/security-profiles/remove [find comment="${g.comment}"]`] : [])], { kind: 'remove-wifi-guest', package: pkg, master: g['master-interface'], ssid: s.name }) }}>Remove</button>{/if}
+          </td>
         </tr>
       {/each}
     </tbody>
@@ -145,6 +166,40 @@
     </Field>
   {/each}
   <div class="r"><button class="btn" disabled={!rf.length} onclick={() => review('Radio settings', rf.map(radioCli), rf.length === 1 ? radioIntent(rf[0]) : { kind: 'batch', title: 'Radio settings', intents: rf.slice(0, 8).map(radioIntent) })}>Apply all radios</button></div>
+</Section>
+
+<Section title="Access rules" desc="Allow or deny single devices by MAC address. The router uses the first matching rule, so tikontrol puts new ones on top." ros="{pkgPath}/access-list/print; /system/scheduler/print">
+  {#if W.length}
+    <Field label="MAC address filter" help="Deny blocks the device. Allow only restricts once the interface stops accepting unknown devices">
+      <input type="text" bind:value={mf.mac} placeholder="02:00:00:00:00:01" aria-label="Device MAC address" autocomplete="off" spellcheck="false" />
+      <select bind:value={mf.allow} aria-label="Allow or deny"><option value={false}>Deny</option><option value={true}>Allow</option></select>
+      <select bind:value={mf.iface} aria-label="Wi-Fi interface"><option value="">All Wi-Fi interfaces</option>{#each W as w}<option value={w.name}>{w.name}{w.ssid ? ` (${w.ssid})` : ''}</option>{/each}</select>
+      <button class="btn small" disabled={!macOk} onclick={reviewMac}>Review</button>
+    </Field>
+  {:else}<Field label="MAC address filter" na="This router reports no Wi-Fi interfaces"><span></span></Field>{/if}
+  {#if macRules.length || sigIfs.length || schedIfs.length}
+    <table>
+      <thead><tr><th>Rule</th><th>Applies to</th><th></th></tr></thead>
+      <tbody>
+        {#each macRules as a}
+          {@const mac = String(a['mac-address'] ?? a.comment.slice(8))}
+          <tr><td><span class="pill {allowed(a) ? 'ok' : 'bad'}">{allowed(a) ? 'Allow' : 'Deny'}</span> <span class="mono">{mac}</span>{#if clients.find((c) => c.mac.toUpperCase() === mac.toUpperCase())} <span class="muted">{displayName(clients.find((c) => c.mac.toUpperCase() === mac.toUpperCase())!)}</span>{/if}</td>
+            <td>{a.interface && a.interface !== 'any' ? a.interface : 'All Wi-Fi interfaces'}</td>
+            <td class="r"><button class="btn small" onclick={() => review(`Remove Wi-Fi access rule for ${mac}`, [`${pkgPath}/access-list/remove [find comment="${a.comment}"]`], { kind: 'remove-wifi-access-list', package: pkg, mac })}>Remove</button></td></tr>
+        {/each}
+        {#each sigIfs as ifn}
+          <tr><td>Minimum signal {sigMin(ifn) || '?'} dBm</td><td>{ifn}</td>
+            <td class="r"><button class="btn small" onclick={() => review(`Remove the signal limit on ${ifn}`, [`${pkgPath}/access-list/remove [find comment="tik:sigrange:${ifn}"]`], { kind: 'remove-wifi-signal-range', package: pkg, interface: ifn })}>Remove</button></td></tr>
+        {/each}
+        {#each schedIfs as ifn}
+          <tr><td>Schedule: on {sched(ifn, true) || '?'}, off {sched(ifn, false) || '?'}</td><td>{ifn}</td>
+            <td class="r"><button class="btn small" onclick={() => review(`Remove the Wi-Fi schedule for ${ifn}`, [`/system/scheduler/remove [find comment="tik:wifisched:${ifn}"]`], { kind: 'remove-wifi-schedule', interface: ifn })}>Remove</button></td></tr>
+        {/each}
+      </tbody>
+    </table>
+  {:else}<div class="muted small">No access rules, signal limits or schedules from tikontrol.</div>{/if}
+  {#if otherRules}<div class="muted small">{otherRules} more access-list {otherRules === 1 ? 'entry was' : 'entries were'} set up outside tikontrol (left as they are).</div>{/if}
+  <div class="muted small">Signal limits are set per device on the Clients page ("Why is this client on 2.4 GHz?"); schedules in a network's Advanced settings.</div>
 </Section>
 
 {#if edit}
@@ -167,7 +222,7 @@
       <Field label="WiFi schedule"><Toggle bind:checked={edit.schedule} label="Schedule" /></Field>
       {#if edit.schedule}<Field label="On between" help="Applies to one radio"><input type="time" bind:value={edit.from} /><input type="time" bind:value={edit.to} /><button class="btn small" onclick={() => reviewSchedule(edit!)}>Review schedule</button></Field>{/if}
       <Field label="Speed limit per client" help="Download/upload, e.g. 50M/10M" na={legacy ? undefined : 'Not supported on the wifi package by tikontrol'}><input type="text" bind:value={edit.limit} placeholder="Unlimited" disabled={!legacy || editIdx < 0} /></Field>
-      <Field label="MAC address filter" help="Access-list entries exist; manage them per device on the Clients page"><Toggle bind:checked={edit.macFilter} disabled label="MAC filter" /></Field>
+      <Field label="MAC address filter" help="Router-wide or per interface: Access rules, below the radios"><span class="muted small">{macRules.length} rule{macRules.length === 1 ? '' : 's'} from tikontrol</span></Field>
       <Field label="Private PSK" help="Different password per device: open the device on the Clients page, Settings, Own Wi-Fi password"><a class="btn small" href="#/clients">Clients…</a></Field>
       {#if editIdx >= 0}
         <Field label="Fast roaming (802.11r)" na={legacy ? NEW_PKG : undefined} help="Faster hand-over between interfaces with this SSID"><Toggle bind:checked={edit.ft} disabled={legacy} label="Fast roaming" /></Field>
