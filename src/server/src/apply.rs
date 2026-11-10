@@ -598,7 +598,9 @@ pub fn arm_cmd(id: &str, plan: &Plan, clock: (&str, &str)) -> Result<Cmd, String
         .arg("name", &format!("tik-revert-{id}"))
         .arg("start-date", &date)
         .arg("start-time", &time)
-        .arg("interval", "0s")
+        // not 0s: a one-shot job whose time passed while the router was down or hung never runs, and the change
+        // stays. With an interval RouterOS runs it at the next minute after boot; the script removes itself first.
+        .arg("interval", "1m")
         .arg("policy", "read,write,test")
         .arg("comment", "tikontrol Safe apply: reverts this change unless it is confirmed")
         .arg("on-event", &revert_script(id, plan)?))
@@ -749,6 +751,20 @@ mod tests {
         let p = compile(&Intent::RemoveDnsRecord { name: "x.lan".into() }, &mut f).unwrap();
         let s = revert_script("ab12", &p).unwrap();
         assert!(s.contains(r#"address="10.0.0.9\"; /system/reboot; \"""#), "{s}");
+    }
+
+    #[test]
+    fn the_revert_job_still_runs_after_its_time_was_missed() {
+        let p = compile(&Intent::RemoveDnsRecord { name: "x.lan".into() }, &mut {
+            let mut f = Fake::default();
+            f.answers.insert("/ip/dns/static/print".into(), Ok(vec![row(&[("name", "x.lan"), ("address", "10.0.0.9")])]));
+            f
+        })
+        .unwrap();
+        let w = arm_cmd("ab12", &p, ("2026-11-09", "23:58:00")).unwrap().words().unwrap().to_vec();
+        // a one-shot (0s) job missed while the router was down never runs; an interval job runs at the next slot
+        assert!(w.contains(&"=interval=1m".to_string()), "{w:?}");
+        assert!(w.iter().any(|x| x.starts_with("=on-event=/system/scheduler/remove [find name=\"tik-revert-ab12\"]")), "removes itself first: {w:?}");
     }
 
     #[test]
