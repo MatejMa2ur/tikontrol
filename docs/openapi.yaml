@@ -158,6 +158,27 @@ paths:
         - { name: cat, in: query, schema: { type: string } }
         - { name: format, in: query, schema: { enum: [json, csv] } }
       responses: { '200': { description: ok } }
+  /api/v1/alerts:
+    get: { summary: 'Alert rules, quiet hours, channels (secrets only as { set }; viewers see contact fields masked), history (newest first) and unacked count', responses: { '200': { description: ok } } }
+  /api/v1/alerts/rules:
+    put:
+      security: [{ session: [], csrf: [] }]
+      summary: Replace the alert rules and quiet hours (admin)
+      requestBody: { content: { application/json: { schema: { type: object, required: [rules, quiet] } } } }
+      responses: { '200': { description: ok }, '400': { description: invalid }, '403': { description: not admin } }
+  /api/v1/alerts/channels:
+    put:
+      security: [{ session: [], csrf: [] }]
+      summary: 'Update notification channels (admin): ntfy, webhook, telegram, and optional email { enabled, minSeverity, host, port, security: tls|starttls|none, username, password, from, to[] (max 10) }. Secrets: absent or null keeps, "" clears. Unencrypted SMTP only to a local relay and never with a password'
+      responses: { '200': { description: the channels view }, '400': { description: invalid }, '403': { description: not admin } }
+  /api/v1/alerts/ack:
+    post: { security: [{ session: [], csrf: [] }], summary: Acknowledge an alert, requestBody: { content: { application/json: { schema: { type: object, required: [id], properties: { id: { type: integer } } } } } }, responses: { '200': { description: ok }, '404': { description: no such alert } } }
+  /api/v1/alerts/test:
+    post:
+      security: [{ session: [], csrf: [] }]
+      summary: Send a test notification through one saved channel (admin, one test every 3 s)
+      requestBody: { content: { application/json: { schema: { type: object, required: [channel], properties: { channel: { enum: [ntfy, webhook, telegram, email] } } } } } }
+      responses: { '200': { description: '{ ok, status }' }, '409': { description: channel not configured }, '429': { description: too soon }, '502': { description: the service refused or could not be reached } }
   /api/v1/apikeys:
     get: { summary: 'API keys (admin): [{ name, created }]; keys themselves are never returned again', responses: { '200': { description: ok }, '403': { description: not admin } } }
     post:

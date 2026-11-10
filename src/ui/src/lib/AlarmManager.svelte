@@ -8,6 +8,7 @@
   import Modal from './ui/Modal.svelte'
 
   type Sev = 'info' | 'warning' | 'critical'
+  type Security = 'tls' | 'starttls' | 'none'
   type Rule = { enabled: boolean; severity: Sev; threshold?: number }
   type Quiet = { enabled: boolean; start: number; end: number; offsetMinutes: number; criticalBypass: boolean }
   type Alert = { id: number; t: number; rule: string; severity: Sev; text: string; detail?: string; ack: boolean; ackBy?: string; cleared?: number; quiet: boolean; sent: string[]; failed: string[] }
@@ -15,6 +16,7 @@
     ntfy: { enabled: boolean; minSeverity: Sev; server: string; topic: string; token: { set: boolean } }
     webhook: { enabled: boolean; minSeverity: Sev; url: { set: boolean; host: string } }
     telegram: { enabled: boolean; minSeverity: Sev; chatId: string; token: { set: boolean } }
+    email?: { enabled: boolean; minSeverity: Sev; host: string; port: number; security: Security; username: string; password: { set: boolean }; from: string; to: string[] }
     thirdParty: string
   }
   type View = { rules: Record<string, Rule>; quiet: Quiet; channels: ChannelsView; history: Alert[]; unacked: number }
@@ -50,6 +52,8 @@
   let ntfy = $state({ enabled: false, minSeverity: 'warning' as Sev, server: '', topic: '', token: '', clearToken: false })
   let webhook = $state({ enabled: false, minSeverity: 'warning' as Sev, url: '', clearUrl: false })
   let telegram = $state({ enabled: false, minSeverity: 'warning' as Sev, chatId: '', token: '', clearToken: false })
+  let email = $state({ enabled: false, minSeverity: 'warning' as Sev, host: '', port: 587, security: 'starttls' as Security, username: '', password: '', clearPassword: false, from: '', to: '' })
+  const ports: Record<Security, number> = { tls: 465, starttls: 587, none: 25 }
   let confirm = $state<string[] | null>(null)
 
   const active = $derived((data?.history ?? []).filter((a) => !a.ack))
@@ -65,6 +69,8 @@
     ntfy = { enabled: c.ntfy.enabled, minSeverity: c.ntfy.minSeverity, server: c.ntfy.server, topic: c.ntfy.topic, token: '', clearToken: false }
     webhook = { enabled: c.webhook.enabled, minSeverity: c.webhook.minSeverity, url: '', clearUrl: false }
     telegram = { enabled: c.telegram.enabled, minSeverity: c.telegram.minSeverity, chatId: c.telegram.chatId, token: '', clearToken: false }
+    const e = c.email
+    if (e) email = { enabled: e.enabled, minSeverity: e.minSeverity, host: e.host, port: e.port, security: e.security, username: e.username, password: '', clearPassword: false, from: e.from, to: e.to.join(', ') }
   }
 
   async function run(f: () => Promise<void>) {
@@ -92,6 +98,7 @@
       ntfy.enabled && !c.ntfy.enabled ? 'ntfy' : '',
       webhook.enabled && !c.webhook.enabled ? 'webhook' : '',
       telegram.enabled && !c.telegram.enabled ? 'Telegram' : '',
+      email.enabled && !c.email?.enabled ? 'e-mail' : '',
     ].filter(Boolean)
   }
   function askSave() {
@@ -107,6 +114,11 @@
         ntfy: { enabled: ntfy.enabled, minSeverity: ntfy.minSeverity, server: ntfy.server.trim(), topic: ntfy.topic.trim(), token: secret(ntfy.token, ntfy.clearToken) },
         webhook: { enabled: webhook.enabled, minSeverity: webhook.minSeverity, url: secret(webhook.url, webhook.clearUrl) },
         telegram: { enabled: telegram.enabled, minSeverity: telegram.minSeverity, chatId: telegram.chatId.trim(), token: secret(telegram.token, telegram.clearToken) },
+        email: {
+          enabled: email.enabled, minSeverity: email.minSeverity, host: email.host.trim(), port: Number(email.port), security: email.security,
+          username: email.username.trim(), password: email.security === 'none' ? (data?.channels.email?.password.set ? '' : undefined) : secret(email.password, email.clearPassword),
+          from: email.from.trim(), to: email.to.split(/[,;\s]+/).filter(Boolean),
+        },
       },
     })
     if (data) data.channels = c
@@ -115,7 +127,7 @@
   })
   const test = (channel: string) => run(async () => {
     const r = await api<{ status: number }>('/alerts/test', { method: 'POST', body: { channel } })
-    msg = `Test sent via ${channel} (HTTP ${r.status}).`
+    msg = channel === 'email' ? 'Test e-mail accepted by the mail server.' : `Test sent via ${channel} (HTTP ${r.status}).`
   })
 </script>
 
@@ -213,13 +225,34 @@
     <Field label="Chat ID"><input type="text" bind:value={telegram.chatId} placeholder="-1001234567890" disabled={!admin} aria-label="Telegram chat id" /></Field>
     <Field label="Minimum severity"><select bind:value={telegram.minSeverity} disabled={!admin} aria-label="Telegram minimum severity">{#each sevs as s}<option value={s}>{s}</option>{/each}</select></Field>
 
-    <Field label="Email (SMTP)" na="Not available yet"><span class="muted small">–</span></Field>
+    <h4>E-mail (SMTP)</h4>
+    <Field label="Enabled" help="Sends through your mail server, with TLS and a verified certificate"><Toggle bind:checked={email.enabled} label="E-mail enabled" disabled={!admin} /></Field>
+    <Field label="Server" help="Host name of your mail provider's SMTP server"><input type="text" bind:value={email.host} placeholder="smtp.example.com" disabled={!admin} aria-label="SMTP server" /></Field>
+    <Field label="Encryption" help={email.security === 'none' ? 'Only to a mail relay on your own network, and never with a password' : ''}>
+      <select bind:value={email.security} onchange={() => (email.port = ports[email.security])} disabled={!admin} aria-label="SMTP encryption">
+        <option value="starttls">STARTTLS (port 587)</option>
+        <option value="tls">TLS (port 465)</option>
+        <option value="none">None (local relay only)</option>
+      </select>
+    </Field>
+    <Field label="Port"><input type="number" min="1" max="65535" bind:value={email.port} disabled={!admin} aria-label="SMTP port" /></Field>
+    {#if email.security !== 'none'}
+      <Field label="User name" help="Optional"><input type="text" bind:value={email.username} autocomplete="off" disabled={!admin} aria-label="SMTP user name" /></Field>
+      <Field label="Password" help={data.channels.email?.password.set ? 'A password is stored. Leave empty to keep it.' : 'An app password is best'}>
+        <input type="password" bind:value={email.password} autocomplete="new-password" disabled={!admin || email.clearPassword} aria-label="SMTP password" />
+        {#if data.channels.email?.password.set}<label class="chk"><input type="checkbox" bind:checked={email.clearPassword} disabled={!admin} /> remove</label>{/if}
+      </Field>
+    {/if}
+    <Field label="From"><input type="email" bind:value={email.from} placeholder="router@example.com" disabled={!admin} aria-label="Sender address" /></Field>
+    <Field label="To" help="Up to 10 addresses, separated by commas"><input type="text" bind:value={email.to} placeholder="me@example.com" disabled={!admin} aria-label="Recipient addresses" /></Field>
+    <Field label="Minimum severity"><select bind:value={email.minSeverity} disabled={!admin} aria-label="E-mail minimum severity">{#each sevs as s}<option value={s}>{s}</option>{/each}</select></Field>
 
     {#if admin}
       <div class="r row end">
         <button class="btn" disabled={busy} onclick={() => test('ntfy')}>Test ntfy</button>
         <button class="btn" disabled={busy} onclick={() => test('webhook')}>Test webhook</button>
         <button class="btn" disabled={busy} onclick={() => test('telegram')}>Test Telegram</button>
+        <button class="btn" disabled={busy} onclick={() => test('email')}>Test e-mail</button>
         <button class="btn primary" disabled={busy} onclick={askSave}>Save</button>
       </div>
       <p class="muted small">Tests use the saved settings, even for a channel that is switched off.</p>

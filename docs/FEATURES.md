@@ -8,10 +8,11 @@ Reference: UniFi Network Application 10.x (latest 10.6.109, Oct 2026), taken fro
 Clean-room: we copy the behaviour, never the assets.
 
 **Status:** ⬜ todo · 🎨 mockup (UI only, fake/snapshot data) · 🟨 in progress · ✅ done (real data, tested) · ➖ won't do
+**Hardware flag:** 🔌 = built and unit-tested, but needs a test on real equipment (MikroTik hardware, a Wi-Fi AP, a physical port, a real ISP line or a real outside service). The text after 🔌 says what to check; all of them are listed in [HARDWARE_TESTS.md](HARDWARE_TESTS.md).
 **Backing:** `ROS` = RouterOS API on the router · `CMR` = MikroTik CMR server · `tik` = our own logic/DB · `✗` = nothing can back it
 
 <!-- progress:start -->
-**Progress:** 113 ✅ · 109 🟨 · 3 🎨 · 1 ⬜ · 8 ➖ (234 items, 50% done)
+**Progress:** 113 ✅ · 109 🟨 · 3 🎨 · 1 ⬜ · 8 ➖ (234 items, 50% done) · 1 🔌 waiting for a hardware test ([list](HARDWARE_TESTS.md))
 <!-- progress:end -->
 
 ---
@@ -156,7 +157,7 @@ Clean-room: we copy the behaviour, never the assets.
 | Feature | Backing | Phase | Status |
 |---|---|---|---|
 | Alert rules (device offline, WAN down, new client, CPU/RAM) | tik · CMR alerts | 2 |🟨 |
-| Channels: email, push (ntfy), Telegram, webhook (ntfy/Telegram/webhook built, untested against the real services; email not done) | tik | 2 |🟨 |
+| Channels: email (SMTP, TLS/STARTTLS), push (ntfy), Telegram, webhook 🔌 send a test through each real service (an SMTP provider on 465 and 587, ntfy.sh, a Telegram bot, a Home Assistant webhook) | tik | 2 | 🟨 |
 | Alert history / acknowledge | tik | 2 | ✅ |
 | Quiet hours / per-rule severity | tik | 3 |🟨 |
 

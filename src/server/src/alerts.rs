@@ -179,12 +179,35 @@ pub struct Telegram {
     pub token: Option<String>,
 }
 
+/// SMTP e-mail. `password` is sealed ("alert-secret:email").
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
+#[serde(default, rename_all = "camelCase")]
+pub struct Email {
+    pub enabled: bool,
+    pub min_severity: Severity,
+    pub host: String,
+    pub port: u16,
+    /// "tls" (465), "starttls" (587) or "none" (local relay only, no password)
+    pub security: String,
+    pub username: String,
+    pub password: Option<String>,
+    pub from: String,
+    pub to: Vec<String>,
+}
+
+impl Default for Email {
+    fn default() -> Self {
+        Email { enabled: false, min_severity: Severity::Warning, host: String::new(), port: 587, security: "starttls".into(), username: String::new(), password: None, from: String::new(), to: vec![] }
+    }
+}
+
 #[derive(Serialize, Deserialize, Clone, Debug, Default, PartialEq)]
 #[serde(default)]
 pub struct Channels {
     pub ntfy: Ntfy,
     pub webhook: Webhook,
     pub telegram: Telegram,
+    pub email: Email,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
@@ -397,6 +420,8 @@ enum Kind {
     Ntfy,
     Webhook,
     Telegram,
+    /// `url` is unused; the settings and the opened password travel in `Out::auth`/`Channels`
+    Email,
 }
 
 fn telegram_url(token: &str) -> Option<outbound::Url> {
@@ -424,24 +449,42 @@ fn outboxes(c: &Channels, sealer: &Sealer, only: Option<&str>) -> Vec<Out> {
             v.push(Out { name: "telegram", min: c.telegram.min_severity, url, ctype: "application/json", auth: None, kind: Kind::Telegram });
         }
     }
+    if pick("email", c.email.enabled) && !c.email.host.is_empty() && !c.email.to.is_empty() {
+        let pass = c.email.password.as_deref().and_then(|p| sealer.open_str("alert-secret:email", p));
+        let url = outbound::Url { https: true, host: c.email.host.clone(), port: c.email.port, path: "/".into() };
+        v.push(Out { name: "email", min: c.email.min_severity, url, ctype: "", auth: pass, kind: Kind::Email });
+    }
     v
 }
 
-fn payload(o: &Out, c: &Channels, a: &Alert) -> Vec<u8> {
-    let title = format!("tikontrol: {}", match a.severity {
+fn title(a: &Alert) -> String {
+    format!("tikontrol: {}", match a.severity {
         Severity::Critical => "critical alert",
         Severity::Warning => "warning",
         Severity::Info => "notice",
-    });
+    })
+}
+
+fn payload(o: &Out, c: &Channels, a: &Alert) -> Vec<u8> {
+    let title = title(a);
     let v = match o.kind {
         Kind::Ntfy => json!({ "topic": c.ntfy.topic, "title": title, "message": a.text, "priority": match a.severity { Severity::Critical => 5, Severity::Warning => 4, Severity::Info => 3 }, "tags": ["tikontrol", a.rule] }),
         Kind::Webhook => json!({ "source": "tikontrol", "id": a.id, "time": a.t, "rule": a.rule, "severity": a.severity, "text": a.text }),
         Kind::Telegram => json!({ "chat_id": c.telegram.chat_id, "text": format!("{title}\n{}", a.text), "disable_web_page_preview": true }),
+        Kind::Email => return Vec::new(),
     };
     serde_json::to_vec(&v).unwrap_or_default()
 }
 
 fn send(o: &Out, c: &Channels, a: &Alert) -> Result<u16, String> {
+    if let Kind::Email = o.kind {
+        let e = &c.email;
+        let security = crate::smtp::Security::parse(&e.security).ok_or("unknown SMTP security")?;
+        let user = (!e.username.is_empty()).then_some(e.username.as_str());
+        let body = format!("{}\n\nRule: {}\nTime: {} (unix)\n\nSent by tikontrol. Change or switch off e-mail alerts in Events, Notification channels.\n", a.text, a.rule, a.t);
+        let m = crate::smtp::Mail { host: &e.host, port: e.port, security, user, pass: o.auth.as_deref().filter(|_| user.is_some()), from: &e.from, to: &e.to, subject: &format!("{}: {}", title(a), a.text), body: &body };
+        return crate::smtp::send(&m).map(|_| 250);
+    }
     let auth = o.auth.as_deref().map(|v| ("authorization", v));
     outbound::post(&o.url, o.ctype, auth.as_slice(), &payload(o, c, a))
 }
@@ -546,6 +589,7 @@ pub fn channels_view(c: &Channels, admin: bool) -> Value {
         "ntfy": { "enabled": c.ntfy.enabled, "minSeverity": c.ntfy.min_severity, "server": c.ntfy.server, "topic": hide(&c.ntfy.topic), "token": secret_set(&c.ntfy.token) },
         "webhook": { "enabled": c.webhook.enabled, "minSeverity": c.webhook.min_severity, "url": { "set": c.webhook.url.is_some(), "host": c.webhook.host } },
         "telegram": { "enabled": c.telegram.enabled, "minSeverity": c.telegram.min_severity, "chatId": hide(&c.telegram.chat_id), "token": secret_set(&c.telegram.token) },
+        "email": { "enabled": c.email.enabled, "minSeverity": c.email.min_severity, "host": c.email.host, "port": c.email.port, "security": c.email.security, "username": hide(&c.email.username), "password": secret_set(&c.email.password), "from": hide(&c.email.from), "to": if admin { json!(c.email.to) } else { json!(c.email.to.iter().map(|_| "•••").collect::<Vec<_>>()) } },
         "thirdParty": "Enabled channels send alert texts (which can include client names, MAC addresses and RouterOS versions) to that service.",
     })
 }
@@ -589,11 +633,29 @@ struct TelegramIn {
 }
 
 #[derive(Deserialize)]
+#[serde(deny_unknown_fields, rename_all = "camelCase")]
+struct EmailIn {
+    enabled: bool,
+    min_severity: Severity,
+    host: String,
+    port: u16,
+    security: String,
+    username: String,
+    #[serde(default)]
+    password: Option<String>,
+    from: String,
+    to: Vec<String>,
+}
+
+#[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 struct ChannelsIn {
     ntfy: NtfyIn,
     webhook: WebhookIn,
     telegram: TelegramIn,
+    /// optional so older clients keep working; absent keeps the stored e-mail settings
+    #[serde(default)]
+    email: Option<EmailIn>,
 }
 
 #[derive(Deserialize)]
@@ -683,6 +745,35 @@ fn apply_channels(cur: &Channels, b: ChannelsIn, sealer: &Sealer) -> Result<Chan
     c.telegram.enabled = b.telegram.enabled;
     c.telegram.min_severity = b.telegram.min_severity;
     c.telegram.chat_id = b.telegram.chat_id;
+    // e-mail
+    if let Some(e) = b.email {
+        let host = e.host.trim().to_ascii_lowercase();
+        let to: Vec<String> = e.to.iter().map(|t| t.trim().to_string()).filter(|t| !t.is_empty()).collect();
+        let security = crate::smtp::Security::parse(&e.security).ok_or("SMTP security must be tls, starttls or none")?;
+        if !host.is_empty() && !crate::smtp::valid_host(&host) {
+            return Err("SMTP server: invalid host name".into());
+        }
+        if e.port == 0 {
+            return Err("SMTP port must be 1-65535".into());
+        }
+        if !e.from.is_empty() && !crate::smtp::valid_address(e.from.trim()) {
+            return Err("sender address looks wrong".into());
+        }
+        if to.len() > 10 || !to.iter().all(|t| crate::smtp::valid_address(t)) {
+            return Err("give at most 10 valid recipient addresses".into());
+        }
+        if !e.username.is_empty() && !crate::smtp::valid_user(&e.username) {
+            return Err("SMTP user name: printable characters, at most 256".into());
+        }
+        let password = secret(&cur.email.password, e.password, "alert-secret:email", &|p| if crate::smtp::valid_pass(p) { Ok(()) } else { Err("SMTP password: at most 256 characters, no line breaks".into()) })?;
+        if security == crate::smtp::Security::None && password.is_some() {
+            return Err("unencrypted SMTP never sends a password; choose TLS or STARTTLS, or remove the password".into());
+        }
+        if e.enabled && (host.is_empty() || e.from.trim().is_empty() || to.is_empty()) {
+            return Err("e-mail needs a server, a sender and at least one recipient before it can be enabled".into());
+        }
+        c.email = Email { enabled: e.enabled, min_severity: e.min_severity, host, port: e.port, security: e.security, username: e.username, password, from: e.from.trim().to_string(), to };
+    }
     Ok(c)
 }
 
@@ -757,8 +848,8 @@ pub fn route(app: &Arc<App>, req: &Req, s: &Session) -> Option<Resp> {
                 Ok(b) => b,
                 Err(r) => return Some(r),
             };
-            if !["ntfy", "webhook", "telegram"].contains(&b.channel.as_str()) {
-                return Some(Resp::error(400, "channel must be ntfy, webhook or telegram"));
+            if !["ntfy", "webhook", "telegram", "email"].contains(&b.channel.as_str()) {
+                return Some(Resp::error(400, "channel must be ntfy, webhook, telegram or email"));
             }
             let t = now();
             if u64::from(LAST_TEST.swap(t as u32, Ordering::SeqCst)) + 3 > t {
@@ -1036,7 +1127,7 @@ mod tests {
         assert_eq!(lock(&app.store).state.alerts.quiet.offset_minutes, 60);
         // test needs a configured channel
         assert_eq!(handle(&app, with_session(req("POST", "/api/v1/alerts/test", r#"{"channel":"telegram"}"#), &c, &csrf)).status, 409);
-        assert_eq!(handle(&app, with_session(req("POST", "/api/v1/alerts/test", r#"{"channel":"email"}"#), &c, &csrf)).status, 400);
+        assert_eq!(handle(&app, with_session(req("POST", "/api/v1/alerts/test", r#"{"channel":"sms"}"#), &c, &csrf)).status, 400);
         // viewers can read and acknowledge, not configure
         lock(&app.store).state.admins.push(auth::new_admin("viewer", "a long viewer password", Role::Viewer).unwrap());
         let r = handle(&app, req("POST", "/api/v1/login", r#"{"name":"viewer","password":"a long viewer password"}"#));
@@ -1047,6 +1138,33 @@ mod tests {
         assert_eq!(handle(&app, with_session(req("POST", "/api/v1/alerts/test", r#"{"channel":"ntfy"}"#), &vc, &vcsrf)).status, 403);
         let v = json_of(&handle(&app, with_session(req("GET", "/api/v1/alerts", ""), &vc, &vcsrf)));
         assert_eq!(v["rules"]["cpuHigh"]["threshold"], 80.0);
+    }
+
+    #[test]
+    fn email_settings_are_validated_and_the_password_sealed() {
+        let app = new_app();
+        let (c, csrf) = admin_session(&app);
+        let base = r#""ntfy":{"enabled":false,"minSeverity":"info","server":"","topic":""},"webhook":{"enabled":false,"minSeverity":"info"},"telegram":{"enabled":false,"minSeverity":"info","chatId":""}"#;
+        let put = |email: &str| handle(&app, with_session(req("PUT", "/api/v1/alerts/channels", &format!("{{{base},\"email\":{email}}}")), &c, &csrf));
+        let mk = |host: &str, sec: &str, pw: &str, from: &str, to: &str, enabled: bool| format!(r#"{{"enabled":{enabled},"minSeverity":"warning","host":"{host}","port":587,"security":"{sec}","username":"me","password":{pw},"from":"{from}","to":[{to}]}}"#);
+        assert_eq!(put(&mk("smtp.example.com\r\nX", "starttls", "null", "", "", false)).status, 400, "host");
+        assert_eq!(put(&mk("smtp.example.com", "ssl3", "null", "", "", false)).status, 400, "security");
+        assert_eq!(put(&mk("smtp.example.com", "starttls", "null", "a@b", "", false)).status, 400, "from");
+        assert_eq!(put(&mk("smtp.example.com", "starttls", "null", "", r#""x@example.com\r\nBcc: y@example.com""#, false)).status, 400, "to");
+        assert_eq!(put(&mk("relay.lan", "none", r#""pw-secret""#, "", "", false)).status, 400, "no password without TLS");
+        assert_eq!(put(&mk("smtp.example.com", "starttls", "null", "", "", true)).status, 400, "enabled but incomplete");
+        let r = put(&mk("smtp.example.com", "starttls", r#""pw-secret-123""#, "router@example.com", r#""me@example.com""#, true));
+        assert_eq!(r.status, 200, "{:?}", json_of(&r));
+        let got = serde_json::to_string(&json_of(&handle(&app, with_session(req("GET", "/api/v1/alerts", ""), &c, &csrf)))).unwrap();
+        assert!(!got.contains("pw-secret-123") && got.contains(r#""password":{"set":true}"#), "{got}");
+        let st = lock(&app.store);
+        assert!(!serde_json::to_string(&st.state).unwrap().contains("pw-secret-123"));
+        assert_eq!(st.sealer.open_str("alert-secret:email", st.state.alerts.channels.email.password.as_ref().unwrap()).as_deref(), Some("pw-secret-123"));
+        drop(st);
+        // an update without "email" keeps it
+        let r = handle(&app, with_session(req("PUT", "/api/v1/alerts/channels", &format!("{{{base}}}")), &c, &csrf));
+        assert_eq!(r.status, 200);
+        assert!(lock(&app.store).state.alerts.channels.email.enabled);
     }
 
     #[test]

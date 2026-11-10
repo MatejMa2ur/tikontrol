@@ -74,7 +74,7 @@ Driven through tikontrol's HTTP API, the same endpoints the UI calls. The UI its
   RouterOS version in use; `deploy/routeros-app.yaml` is untested.
 - **Setup token:** printed to the container log, which RouterOS may forward to its own log. Check who can read that.
 - **MCP:** behaviour behind a reverse proxy (the LAN-only check uses the peer address).
-- **Alerts:** SMTP e-mail is not implemented; ntfy, webhook and Telegram are, but untested against real services.
+- **Alerts:** e-mail (SMTP), ntfy, webhook and Telegram are built but untested against real services (see HARDWARE_TESTS.md).
 - **Not done:** multi-router / multi-site, GeoIP traffic by country, max-speed indicators.
 - **Before a release:** `npm audit`, `cargo audit`, a `/security-review` pass and a CHANGELOG entry.
 

@@ -20,6 +20,7 @@ pub mod policy;
 pub mod ros;
 pub mod routes;
 pub mod sites;
+pub mod smtp;
 pub mod speedtest;
 pub mod store;
 pub mod tools;
