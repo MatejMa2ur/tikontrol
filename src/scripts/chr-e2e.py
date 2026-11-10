@@ -125,7 +125,7 @@ CASES = [
     ({"kind": "export-ovpn-ca"}, None, "error"),  # reverted above: there is no tik-ovpn-ca
     ({"kind": "wireguard-client", "name": "wg-vpn", "address": "10.66.0.2/32", "public_key": WGKEY, "endpoint": "vpn.example.com", "endpoint_port": 51820, "sources": ["192.168.88.80"]}, None, "ok"),
     ({"kind": "site-to-site", "name": "wg-s2s", "listen_port": 13232, "address": "10.77.0.1/30", "public_key": WGKEY2, "endpoint": "office.example.com", "endpoint_port": 13232, "remote_subnets": ["10.200.0.0/24"]}, None, "ok"),
-    ({"kind": "back-to-home", "enabled": True}, None, "ok"),
+    ({"kind": "back-to-home", "enabled": True}, None, "error"),  # a CHR has no Back To Home: refused (7.12+, real hardware only)
     ({"kind": "wireguard-peer-enabled", "public_key": WGKEY3, "enabled": False}, {"kind": "wireguard-peer-enabled", "public_key": WGKEY3, "enabled": True}, "ok"),
     # system
     ({"kind": "site-settings", "identity": "test-router", "time_zone": "Europe/Bratislava", "ntp_enabled": True, "ntp_servers": ["pool.ntp.org"]}, None, "ok"),
@@ -308,16 +308,31 @@ SETUP = [
 
 
 def ros(cmd, d=None):
-    return subprocess.run([os.path.join(d or DIR, "ssh-chr.sh"), cmd], capture_output=True, text=True, timeout=120).stdout
+    # a busy CHR sometimes refuses or drops the ssh login: try again rather than read an empty answer
+    for wait in (2, 4, 8, 0):
+        r = subprocess.run([os.path.join(d or DIR, "ssh-chr.sh"), cmd], capture_output=True, text=True, timeout=120)
+        if r.returncode != 255 or not wait:
+            return r.stdout
+        time.sleep(wait)
 
 
 VOLATILE = re.compile(r"^#|^/system scheduler add .*name=tik-revert|^/certificate|^/file|^/system keymat-provider")
 
 
 def export(d=None):
-    out = ros("/export terse", d)
-    lines = [l.rstrip() for l in out.replace("\r", "").split("\n") if l.strip()]
-    return [l for l in lines if not VOLATILE.search(l)]
+    """/export terse, read until two reads agree: under load the CHR now and then returns one with whole
+    sections missing, which looked like a failed revert."""
+    def once():
+        out = ros("/export terse", d)
+        lines = [l.rstrip() for l in out.replace("\r", "").split("\n") if l.strip()]
+        return [l for l in lines if not VOLATILE.search(l)]
+    last = once()
+    for _ in range(4):
+        now = once()
+        if now == last:
+            return now
+        last = now
+    return last
 
 
 def diff(a, b):

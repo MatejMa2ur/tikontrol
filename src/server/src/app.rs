@@ -213,13 +213,13 @@ impl App {
         };
         let cred = cred.ok_or("read-only mode: no write credential is stored")?;
         let pw = lock(&self.store).sealer.open_str(&format!("{label}:{role}"), &cred.password).ok_or("stored router password cannot be decrypted (wrong key file?)")?;
-        (self.connector)(cfg, &cred.user, &pw)
+        retry_busy(|| (self.connector)(cfg, &cred.user, &pw), std::thread::sleep)
     }
 
     /// Opens a connection with credentials the user just typed (MikroTik-account login, their own writes).
     pub fn open_as(&self, user: &str, pw: &str) -> Result<Box<dyn Router + Send>, String> {
         let cfg = self.router_cfg().ok_or("no router configured")?;
-        (self.connector)(&cfg, user, pw)
+        retry_busy(|| (self.connector)(&cfg, user, pw), std::thread::sleep)
     }
 
     /// Runs `f` on the shared reader connection, reconnecting once if it dropped.
@@ -384,5 +384,37 @@ pub mod tests {
     fn read_only_mode_has_no_writer() {
         let app = app_with_router("read,api", Mode::ReadOnly);
         assert!(app.open(As::Writer).err().unwrap().contains("read-only mode"));
+    }
+}
+
+/// A busy router refuses a login while too many others are still in progress ("too many concurrent logins"):
+/// that one refusal is tried again, twice, after 1 s and 2 s. Wrong passwords and every other error are not.
+fn retry_busy<T>(mut open: impl FnMut() -> Result<T, String>, mut sleep: impl FnMut(std::time::Duration)) -> Result<T, String> {
+    for wait in [1, 2] {
+        match open() {
+            Err(e) if e.contains("too many concurrent logins") => sleep(std::time::Duration::from_secs(wait)),
+            r => return r,
+        }
+    }
+    open()
+}
+
+#[cfg(test)]
+mod retry_tests {
+    use super::retry_busy;
+
+    #[test]
+    fn only_a_busy_router_is_tried_again() {
+        let (mut n, mut slept) = (0, vec![]);
+        let r: Result<(), String> = retry_busy(|| { n += 1; Err("too many concurrent logins (6)".into()) }, |d| slept.push(d.as_secs()));
+        assert!(r.is_err());
+        assert_eq!((n, slept), (3, vec![1, 2]));
+        let mut n = 0;
+        let r = retry_busy(|| { n += 1; if n < 2 { Err("too many concurrent logins (6)".to_string()) } else { Ok(7) } }, |_| {});
+        assert_eq!((r, n), (Ok(7), 2));
+        let mut n = 0;
+        let r: Result<(), String> = retry_busy(|| { n += 1; Err("invalid user name or password (6)".into()) }, |_| panic!("no wait"));
+        assert!(r.is_err());
+        assert_eq!(n, 1);
     }
 }
