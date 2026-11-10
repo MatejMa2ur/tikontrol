@@ -79,7 +79,7 @@
   async function loadMcp() {
     try {
       mcp = await api<McpCfg>('/mcp')
-      proposals = await api<Proposal[]>('/mcp/proposals')
+      proposals = isAdmin ? await api<Proposal[]>('/mcp/proposals') : []
     } catch (e) { mcpErr = (e as Error).message }
   }
   async function mcpPost(path: string, body: unknown = {}) {

@@ -16,6 +16,10 @@ use std::net::{IpAddr, TcpStream, ToSocketAddrs};
 use std::sync::Arc;
 
 const MAX_REPLY: usize = 8 * 1024;
+/// Most lines one (multi-line) reply may have; EHLO answers have about a dozen.
+const MAX_LINES: usize = 64;
+/// The whole conversation, so a server that trickles replies can't hold the alert engine.
+pub const DEADLINE: std::time::Duration = std::time::Duration::from_secs(20);
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Security {
@@ -175,6 +179,7 @@ impl Write for Stream {
 struct Session {
     s: Stream,
     buf: Vec<u8>,
+    deadline: std::time::Instant,
 }
 
 fn describe(e: std::io::Error) -> String {
@@ -187,8 +192,16 @@ fn describe(e: std::io::Error) -> String {
 impl Session {
     /// Reads one (possibly multi-line) reply and returns its code and last line.
     fn reply(&mut self) -> Result<(u16, String), String> {
+        let mut lines = 0;
         loop {
+            if std::time::Instant::now() > self.deadline {
+                return Err("timed out".into());
+            }
             if let Some(pos) = self.buf.windows(2).position(|w| w == b"\r\n") {
+                lines += 1;
+                if lines > MAX_LINES {
+                    return Err("SMTP reply too long".into());
+                }
                 let line: Vec<u8> = self.buf.drain(..pos + 2).collect();
                 let line = String::from_utf8_lossy(&line[..pos]).into_owned();
                 let code = line.get(..3).and_then(|c| c.parse::<u16>().ok()).ok_or("not an SMTP reply")?;
@@ -267,7 +280,7 @@ fn send_with(m: &Mail, tls: Arc<ClientConfig>, t: u64) -> Result<(), String> {
         Ok(Stream::Tls(Box::new(StreamOwned::new(conn, tcp))))
     };
     let s = if m.security == Security::Tls { tls_wrap(tcp)? } else { Stream::Plain(tcp) };
-    let mut c = Session { s, buf: Vec::new() };
+    let mut c = Session { s, buf: Vec::new(), deadline: std::time::Instant::now() + DEADLINE };
     let run = |c: &mut Session| -> Result<(), String> {
         c.expect(&[220], "greeting")?;
         c.cmd("EHLO tikontrol", &[250], "EHLO")?;
@@ -445,6 +458,25 @@ mod tests {
             assert!(log.contains(&base64(b"CPU high")));
             assert_eq!(log.last().unwrap(), "QUIT");
         }
+    }
+
+    #[test]
+    fn endless_multiline_replies_are_cut_off() {
+        let l = TcpListener::bind("127.0.0.1:0").unwrap();
+        let port = l.local_addr().unwrap().port();
+        let h = std::thread::spawn(move || {
+            let (mut tcp, _) = l.accept().unwrap();
+            for _ in 0..200 {
+                if tcp.write_all(b"220-still talking\r\n").is_err() {
+                    break;
+                }
+            }
+        });
+        let to = vec!["me@example.com".to_string()];
+        let m = Mail { host: "127.0.0.1", port, security: Security::None, user: None, pass: None, from: "t@example.com", to: &to, subject: "s", body: "b" };
+        let e = send(&m).unwrap_err();
+        h.join().unwrap();
+        assert!(e.contains("too long"), "{e}");
     }
 
     #[test]

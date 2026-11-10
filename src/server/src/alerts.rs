@@ -711,7 +711,9 @@ fn apply_channels(cur: &Channels, b: ChannelsIn, sealer: &Sealer) -> Result<Chan
     if !b.ntfy.topic.is_empty() && !is_ntfy_topic(&b.ntfy.topic) {
         return Err("ntfy topic: 1-64 letters, digits, - or _".into());
     }
-    c.ntfy.token = secret(&cur.ntfy.token, b.ntfy.token, "alert-secret:ntfy", &|t| if token_ok(t, 256) { Ok(()) } else { Err("ntfy token: printable characters, at most 256".into()) })?;
+    // a stored token only ever goes to the server it was entered for
+    let kept_ntfy = if server == cur.ntfy.server { cur.ntfy.token.clone() } else { None };
+    c.ntfy.token = secret(&kept_ntfy, b.ntfy.token, "alert-secret:ntfy", &|t| if token_ok(t, 256) { Ok(()) } else { Err("ntfy token: printable characters, at most 256".into()) })?;
     if b.ntfy.enabled && (server.is_empty() || b.ntfy.topic.is_empty()) {
         return Err("ntfy needs a server and a topic before it can be enabled".into());
     }
@@ -765,7 +767,10 @@ fn apply_channels(cur: &Channels, b: ChannelsIn, sealer: &Sealer) -> Result<Chan
         if !e.username.is_empty() && !crate::smtp::valid_user(&e.username) {
             return Err("SMTP user name: printable characters, at most 256".into());
         }
-        let password = secret(&cur.email.password, e.password, "alert-secret:email", &|p| if crate::smtp::valid_pass(p) { Ok(()) } else { Err("SMTP password: at most 256 characters, no line breaks".into()) })?;
+        // a stored password only ever goes to the server and account it was entered for
+        let moved = host != cur.email.host || e.port != cur.email.port || e.username != cur.email.username;
+        let kept = if moved { None } else { cur.email.password.clone() };
+        let password = secret(&kept, e.password, "alert-secret:email", &|p| if crate::smtp::valid_pass(p) { Ok(()) } else { Err("SMTP password: at most 256 characters, no line breaks".into()) })?;
         if security == crate::smtp::Security::None && password.is_some() {
             return Err("unencrypted SMTP never sends a password; choose TLS or STARTTLS, or remove the password".into());
         }
@@ -1161,6 +1166,12 @@ mod tests {
         assert!(!serde_json::to_string(&st.state).unwrap().contains("pw-secret-123"));
         assert_eq!(st.sealer.open_str("alert-secret:email", st.state.alerts.channels.email.password.as_ref().unwrap()).as_deref(), Some("pw-secret-123"));
         drop(st);
+        // moving to another server or account drops the stored password
+        let r = put(&mk("smtp.other.example", "starttls", "null", "router@example.com", r#""me@example.com""#, false));
+        assert_eq!(r.status, 200);
+        assert!(lock(&app.store).state.alerts.channels.email.password.is_none());
+        let r = put(&mk("smtp.example.com", "starttls", r#""pw-secret-123""#, "router@example.com", r#""me@example.com""#, true));
+        assert_eq!(r.status, 200);
         // an update without "email" keeps it
         let r = handle(&app, with_session(req("PUT", "/api/v1/alerts/channels", &format!("{{{base}}}")), &c, &csrf));
         assert_eq!(r.status, 200);

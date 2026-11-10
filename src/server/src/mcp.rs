@@ -737,6 +737,33 @@ struct ProposeIn {
 
 pub const MAX_INTENT_JSON: usize = 8 * 1024;
 
+/// Field names that carry credentials. An assistant must never choose a password, key or secret:
+/// the reviewer would only see it masked, and whoever steered the assistant would know it.
+fn has_secret_field(v: &Value) -> bool {
+    const WORDS: &[&str] = &["password", "secret", "passphrase", "psk", "private_key", "private-key", "preshared", "pre_shared", "pre-shared", "token"];
+    match v {
+        Value::Object(m) => m.iter().any(|(k, v)| {
+            let k = k.to_ascii_lowercase();
+            WORDS.iter().any(|w| k.contains(w)) || has_secret_field(v)
+        }),
+        Value::Array(a) => a.iter().any(has_secret_field),
+        _ => false,
+    }
+}
+
+/// One structured proposal every 2 s per tikontrol: each one compiles against the router.
+static PROPOSE_LAST: Mutex<Option<std::time::Instant>> = Mutex::new(None);
+
+fn propose_limit() -> Result<(), String> {
+    let mut g = lock(&PROPOSE_LAST);
+    let now = std::time::Instant::now();
+    if g.is_some_and(|t| now.duration_since(t) < std::time::Duration::from_secs(2)) {
+        return Err("one proposal every 2 seconds: wait a moment".into());
+    }
+    *g = Some(now);
+    Ok(())
+}
+
 fn propose(app: &App, args: Value) -> Result<Value, String> {
     let p: ProposeIn = serde_json::from_value(args).map_err(|_| "propose_change needs title (string), an intent (object) or commands (array of strings), and an optional description")?;
     let title = clean_n(p.title.trim(), 1000);
@@ -748,8 +775,16 @@ fn propose(app: &App, args: Value) -> Result<Value, String> {
             if !i.is_object() || serde_json::to_string(&i).map_or(true, |j| j.len() > MAX_INTENT_JSON) {
                 return Err(format!("intent must be a JSON object of at most {MAX_INTENT_JSON} bytes"));
             }
-            // compiled with the reader: reads current state only, never writes
-            let plan = app.with_reader(|r| crate::apply::compile_value(&i, r)).map_err(|e| format!("intent refused: {}", clean_n(&e, 300)))?;
+            if has_secret_field(&i) {
+                return Err("intents with passwords, keys or secrets can't be proposed: propose the change without them and let the person enter them in the web UI".into());
+            }
+            propose_limit()?;
+            // compiled with the reader: reads current state only, never writes. A refusal is a
+            // normal answer (Ok(Err)), not a dropped connection, so it doesn't make the reader reconnect.
+            let plan = app.with_reader(|r| Ok(crate::apply::compile_value(&i, r))).and_then(|p| p).map_err(|e| {
+                // router data in the reason (names, interfaces) would get around privacy mode
+                if lock(&app.store).state.mcp.privacy { "intent refused: it does not fit this router (details hidden in privacy mode)".to_string() } else { format!("intent refused: {}", clean_n(&e, 300)) }
+            })?;
             (plan.cli(), Some(i), true)
         }
         None => {
@@ -784,6 +819,7 @@ pub fn session_route(app: &Arc<App>, req: &Req, s: &Session) -> Option<Resp> {
     let admin = s.role == Role::Admin;
     Some(match (req.method.as_str(), req.path.as_str()) {
         ("GET", "/api/v1/mcp") => config(app, req),
+        ("GET", "/api/v1/mcp/proposals") if !admin => Resp::error(403, "admin role required"),
         ("GET", "/api/v1/mcp/proposals") => Resp::json(200, &json!(lock(&app.mcp.proposals).1)),
         ("POST", "/api/v1/mcp/enable" | "/api/v1/mcp/disable" | "/api/v1/mcp/privacy") | ("DELETE", "/api/v1/mcp/proposals") if !admin => Resp::error(403, "admin role required"),
         ("POST", "/api/v1/mcp/enable") => enable(app),
@@ -1036,10 +1072,33 @@ mod tests {
         assert!(cmds.contains("/ip/dns/static/add") && !cmds.contains("reboot"), "the assistant's own text is replaced by tikontrol's compilation: {cmds}");
         assert_eq!(props[0]["intent"]["kind"], "dns-record");
         for bad in [json!({ "kind": "no-such-thing" }), json!({ "kind": "dns-record", "name": "x\"; /system/reboot", "address": "1.2.3.4" }), json!("dns-record"), json!({ "kind": "dns-record", "name": "a".repeat(9000) })] {
+            *lock(&PROPOSE_LAST) = None;
             let r = call_tool(&app, &tok, "propose_change", json!({ "title": "bad", "intent": bad }));
             assert_eq!(r["isError"], true, "{r}");
         }
-        assert_eq!(lock(&app.mcp.proposals).1.len(), 1);
+        // an assistant may not pick credentials, at any depth
+        for secret in [json!({ "kind": "vpn-user", "name": "x", "password": "chosen-by-ai-123" }), json!({ "kind": "batch", "title": "t", "intents": [{ "kind": "vpn-server", "server": "l2tp", "enabled": true, "ipsec_secret": "abcdefghijklmnop" }] })] {
+            *lock(&PROPOSE_LAST) = None;
+            let r = call_tool(&app, &tok, "propose_change", json!({ "title": "s", "intent": secret }));
+            assert!(r["isError"] == true && text_of(&r).contains("secrets"), "{r}");
+        }
+        // proposals come one at a time
+        *lock(&PROPOSE_LAST) = None;
+        call_tool(&app, &tok, "propose_change", json!({ "title": "a", "intent": { "kind": "dns-record", "name": "a.lan", "address": "192.168.88.21" } }));
+        let r = call_tool(&app, &tok, "propose_change", json!({ "title": "b", "intent": { "kind": "dns-record", "name": "b.lan", "address": "192.168.88.22" } }));
+        assert!(text_of(&r).contains("2 seconds"), "{r}");
+        // privacy mode hides router details in refusals
+        lock(&app.store).state.mcp.privacy = true;
+        *lock(&PROPOSE_LAST) = None;
+        let r = call_tool(&app, &tok, "propose_change", json!({ "title": "x", "intent": { "kind": "no-such-thing" } }));
+        assert!(text_of(&r).contains("details hidden"), "{r}");
+        // only admins see proposals
+        lock(&app.store).state.admins.push(crate::auth::new_admin("viewer", "a long viewer password", Role::Viewer).unwrap());
+        let r = api(&app, req("POST", "/api/v1/login", r#"{"name":"viewer","password":"a long viewer password"}"#));
+        let vc = r.headers.iter().find(|(k, _)| *k == "set-cookie").unwrap().1.split(';').next().unwrap().split_once('=').unwrap().1.to_string();
+        let vcsrf = json_of(&r)["csrf"].as_str().unwrap().to_string();
+        assert_eq!(api(&app, with_session(req("GET", "/api/v1/mcp/proposals", ""), &vc, &vcsrf)).status, 403);
+        assert_eq!(lock(&app.mcp.proposals).1.len(), 2);
     }
 
     #[test]

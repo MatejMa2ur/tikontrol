@@ -202,7 +202,7 @@
     <Field label="Enabled" help="Sends to the ntfy server below (a third party unless you host it)"><Toggle bind:checked={ntfy.enabled} label="ntfy enabled" disabled={!admin} /></Field>
     <Field label="Server" help="https://, or http:// to a local address"><input type="text" bind:value={ntfy.server} placeholder="https://ntfy.example.com" disabled={!admin} aria-label="ntfy server" /></Field>
     <Field label="Topic"><input type="text" bind:value={ntfy.topic} placeholder="my-home-alerts" disabled={!admin} aria-label="ntfy topic" /></Field>
-    <Field label="Access token" help={data.channels.ntfy.token.set ? 'A token is stored. Leave empty to keep it.' : 'Optional'}>
+    <Field label="Access token" help={data.channels.ntfy.token.set ? 'A token is stored. Leave empty to keep it; changing the server removes it.' : 'Optional'}>
       <input type="password" bind:value={ntfy.token} autocomplete="off" disabled={!admin || ntfy.clearToken} aria-label="ntfy access token" />
       {#if data.channels.ntfy.token.set}<label class="chk"><input type="checkbox" bind:checked={ntfy.clearToken} disabled={!admin} /> remove</label>{/if}
     </Field>
@@ -238,7 +238,7 @@
     <Field label="Port"><input type="number" min="1" max="65535" bind:value={email.port} disabled={!admin} aria-label="SMTP port" /></Field>
     {#if email.security !== 'none'}
       <Field label="User name" help="Optional"><input type="text" bind:value={email.username} autocomplete="off" disabled={!admin} aria-label="SMTP user name" /></Field>
-      <Field label="Password" help={data.channels.email?.password.set ? 'A password is stored. Leave empty to keep it.' : 'An app password is best'}>
+      <Field label="Password" help={data.channels.email?.password.set ? 'A password is stored. Leave empty to keep it; changing the server, port or user name removes it.' : 'An app password is best'}>
         <input type="password" bind:value={email.password} autocomplete="new-password" disabled={!admin || email.clearPassword} aria-label="SMTP password" />
         {#if data.channels.email?.password.set}<label class="chk"><input type="checkbox" bind:checked={email.clearPassword} disabled={!admin} /> remove</label>{/if}
       </Field>
