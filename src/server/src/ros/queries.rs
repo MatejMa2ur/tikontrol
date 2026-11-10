@@ -210,6 +210,12 @@ fn build(q: &Q) -> Cmd {
     c
 }
 
+/// Demo mode (ros/demo.rs): the snapshot keys a plain `print` of `path` was read into, with the
+/// fixed filter each one was read with. Reads with extra arguments (`stats`) are left out.
+pub fn keys_for(path: &str) -> Vec<(&'static str, &'static [(&'static str, &'static str)])> {
+    QUERIES.iter().filter(|q| q.path == path && q.args.is_empty()).map(|q| (q.key, q.query)).collect()
+}
+
 /// Console (read-only): a RouterOS command is accepted only if it is the `print` of a menu the snapshot
 /// already reads, or a one-shot monitor of a named interface. It runs with the snapshot's vetted
 /// proplist, so no field outside it (keys, secrets, script bodies) can be asked for. Returns the command

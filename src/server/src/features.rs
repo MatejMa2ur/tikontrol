@@ -79,7 +79,7 @@ fn can_write_for(app: &App, s: &Session, cmr: bool) -> Result<(), &'static str> 
         return Err("only admins can change the router");
     }
     if app.demo.is_some() {
-        return Err("demo mode: nothing can be changed");
+        return Err("demo mode: applying is disabled (this is sample data, not a router)");
     }
     if let Some(c) = crate::cmr::controller(app).filter(|_| cmr) {
         return c.writer.map(|_| ()).ok_or("read-only: the CMR controller has no write credential stored in tikontrol");
@@ -128,7 +128,10 @@ pub fn route(app: &Arc<App>, req: &Req, s: &Session) -> Option<Resp> {
                 Err(e) => return Some(Resp::error(400, &e)),
             };
             // the inverse of some intents needs current values: read them with the reader
-            let compiled = if cmr { crate::cmr::open(app, As::Reader).and_then(|mut r| apply::compile_value(&b.intent, r.as_mut())) } else { app.with_reader(|r| apply::compile_value(&b.intent, r)) };
+            // demo mode: the sample snapshot answers the reads; it refuses anything else (ros/demo.rs)
+            let compiled = if let Some(d) = &app.demo {
+                apply::compile_value(&b.intent, &mut crate::ros::demo::Demo::new(d.clone()))
+            } else if cmr { crate::cmr::open(app, As::Reader).and_then(|mut r| apply::compile_value(&b.intent, r.as_mut())) } else { app.with_reader(|r| apply::compile_value(&b.intent, r)) };
             let plan = match compiled {
                 Ok(p) => p,
                 Err(e) => return Some(Resp::error(400, &e)),
@@ -400,6 +403,39 @@ mod tests {
         assert_eq!(id_of(&r)["canApply"], false, "router changes still need the router writer");
         let mixed = r#"{"intent":{"kind":"batch","title":"x","intents":[{"kind":"cmr-alert","name":"a","metric":"cpu","threshold":9},{"kind":"dns-record","name":"a.lan","address":"10.0.0.1"}]}}"#;
         assert_eq!(handle(&app, with_session(req("POST", "/api/v1/apply/preview", mixed), &c, &csrf)).status, 400);
+    }
+
+    #[test]
+    fn demo_mode_previews_from_the_sample_but_never_applies() {
+        use crate::store::Store;
+        let sample: serde_json::Value = serde_json::from_str(include_str!("../../ui/src/lib/sample.json")).unwrap();
+        let mut a = crate::app::App::new(Store::open(&crate::store::tests::tmpdir("demo")).unwrap(), crate::app::tests::fake_connector("read,write,api,test"), true);
+        a.demo = Some(Arc::new(sample.clone()));
+        let app = Arc::new(a);
+        let (c, csrf) = admin_session(&app);
+        let preview = |intent: &str| {
+            let r = handle(&app, with_session(req("POST", "/api/v1/apply/preview", &format!(r#"{{"intent":{intent}}}"#)), &c, &csrf));
+            let v = id_of(&r);
+            assert_eq!(r.status, 200, "{intent}: {v}");
+            assert_eq!(v["canApply"], false);
+            assert!(v["reason"].as_str().unwrap().starts_with("demo mode"), "{v}");
+            v
+        };
+        let v = preview(r#"{"kind":"dns-record","name":"nas.lan","address":"192.168.88.4"}"#);
+        assert_eq!(v["commands"][0], "/ip/dns/static/add name=nas.lan address=192.168.88.4 comment=tik:dns:nas.lan");
+        // placed before the sample's first forward rule, read from the snapshot
+        let first = sample["filter"].as_array().unwrap().iter().find(|r| r["chain"] == "forward").unwrap()[".id"].as_str().unwrap();
+        let v = preview(r#"{"kind":"block-client","mac":"AA:BB:CC:DD:EE:FF"}"#);
+        assert!(v["commands"][0].as_str().unwrap().ends_with(&format!("place-before={first}")), "{v}");
+        // the undo restores the sample's current UPnP state
+        let was = if sample["upnp"]["enabled"] == true { "yes" } else { "no" };
+        let v = preview(r#"{"kind":"set-upnp","enabled":true}"#);
+        assert_eq!(v["commands"][0], "/ip/upnp/set enabled=yes");
+        assert_eq!(v["undo"][0], format!("/ip/upnp/set enabled={was}"));
+        let id = v["id"].as_str().unwrap();
+        let r = handle(&app, with_session(req("POST", "/api/v1/apply/start", &format!(r#"{{"id":"{id}"}}"#)), &c, &csrf));
+        assert_eq!(r.status, 403);
+        assert!(id_of(&r)["error"].as_str().unwrap().contains("demo mode"), "{:?}", id_of(&r));
     }
 
     #[test]
