@@ -27,3 +27,10 @@ Checked 2026-11-04 from MikroTik's documentation and forum. Nothing here was tes
 - Is its `ui-url` clickable in WinBox, or only shown as text?
 - Does it open in a browser or inside WinBox?
 - Can a router link to a tikontrol that runs on a separate home server, without an App?
+
+## Decision (2026-11-10)
+
+- **Primary: the RouterOS App.** On arm64 and x86 routers tikontrol is installed with `deploy/routeros-app.yaml`; RouterOS generates `ui-url` from the `web` port, and `show-in-webfig` (default yes) puts a link on the WebFig login page. Nothing in WinBox is modified.
+- **Everywhere else (hAP ac², home server): the browser.** The installer adds a static DNS name (`tikontrol.lan`), so users bookmark `https://tikontrol.lan:8443`.
+- **Icon:** not set yet. The manual says custom apps may set `icon`, but its format could not be checked from the build environment, and an icon loaded from GitHub would be an outbound call from the user's browser, which tikontrol avoids. It must be embedded (or served by tikontrol itself) once the format is confirmed on hardware.
+- The open questions above stay as hardware checks (🔌 in FEATURES.md).

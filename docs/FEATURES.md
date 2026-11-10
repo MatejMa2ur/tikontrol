@@ -12,7 +12,7 @@ Clean-room: we copy the behaviour, never the assets.
 **Backing:** `ROS` = RouterOS API on the router · `CMR` = MikroTik CMR server · `tik` = our own logic/DB · `✗` = nothing can back it
 
 <!-- progress:start -->
-**Progress:** 117 ✅ · 108 🟨 · 0 🎨 · 1 ⬜ · 8 ➖ (234 items, 52% done) · 34 🔌 waiting for a hardware test ([list](HARDWARE_TESTS.md))
+**Progress:** 119 ✅ · 106 🟨 · 0 🎨 · 1 ⬜ · 9 ➖ (235 items, 53% done) · 37 🔌 waiting for a hardware test ([list](HARDWARE_TESTS.md))
 <!-- progress:end -->
 
 ---
@@ -288,7 +288,8 @@ Clean-room: we copy the behaviour, never the assets.
 | Data retention settings | tik | 2 | ✅ |
 | Trusted HTTPS: local CA (name-constrained) signs a 397-day server cert, auto-renewed; CA download + per-device trust steps | tik `/api/v1/ca.crt` | 2 | ✅ |
 | Device auth / SSH settings, service hardening | ROS `/ip/service` | 2 | ✅ |
-| Debug tools: ping, traceroute, packet capture (ping/traceroute/DNS verified on CHR; packet capture needs the sniff policy) | ROS `/ping`, `/tool/traceroute`, sniffer | 3 | 🟨 |
+| Debug tools: ping, traceroute, DNS cache lookup (verified on CHR) | ROS `/ping`, `/tool/traceroute`, DNS cache | 3 | ✅ |
+| Packet capture: not offered, because it needs the `sniff` policy, which tikontrol's users must not have (least privilege); use WinBox Tools → Packet Sniffer | ✗ by design | – | ➖ |
 | Safe apply (auto-revert) | tik + ROS scheduler | 3 | ✅ |
 | "Show in RouterOS" for every object | tik | 2 | 🟨 |
 
@@ -321,10 +322,10 @@ Not a UniFi feature: this is our own addition. We want a way to reach tikontrol 
 
 | Feature | Backing | Phase | Status |
 |---|---|---|---|
-| Decide how users open tikontrol from RouterOS | tik | 2 | 🟨 |
-| Package tikontrol as a custom RouterOS App, with a `ui-url` link | ROS `/app` (arm64, x86) | 4 | 🟨 |
-| Link with our own icon on the WebFig login page (`show-in-webfig`) | ROS `/app` | 4 | 🟨 |
-| Check on hardware how an App appears in WinBox and what opening it does | ROS | 0 | ⬜ |
+| Decide how users open tikontrol from RouterOS (RouterOS App link + WebFig login link where Apps run, a browser bookmark to `tikontrol.lan` elsewhere; see the research note) | tik | 2 | ✅ |
+| Package tikontrol as a custom RouterOS App, with a `ui-url` link 🔌 install `deploy/routeros-app.yaml` on a 7.22+ arm64/x86 router and check the generated `ui-url` opens tikontrol over HTTPS | ROS `/app` (arm64, x86) | 4 | 🟨 |
+| Link with our own icon on the WebFig login page (`show-in-webfig`) 🔌 check the link appears; find the `icon` format and embed our icon without an outbound fetch | ROS `/app` | 4 | 🟨 |
+| Check on hardware how an App appears in WinBox and what opening it does 🔌 is the App listed in WinBox, is `ui-url` clickable, does it open a browser | ROS | 0 | ⬜ |
 
 ## Read-only mode
 Not a UniFi feature: this is our own addition. The router enforces it, not tikontrol. tikontrol connects with a RouterOS user that has no `write` policy, so RouterOS refuses edits even if the app has a bug or is compromised.

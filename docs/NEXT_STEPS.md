@@ -84,7 +84,7 @@ Driven through tikontrol's HTTP API, the same endpoints the UI calls. The UI its
 - The README still describes tikontrol as a mockup; update it once the backend is tested on CHR.
 - Update `PLAN.md`: home server first, CMR optional, read-only first, MCP as a phase.
 - Choose a license. The repo has none yet.
-- Decide how users open tikontrol from RouterOS.
+- ~~Decide how users open tikontrol from RouterOS.~~ Decided: RouterOS App + WebFig link, else a browser bookmark (research/winbox_integration.md).
 
 ## Open checks
 

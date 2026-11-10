@@ -76,6 +76,12 @@ Read-only checks first; test anything that writes on a spare router or CHR, neve
 - [ ] **Backups (scheduled, download, restore): list verified on CHR; tikontrol downloads its own `tik-*.rsc` exports (admin only, no secrets), full `.backup` files stay on the router** 🟨: download a tik-*.rsc as the reader with `/file/read` (RouterOS 7.13+); check which policy the reader needs
 - [ ] **Firmware/app updates (channel, auto-update window: daily or weekly check, optional install)** 🟨: let the window fire on a spare router: check `check-for-updates once`, the scheduler policy the writer may grant, and an install + restart
 
+## Opening tikontrol from RouterOS
+
+- [ ] **Package tikontrol as a custom RouterOS App, with a `ui-url` link** 🟨: install `deploy/routeros-app.yaml` on a 7.22+ arm64/x86 router and check the generated `ui-url` opens tikontrol over HTTPS
+- [ ] **Link with our own icon on the WebFig login page (`show-in-webfig`)** 🟨: check the link appears; find the `icon` format and embed our icon without an outbound fetch
+- [ ] **Check on hardware how an App appears in WinBox and what opening it does** ⬜: is the App listed in WinBox, is `ui-url` clickable, does it open a browser
+
 ## AI assistants (MCP)
 
 - [ ] **Proposed changes, applied only after approval in Review & apply: the assistant sends a tikontrol intent, compiled read-only when proposed and applied through Safe apply (text-only proposals are never run)** 🟨: propose a change from a real MCP client (e.g. Claude Desktop) against a CHR, then apply and revert it
