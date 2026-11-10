@@ -7,9 +7,11 @@ Read-only checks first; test anything that writes on a spare router or CHR, neve
 ## Pages (navigation)
 
 - [ ] **Topology** 🟨: a real downstream MikroTik switch and AP heard over MNDP/LLDP
+- [ ] **Settings → Routing (add and remove port forwards, routes, DNS records)** 🟨: add, remove and revert each on a CHR; hand-made rows must have no Remove
 
 ## Dashboard
 
+- [ ] **Client count (wired / wireless / guest; guests from hotspot users, guest Wi-Fi interfaces and guest subnets)** 🟨: a real guest SSID and hotspot: guests counted, main-LAN clients not
 - [ ] **Top clients by traffic (Wi-Fi from the registration table, wired from kid-control's device table)** 🟨: check that `/ip/kid-control/device` counts wired clients on a real router (it may need a kid-control profile)
 
 ## UniFi Devices / Topology
@@ -21,6 +23,7 @@ Read-only checks first; test anything that writes on a spare router or CHR, neve
 
 - [ ] **Live per-client throughput (wired via kid-control device counters)** 🟨: compare a wired client's rate with `/interface/monitor-traffic` on its port
 - [ ] **Per-client traffic history (hourly bytes, wired and Wi-Fi)** 🟨: a day of history on a real router with wired and Wi-Fi clients
+- [ ] **Client groups (deleting one offers to remove its address list, mangle and queue objects in one batch; leftovers listed)** 🟨: apply members and a limit, then delete with "Remove from router" and revert
 
 ## Alarm Manager / Notifications
 

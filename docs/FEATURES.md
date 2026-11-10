@@ -12,7 +12,7 @@ Clean-room: we copy the behaviour, never the assets.
 **Backing:** `ROS` = RouterOS API on the router · `CMR` = MikroTik CMR server · `tik` = our own logic/DB · `✗` = nothing can back it
 
 <!-- progress:start -->
-**Progress:** 113 ✅ · 109 🟨 · 3 🎨 · 1 ⬜ · 8 ➖ (234 items, 50% done) · 10 🔌 waiting for a hardware test ([list](HARDWARE_TESTS.md))
+**Progress:** 114 ✅ · 108 🟨 · 3 🎨 · 1 ⬜ · 8 ➖ (234 items, 50% done) · 13 🔌 waiting for a hardware test ([list](HARDWARE_TESTS.md))
 <!-- progress:end -->
 
 ---
@@ -38,7 +38,7 @@ Clean-room: we copy the behaviour, never the assets.
 | P15 | Settings → Internet | Settings · Internet | 3 |🟨 |
 | P16 | Settings → VPN | Settings · VPN | 2 | 🟨 |
 | P17 | Settings → Security / CyberSecure | Settings · Security | 3 |🎨 |
-| P18 | Settings → Routing | Settings · Routing | 2 | 🟨 |
+| P18 | Settings → Routing (add and remove port forwards, routes, DNS records) 🔌 add, remove and revert each on a CHR; hand-made rows must have no Remove | Settings · Routing | 2 | 🟨 |
 | P19 | Settings → Profiles | Settings · Profiles | 3 |🎨 |
 | P20 | Settings → Control Plane (admins, backups, updates, integrations, console) | Settings · System | 2 | 🟨 |
 | P21 | Settings → System (site, logging, SNMP, device auth) | Settings · System | 2 | 🟨 |
@@ -56,7 +56,7 @@ Clean-room: we copy the behaviour, never the assets.
 | WAN live throughput (down/up) graph | ROS monitor-traffic | 1 | ✅ |
 | Max download/upload speed indicators | tik | 1 | ✅ |
 | ISP name, public IP, WAN IP (needs a real ISP WAN: the CHR sits behind QEMU NAT) | ROS `/ip/cloud`, dhcp-client | 1 | 🟨 |
-| Client count (wired / wireless / guest) | ROS | 1 | 🟨 |
+| Client count (wired / wireless / guest; guests from hotspot users, guest Wi-Fi interfaces and guest subnets) 🔌 a real guest SSID and hotspot: guests counted, main-LAN clients not | ROS | 1 | 🟨 |
 | Gateway resources (CPU, RAM, temp, uptime) (CPU/RAM/uptime verified on CHR; temperature needs a sensor) | ROS `/system/resource`, health | 1 | 🟨 |
 | Top clients by traffic (Wi-Fi from the registration table, wired from kid-control's device table) 🔌 check that `/ip/kid-control/device` counts wired clients on a real router (it may need a kid-control profile) | ROS kid-control + tik | 1 | 🟨 |
 | Top applications | CMR apptraffic | 3 | ✅ |
@@ -111,8 +111,8 @@ Clean-room: we copy the behaviour, never the assets.
 | Override network/VLAN for client (client drawer: set/remove; needs hardware (Wi-Fi AP), CHR refusal tested) | ROS (MAC-based VLAN / access list) | 4 |🟨 |
 | Offline / historical clients list | tik | 2 | ✅ |
 | Roaming history (which AP, when) | tik (reg-table changes) · CMR wifi-logs | 3 | 🟨 |
-| Filters (wired / wireless / guest / offline) and search | tik | 1 | 🟨 |
-| Client groups | tik | 3 | 🟨 |
+| Filters (wired / wireless / guest / offline) and search | tik | 1 | ✅ |
+| Client groups (deleting one offers to remove its address list, mangle and queue objects in one batch; leftovers listed) 🔌 apply members and a limit, then delete with "Remove from router" and revert | tik | 3 | 🟨 |
 
 ## Ports
 | Feature | Backing | Phase | Status |
