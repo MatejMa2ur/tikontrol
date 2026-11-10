@@ -80,6 +80,7 @@ Cross-cutting questions (dotted proplists, Safe apply under device mode or after
 
 ## Insights / Traffic
 
+- [ ] **Traffic by client over time (top clients per hour or day, 24 h / 7 d, stacked chart with a totals table)** 🟨: a few hours on a real router: Wi-Fi and wired clients both appear, per-client sums match the client drawer, days group correctly across midnight
 - [ ] **Traffic by country (opt-in `TIK_GEOIP` local CSV, nothing downloaded)** 🟨: real traffic-flow export with a `TIK_GEOIP` CSV
 
 ## Alarm Manager / Notifications

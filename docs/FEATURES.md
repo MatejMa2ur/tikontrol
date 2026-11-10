@@ -12,7 +12,7 @@ Clean-room: we copy the behaviour, never the assets.
 **Backing:** `ROS` = RouterOS API on the router · `CMR` = MikroTik CMR server · `tik` = our own logic/DB · `✗` = nothing can back it
 
 <!-- progress:start -->
-**Progress:** 120 ✅ · 105 🟨 · 0 🎨 · 1 ⬜ · 9 ➖ (235 items, 53% done) · 105 🔌 waiting for a hardware test ([list](HARDWARE_TESTS.md))
+**Progress:** 120 ✅ · 105 🟨 · 0 🎨 · 1 ⬜ · 9 ➖ (235 items, 53% done) · 106 🔌 waiting for a hardware test ([list](HARDWARE_TESTS.md))
 <!-- progress:end -->
 
 ---
@@ -147,7 +147,7 @@ Clean-room: we copy the behaviour, never the assets.
 | Feature | Backing | Phase | Status |
 |---|---|---|---|
 | Traffic by application / category | CMR apptraffic | 3 | ✅ |
-| Traffic by client over time | tik | 2 | 🟨 |
+| Traffic by client over time (top clients per hour or day, 24 h / 7 d, stacked chart with a totals table) 🔌 a few hours on a real router: Wi-Fi and wired clients both appear, per-client sums match the client drawer, days group correctly across midnight | tik | 2 | 🟨 |
 | Top domains | ROS DNS cache + tik | 3 | ✅ |
 | Flow log (src, dst, port, bytes) | ROS traffic-flow (IPFIX) → tik collector | 3 | ✅ |
 | Traffic by country (opt-in `TIK_GEOIP` local CSV, nothing downloaded) 🔌 real traffic-flow export with a `TIK_GEOIP` CSV | tik GeoIP on flows | 4 | 🟨 |
