@@ -37,8 +37,13 @@ pub struct Proposal {
     pub t: u64,
     pub title: String,
     pub description: String,
-    /// RouterOS CLI lines as display text; never run by tikontrol from here
+    /// RouterOS CLI lines as display text; never run by tikontrol from here. For a structured
+    /// proposal these are tikontrol's own compilation of `intent`, not the assistant's text.
     pub commands: Vec<String>,
+    /// a tikontrol intent (as the web UI sends to /apply/preview), compiled read-only when proposed;
+    /// the reviewer applies it through Safe apply. Absent for text-only proposals.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub intent: Option<Value>,
 }
 
 #[derive(Default)]
@@ -158,13 +163,14 @@ fn tools(rw: bool) -> Vec<Value> {
         let mut p = tool(
             "propose_change",
             "Propose a change",
-            "Record a proposed router change for a person to review in the tikontrol web UI. Nothing is applied by this tool.",
+            "Record a proposed router change for a person to review in the tikontrol web UI. Nothing is applied by this tool. Prefer `intent`: tikontrol checks it now against the router (read-only) and the person can apply it through Safe apply, which undoes it by itself unless confirmed. Plain `commands` are only shown as text.",
             json!({
                 "title": { "type": "string", "maxLength": 120 },
                 "description": { "type": "string", "maxLength": 2000 },
-                "commands": { "type": "array", "items": { "type": "string", "maxLength": 500 }, "minItems": 1, "maxItems": 50, "description": "RouterOS CLI lines, shown to the reviewer as text" },
+                "intent": { "type": "object", "description": "A tikontrol change intent with a `kind`, e.g. {\"kind\":\"disable-services\",\"names\":[\"telnet\"]}, {\"kind\":\"dns-record\",\"name\":\"nas.lan\",\"address\":\"192.168.88.20\"}, {\"kind\":\"static-route\",\"dst\":\"10.8.0.0/24\",\"gateway\":\"192.168.88.2\"}, or {\"kind\":\"batch\",\"title\":\"...\",\"intents\":[...]} (up to 8). An invalid intent is refused with the reason." },
+                "commands": { "type": "array", "items": { "type": "string", "maxLength": 500 }, "minItems": 1, "maxItems": 50, "description": "RouterOS CLI lines, shown to the reviewer as text only (when no intent fits)" },
             }),
-            &["title", "commands"],
+            &["title"],
         );
         p["annotations"] = json!({ "readOnlyHint": false, "destructiveHint": false, "idempotentHint": false, "openWorldHint": false });
         v.push(p);
@@ -723,26 +729,49 @@ struct ProposeIn {
     title: String,
     #[serde(default)]
     description: String,
+    #[serde(default)]
     commands: Vec<String>,
+    #[serde(default)]
+    intent: Option<Value>,
 }
 
+pub const MAX_INTENT_JSON: usize = 8 * 1024;
+
 fn propose(app: &App, args: Value) -> Result<Value, String> {
-    let p: ProposeIn = serde_json::from_value(args).map_err(|_| "propose_change needs title (string), commands (array of strings) and optional description")?;
+    let p: ProposeIn = serde_json::from_value(args).map_err(|_| "propose_change needs title (string), an intent (object) or commands (array of strings), and an optional description")?;
     let title = clean_n(p.title.trim(), 1000);
     if title.is_empty() || title.chars().count() > 120 || p.description.chars().count() > 2000 {
         return Err("title must be 1-120 characters, description at most 2000".into());
     }
-    if p.commands.is_empty() || p.commands.len() > 50 || p.commands.iter().any(|c| c.trim().is_empty() || c.chars().count() > 500) {
-        return Err("commands must be 1-50 non-empty lines of at most 500 characters".into());
-    }
+    let (commands, intent, checked) = match p.intent {
+        Some(i) => {
+            if !i.is_object() || serde_json::to_string(&i).map_or(true, |j| j.len() > MAX_INTENT_JSON) {
+                return Err(format!("intent must be a JSON object of at most {MAX_INTENT_JSON} bytes"));
+            }
+            // compiled with the reader: reads current state only, never writes
+            let plan = app.with_reader(|r| crate::apply::compile_value(&i, r)).map_err(|e| format!("intent refused: {}", clean_n(&e, 300)))?;
+            (plan.cli(), Some(i), true)
+        }
+        None => {
+            if p.commands.is_empty() || p.commands.len() > 50 || p.commands.iter().any(|c| c.trim().is_empty() || c.chars().count() > 500) {
+                return Err("give an intent, or commands as 1-50 non-empty lines of at most 500 characters".into());
+            }
+            (p.commands.iter().map(|c| clean_n(c.trim(), 500)).collect(), None, false)
+        }
+    };
     let mut g = lock(&app.mcp.proposals);
     g.0 += 1;
     let id = g.0;
-    g.1.push(Proposal { id, t: now(), title, description: clean_n(&p.description, 2000), commands: p.commands.iter().map(|c| clean_n(c.trim(), 500)).collect() });
+    g.1.push(Proposal { id, t: now(), title, description: clean_n(&p.description, 2000), commands, intent });
     while g.1.len() > MAX_PROPOSALS {
         g.1.remove(0);
     }
-    Ok(json!({ "id": id, "applied": false, "status": "Recorded. Nothing was applied: a tikontrol admin must review this proposal in the web UI and apply it through Safe apply." }))
+    let status = if checked {
+        "Recorded and checked against the router. Nothing was applied: a tikontrol admin must review it in the web UI and apply it through Safe apply."
+    } else {
+        "Recorded as text only. Nothing was applied: a person must read the commands and apply them by hand. Propose an intent instead so it can go through Safe apply."
+    };
+    Ok(json!({ "id": id, "applied": false, "checked": checked, "status": status }))
 }
 
 // ---------- browser (session) routes ----------
@@ -992,6 +1021,25 @@ mod tests {
         let id = lock(&app.mcp.proposals).1[0].id;
         assert_eq!(api(&app, with_session(req("DELETE", &format!("/api/v1/mcp/proposals?id={id}"), ""), &c, &csrf)).status, 200);
         assert_eq!(lock(&app.mcp.proposals).1.len(), MAX_PROPOSALS - 1);
+    }
+
+    #[test]
+    fn intent_proposals_are_compiled_read_only_and_bad_ones_refused() {
+        let (app, c, csrf, tok) = enabled();
+        let pw = lock(&app.store).sealer.seal("router-password:reader", "router-pass");
+        lock(&app.store).state.router = Some(RouterCfg { host: "192.0.2.1".into(), port: 8729, pin: "00".into(), mode: Mode::ReadWrite, reader: Cred { user: "r".into(), password: pw }, writer: Some(Cred { user: "w".into(), password: String::new() }) });
+        let r = call_tool(&app, &tok, "propose_change", json!({ "title": "NAS name", "intent": { "kind": "dns-record", "name": "nas.lan", "address": "192.168.88.20" }, "commands": ["/system/reboot"] }));
+        assert_eq!(r["isError"], false, "{r}");
+        assert!(text_of(&r).contains("checked against the router"));
+        let props = json_of(&api(&app, with_session(req("GET", "/api/v1/mcp/proposals", ""), &c, &csrf)));
+        let cmds = serde_json::to_string(&props[0]["commands"]).unwrap();
+        assert!(cmds.contains("/ip/dns/static/add") && !cmds.contains("reboot"), "the assistant's own text is replaced by tikontrol's compilation: {cmds}");
+        assert_eq!(props[0]["intent"]["kind"], "dns-record");
+        for bad in [json!({ "kind": "no-such-thing" }), json!({ "kind": "dns-record", "name": "x\"; /system/reboot", "address": "1.2.3.4" }), json!("dns-record"), json!({ "kind": "dns-record", "name": "a".repeat(9000) })] {
+            let r = call_tool(&app, &tok, "propose_change", json!({ "title": "bad", "intent": bad }));
+            assert_eq!(r["isError"], true, "{r}");
+        }
+        assert_eq!(lock(&app.mcp.proposals).1.len(), 1);
     }
 
     #[test]

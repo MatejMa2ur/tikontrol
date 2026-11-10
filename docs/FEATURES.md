@@ -12,7 +12,7 @@ Clean-room: we copy the behaviour, never the assets.
 **Backing:** `ROS` = RouterOS API on the router · `CMR` = MikroTik CMR server · `tik` = our own logic/DB · `✗` = nothing can back it
 
 <!-- progress:start -->
-**Progress:** 113 ✅ · 109 🟨 · 3 🎨 · 1 ⬜ · 8 ➖ (234 items, 50% done) · 2 🔌 waiting for a hardware test ([list](HARDWARE_TESTS.md))
+**Progress:** 113 ✅ · 109 🟨 · 3 🎨 · 1 ⬜ · 8 ➖ (234 items, 50% done) · 3 🔌 waiting for a hardware test ([list](HARDWARE_TESTS.md))
 <!-- progress:end -->
 
 ---
@@ -349,7 +349,7 @@ Not a UniFi feature: this is our own addition. An MCP server lets an AI assistan
 |---|---|---|---|
 | MCP server: off by default, local network only, own access token | tik | 2 | ✅ |
 | Read-only tools: clients, Wi-Fi, events, insights, topology | tik + ROS | 2 | ✅ |
-| Proposed changes, applied only after approval in Review & apply | tik + Safe apply | 3 | 🟨 |
+| Proposed changes, applied only after approval in Review & apply: the assistant sends a tikontrol intent, compiled read-only when proposed and applied through Safe apply (text-only proposals are never run) 🔌 propose a change from a real MCP client (e.g. Claude Desktop) against a CHR, then apply and revert it | tik + Safe apply | 3 | 🟨 |
 | Privacy mode: hide or swap names and addresses before data leaves tikontrol | tik | 2 | ✅ |
 | Treat device names and SSIDs as untrusted input (prompt injection) | tik | 2 | 🟨 |
 | Never expose router credentials through MCP | tik | 2 | ✅ |

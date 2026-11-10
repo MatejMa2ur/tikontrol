@@ -11,3 +11,7 @@ Read-only checks first; test anything that writes on a spare router or CHR, neve
 ## Control plane / System
 
 - [ ] **Backups (scheduled, download, restore): list verified on CHR; tikontrol downloads its own `tik-*.rsc` exports (admin only, no secrets), full `.backup` files stay on the router** 🟨: download a tik-*.rsc as the reader with `/file/read` (RouterOS 7.13+); check which policy the reader needs
+
+## AI assistants (MCP)
+
+- [ ] **Proposed changes, applied only after approval in Review & apply: the assistant sends a tikontrol intent, compiled read-only when proposed and applied through Safe apply (text-only proposals are never run)** 🟨: propose a change from a real MCP client (e.g. Claude Desktop) against a CHR, then apply and revert it

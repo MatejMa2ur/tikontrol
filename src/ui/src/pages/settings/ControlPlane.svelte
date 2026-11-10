@@ -66,7 +66,7 @@
 
   // ---------- AI assistants (MCP): src/server/src/mcp.rs ----------
   type McpCfg = { enabled: boolean; privacy: boolean; endpoint: string | null; readWrite: boolean; protocolVersion: string }
-  type Proposal = { id: number; t: number; title: string; description: string; commands: string[] }
+  type Proposal = { id: number; t: number; title: string; description: string; commands: string[]; intent?: Record<string, unknown> }
   let mcp = $state<McpCfg | null>(null)
   let token = $state('')
   let copied = $state(false)
@@ -321,7 +321,8 @@
       {#each proposals as p (p.id)}
         <div class="prop">
           <div class="row between"><b>{p.title}</b><span class="row">
-            <button class="btn small" onclick={() => review(p.title, p.commands)}>Review…</button>
+            {#if p.intent}<span class="pill ok" title="tikontrol compiled this change itself and checked it against the router">Checked</span>{:else}<span class="pill" title="Only text from the assistant: tikontrol can't apply it through Safe apply">Text only</span>{/if}
+            <button class="btn small" onclick={() => review(p.title, p.commands, p.intent as any)}>Review…</button>
             {#if isAdmin}<button class="btn small" onclick={() => dismiss(p.id)}>Dismiss</button>{/if}
           </span></div>
           {#if p.description}<p class="muted small">{p.description}</p>{/if}
@@ -330,7 +331,7 @@
       {:else}
         <div class="muted small">No proposals. Nothing an assistant suggests runs until you review and apply it here.</div>
       {/each}
-      <p class="muted small">Proposals come from the AI assistant: read every command before applying it.</p>
+      <p class="muted small">Proposals come from the AI assistant: read every command before applying it. "Checked" proposals are compiled by tikontrol and go through Safe apply; "Text only" ones are never run by tikontrol.</p>
     {/if}
   {/if}
   {#if mcpErr}<div class="err small" role="alert">{mcpErr}</div>{/if}
