@@ -1,7 +1,7 @@
 <script lang="ts">
   import { keep, kept } from '../lib/keep'
   import { router, internet, clients, radios, raw, bytes, dur, hw, isBackend, neighbors } from '../lib/data'
-  import { api } from '../lib/backend'
+  import { api, switchSite, type Site } from '../lib/backend'
   import { live } from '../lib/live.svelte'
   import { review } from '../lib/apply.svelte'
   import { cmr, loadCmr, cmrOk, type CmrDevice } from '../lib/cmr.svelte'
@@ -50,6 +50,9 @@
   $effect(() => { loadCmr() })
   // when the router itself is the CMR server, its own CMR entry is the first row already
   const fleet = $derived((cmr.data?.devices ?? []).filter((d) => !(d.controller && cmr.data?.source === 'router')))
+  // routers this tikontrol already manages (Settings → Control Plane → Routers): a neighbour among them gets Open, not Set up
+  let sites = $state<Site[]>([])
+  if (isBackend) api<Site[]>('/sites').then((r) => (sites = r)).catch(() => {})
   // match on address: two MikroTiks can share a name (both "hAP")
   const same = (d: any, n: any) => (d.address && n.address ? String(d.address).split('/')[0] === n.address : d.identity === n.identity)
   const strangers = $derived(neighbors.filter((n) => !fleet.some((d) => same(d, n))))
@@ -101,7 +104,7 @@
         <thead><tr><th>Name</th><th>Model</th><th>IP address</th><th>Version</th><th>Uptime</th><th>CPU</th><th>Memory</th><th>Clients</th><th>Status</th></tr></thead>
         <tbody>
           <tr onclick={() => { drawer = true; dtab = 'overview' }}>
-            <td><span class="row"><span class="icon-box"><Icon name="devices" /></span><span><button class="plain" onclick={(e) => { e.stopPropagation(); drawer = true; dtab = 'overview' }}><b>{identity}</b></button><div class="muted small">Gateway · AP</div></span></span></td>
+            <td><span class="row"><span class="icon-box"><Icon name="devices" /></span><span><button class="plain" onclick={(e) => { e.stopPropagation(); drawer = true; dtab = 'overview' }}><b>{identity}</b></button><div class="muted small">{internet.behind ? 'Switch' : 'Gateway'}{(raw.wifi ?? []).some((w: any) => String(w.disabled) !== 'true') ? ' · AP' : ''}</div></span></span></td>
             <td>{router.board}<div class="muted small mono">{router.model}</div></td>
             <td class="mono">{internet.gatewayIp}</td>
             <td>{router.version}{#if router.firmware !== router.firmwareUpgrade}<div><span class="pill warn">firmware upgrade</span></div>{/if}</td>
@@ -124,10 +127,12 @@
           {/each}
           {#each strangers as n}
             {@const ver = (n.version ?? '').split(' ')[0]}
-            <tr onclick={() => openGuide(n)}><td><b>{n.identity}</b></td><td>{n.board ?? n.platform}</td><td class="mono">{n.address}</td>
+            {@const known = sites.find((x) => x.host === n.address)}
+            <tr onclick={() => (known ? switchSite(known.id) : openGuide(n))}><td><b>{n.identity}</b></td><td>{n.board ?? n.platform}</td><td class="mono">{n.address}</td>
               <td>{ver}{#if tooOld(ver)}<br /><span class="pill bad" title="tikontrol needs RouterOS 7">RouterOS 7 needed</span>{:else if ver && cmpVersion(ver, '7.18') < 0}<br /><span class="pill warn" title="tikontrol reads routers over the API from RouterOS 7.18">update to 7.18+</span>{/if}</td>
               <td>—</td><td>—</td><td>—</td><td>—</td>
-              <td><span class="pill">Not adopted</span> <button class="btn small" onclick={(e) => { e.stopPropagation(); openGuide(n) }} aria-label="Set up {n.identity}">Set up</button></td></tr>
+              <td>{#if known}<span class="pill ok">In tikontrol</span> <button class="btn small" onclick={(e) => { e.stopPropagation(); switchSite(known.id) }} aria-label="Open {n.identity}">Open</button>
+                {:else}<span class="pill">Not adopted</span> <button class="btn small" onclick={(e) => { e.stopPropagation(); openGuide(n) }} aria-label="Set up {n.identity}">Set up</button>{/if}</td></tr>
           {/each}
         </tbody>
       </table>
