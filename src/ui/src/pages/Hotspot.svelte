@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { raw, ssids, parseUptime } from '../lib/data'
+  import { raw, ssids, radios, hw, parseUptime } from '../lib/data'
   import { review } from '../lib/apply.svelte'
   import Icon from '../lib/Icon.svelte'
   import Tabs from '../lib/ui/Tabs.svelte'
@@ -27,11 +27,22 @@
     on: !!ours,
     iface: String(ours?.interface ?? 'guest-vlan'),
     address: String(addr?.address ?? '10.10.10.1/24'),
-    ssid: 'Guest', title: 'Welcome', text: 'Free Wi-Fi for our guests.', color: '#2672f5',
+    ssid: 'Guest', pass: '', title: 'Welcome', text: 'Free Wi-Fi for our guests.', color: '#2672f5',
     auth: hprof && !loginBy.includes('trial') ? 'voucher' : 'terms',
     duration: String(uprof?.['session-timeout'] || hprof?.['trial-uptime-limit'] || '1d'),
     limit: rUp && rDown ? `${rDown}/${rUp}` : ours ? '' : '20M/5M',
   })
+  // guest Wi-Fi in the same change: a wifi-guest virtual AP on a physical radio, the portal on its own interface
+  // (src/server/src/intents/wifi.rs guest_iface). Without a radio the portal needs an existing guest interface or VLAN.
+  const W: any[] = raw.wifi ?? []
+  const phys = radios.filter((r) => !W.find((w) => w.name === r.name)?.['master-interface'])
+  const wifiPkg = hw.wifiPackage === 'wifi' ? 'wifi' : 'wireless'
+  const canWifi = hw.wifiPackage !== 'none' && phys.length > 0
+  let via = $state(canWifi && !ours ? 'ssid' : 'iface')
+  let master = $state(phys[0]?.name ?? '')
+  const useSsid = $derived(via === 'ssid' && canWifi)
+  const ssidOk = $derived(portal.ssid.trim().length > 0 && new TextEncoder().encode(portal.ssid).length <= 32 && portal.ssid === portal.ssid.trim())
+  const passOk = $derived(/^[\x20-\x7e]{8,63}$/.test(portal.pass))
   const durations = [...new Set(['1h', '8h', '1d', '7d', portal.duration])]
 
   // new vouchers are generated in this browser (crypto.getRandomValues) and shown once for printing, then created as
@@ -54,7 +65,15 @@
   })()
   const savedCount = saved.reduce((n, b) => n + b.users.length, 0)
   const [down, up] = $derived(portal.limit.split('/').map((x) => x.trim()))
-  const applyPortal = () => review('Guest portal', [
+  const hotspotIntent = () => ({ kind: 'guest-hotspot', ...(useSsid ? { guest_ssid: { master, ssid: portal.ssid } } : { interface: portal.iface }), address: portal.address, down: down ?? '', up: up ?? '', session: portal.duration, login: portal.auth === 'voucher' ? 'voucher' : 'terms' })
+  // one batch: the guest SSID first, then the portal on its interface; a revert removes the portal, then the SSID
+  const applyPortal = () => useSsid ? review('Guest Wi-Fi with portal', [
+    `# ${wifiPkg === 'wifi' ? '/interface/wifi' : '/interface/wireless'}/add master-interface=${master} ssid="${portal.ssid}" (guest SSID, its own interface)`,
+    `# guest portal (address, pool, DHCP, hotspot) on that new interface, ${portal.address}`,
+  ], { kind: 'batch', title: 'Guest Wi-Fi with portal', intents: [
+    { kind: 'wifi-guest', package: wifiPkg, master, ssid: portal.ssid, passphrase: portal.pass },
+    hotspotIntent(),
+  ] }) : review('Guest portal', [
     `/ip/address/add address=${portal.address} interface=${portal.iface} comment=tik:hotspot`,
     '/ip/pool/add name=tik-guest ranges=… comment=tik:hotspot',
     '/ip/dhcp-server/network/add … comment=tik:hotspot',
@@ -62,7 +81,7 @@
     `/ip/hotspot/user/profile/add name=tik-guest session-timeout=${portal.duration}${portal.limit ? ` rate-limit=${up}/${down}` : ''}`,
     `/ip/hotspot/profile/add name=tik-guest login-by=${portal.auth === 'voucher' ? 'http-chap,http-pap' : 'trial'}`,
     `/ip/hotspot/add name=tik-guest interface=${portal.iface} address-pool=tik-guest profile=tik-guest`,
-  ], { kind: 'guest-hotspot', interface: portal.iface, address: portal.address, down: down ?? '', up: up ?? '', session: portal.duration, login: portal.auth === 'voucher' ? 'voucher' : 'terms' })
+  ], hotspotIntent())
   const removePortal = () => review('Remove guest portal', [
     '/ip/hotspot/remove [find name="tik-guest"]', '/ip/hotspot/profile/remove [find name="tik-guest"]', '/ip/hotspot/user/profile/remove [find name="tik-guest"]',
     '/ip/dhcp-server/remove [find name="tik-guest"]', '/ip/dhcp-server/network/remove [find comment="tik:hotspot"]', '/ip/pool/remove [find name="tik-guest"]', '/ip/address/remove [find comment="tik:hotspot"]',
@@ -82,18 +101,29 @@
       <Section title="Captive portal" desc="A guest network with a login page: RouterOS Hotspot, optionally with a branded page served from the router." ros="/ip/hotspot/print; /ip/hotspot/profile/print; /ip/hotspot/user/profile/print; /ip/address/print where comment=tik:hotspot">
         <Field label="Enabled" help={ours ? 'Turn off and review to remove the guest portal' : ''}><Toggle bind:checked={portal.on} label="Guest portal" /></Field>
         {#if others.length}<div class="muted small">This router has other hotspots ({others.map((h) => h.name).join(', ')}); tikontrol leaves them alone.</div>{/if}
-        <Field label="Guest interface" help="Only guests should use it: a guest VLAN or guest Wi-Fi, never your main LAN"><input type="text" bind:value={portal.iface} disabled={!!ours} /></Field>
+        {#if !ours}
+          <Field label="Guests connect via" help={canWifi ? '' : "This router has no Wi-Fi radio, so tikontrol can't create a guest SSID: use a guest VLAN or port"}>
+            <select bind:value={via} disabled={!canWifi}><option value="ssid" disabled={!canWifi}>A new guest Wi-Fi (SSID)</option><option value="iface">An existing interface or VLAN</option></select>
+          </Field>
+        {/if}
+        {#if useSsid && !ours}
+          <Field label="Guest SSID" help="Created with the portal, as its own network (not in your LAN bridge)"><input type="text" bind:value={portal.ssid} maxlength="32" /></Field>
+          <Field label="Guest Wi-Fi password" help="8-63 characters; give it to guests with the voucher or terms"><input type="password" bind:value={portal.pass} autocomplete="new-password" /></Field>
+          <Field label="Radio"><select bind:value={master}>{#each phys as r}<option value={r.name}>{r.name} · {r.band}</option>{/each}</select></Field>
+        {:else}
+          <Field label="Guest interface" help="Only guests should use it: a guest VLAN or guest Wi-Fi, never your main LAN"><input type="text" bind:value={portal.iface} disabled={!!ours} /></Field>
+        {/if}
         <Field label="Guest network" help="The router's address on it"><input type="text" bind:value={portal.address} disabled={!!ours} /></Field>
-        <Field label="Guest SSID" help="Preview only"><input type="text" bind:value={portal.ssid} /></Field>
         <Field label="Authentication">
           <select bind:value={portal.auth} disabled={!!ours}><option value="terms">Accept terms</option><option value="voucher">Voucher</option></select>
         </Field>
         <Field label="Session length"><select bind:value={portal.duration} disabled={!!ours}>{#each durations as d}<option>{d}</option>{/each}</select></Field>
         <Field label="Speed limit per guest" help="Download/upload, e.g. 20M/5M; empty for none"><input type="text" bind:value={portal.limit} disabled={!!ours} /></Field>
+        {#if ours && String(ours.interface ?? '').startsWith('tik-guest-')}<div class="muted small">The portal runs on a guest SSID made by tikontrol. Removing the portal leaves that SSID; remove it in Settings › <a href="#/settings/wifi">WiFi</a>.</div>{/if}
         {#if ours}<div class="muted small">These are the router's current settings. To change them, turn the portal off, apply, then set it up again.</div>{/if}
         <div class="r">
           {#if ours && !portal.on}<button class="btn primary" onclick={removePortal}>Review removal</button>
-          {:else if !ours}<button class="btn primary" disabled={!portal.on} onclick={applyPortal}>Review & apply</button>{/if}
+          {:else if !ours}<button class="btn primary" disabled={!portal.on || (useSsid && (!ssidOk || !passOk || !master))} onclick={applyPortal}>Review & apply</button>{/if}
         </div>
         <h3 class="sub">Branded login page</h3>
         <Field label="Title"><input type="text" bind:value={portal.title} maxlength="60" /></Field>
@@ -116,7 +146,7 @@
             <button class="go">Connect</button>
           </div>
         </div>
-        <div class="muted small c">Preview · {portal.ssid}</div>
+        <div class="muted small c">Preview{useSsid && !ours ? ` · ${portal.ssid}` : ''}</div>
       </div>
     </div>
   {:else if tab === 'vouchers'}

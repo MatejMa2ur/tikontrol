@@ -15,7 +15,13 @@ use std::net::Ipv4Addr;
 #[serde(tag = "kind", rename_all = "kebab-case", deny_unknown_fields)]
 enum I {
     GuestHotspot {
+        /// an existing guest interface or VLAN; empty when `guest_ssid` names the guest Wi-Fi instead
+        #[serde(default)]
         interface: String,
+        /// the guest SSID `wifi-guest` creates (same master and SSID): the portal goes on its virtual AP interface.
+        /// Sent in one batch with that `wifi-guest`, before it.
+        #[serde(default)]
+        guest_ssid: Option<GuestSsid>,
         address: String,
         #[serde(default)]
         down: String,
@@ -31,6 +37,13 @@ enum I {
     RemoveHotspotVouchers { batch: String },
     HotspotPage { title: String, message: String, color: String },
     RemoveHotspotPage {},
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct GuestSsid {
+    master: String,
+    ssid: String,
 }
 
 fn day() -> String {
@@ -172,8 +185,12 @@ fn code(s: &str) -> Result<String, String> {
 fn build(i: I, r: &mut dyn Router) -> Result<Plan, String> {
     use I::*;
     Ok(match i {
-        GuestHotspot { interface, address, down, up, session, login } => {
-            let ifn = ros_name(&interface)?;
+        GuestHotspot { interface, guest_ssid, address, down, up, session, login } => {
+            let ifn = match &guest_ssid {
+                Some(_) if !interface.trim().is_empty() => return Err("give either an interface or a guest SSID, not both".into()),
+                Some(g) => super::wifi::guest_iface(&g.master, &g.ssid)?,
+                None => ros_name(&interface)?,
+            };
             let (a, n) = address.trim().split_once('/').ok_or("address needs a prefix, e.g. 10.10.10.1/24")?;
             let n: u32 = n.parse().map_err(|_| "invalid prefix length")?;
             if !(16..=29).contains(&n) {
@@ -223,8 +240,13 @@ fn build(i: I, r: &mut dyn Router) -> Result<Plan, String> {
             if !placeholders(r)? {
                 undo.extend(rm_placeholders()); // a revert leaves nothing behind
             }
+            let first = if guest_ssid.is_some() {
+                "High risk: the portal goes on the new guest Wi-Fi's own interface. If that interface ends up in your LAN bridge, the bridge's devices don't see the portal and guests get no address: check it isn't a bridge port after applying."
+            } else {
+                "High risk: choose an interface only guests use (a guest VLAN or guest Wi-Fi). On your main LAN every device, including this browser, lands on the login page."
+            };
             with(plan(format!("Guest hotspot on {ifn} ({netaddr}/{n}, {})", if login == "terms" { "accept terms" } else { "vouchers" }), Risk::High, ops, undo), &[
-                "High risk: choose an interface only guests use (a guest VLAN or guest Wi-Fi). On your main LAN every device, including this browser, lands on the login page.",
+                first,
                 "Guests can still reach your LAN unless a firewall rule blocks it (Security). The walled garden is empty.",
                 "The login page is RouterOS's default; a branded page (title, message, colour) isn't uploaded yet.",
                 "Tested on CHR (RouterOS in a VM); the guest login itself is not yet tested with a real device.",
@@ -388,6 +410,48 @@ mod tests {
         let mut f = Fake::default();
         f.answers.insert("/ip/hotspot/print".into(), Ok(vec![row(&[(".id", "*1")])]));
         assert!(compile(&json!({"kind": "guest-hotspot", "interface": "x", "address": "10.10.10.1/24"}), &mut f).unwrap().is_err());
+    }
+
+    #[test]
+    fn guest_hotspot_on_the_new_guest_ssid() {
+        let v = json!({"kind": "guest-hotspot", "guest_ssid": {"master": "wlan1", "ssid": "Café Guests"}, "address": "10.10.10.1/24"});
+        let p = ok(v, &mut Fake::default());
+        assert!(p.cli()[0].contains("interface=tik-guest-cafguests-wlan1"), "{:?}", p.cli());
+        assert!(p.cli().last().unwrap().contains("/ip/hotspot/add name=tik-guest interface=tik-guest-cafguests-wlan1"));
+        for bad in [
+            json!({"kind": "guest-hotspot", "address": "10.10.10.1/24"}),
+            json!({"kind": "guest-hotspot", "interface": "ether5", "guest_ssid": {"master": "wlan1", "ssid": "G"}, "address": "10.10.10.1/24"}),
+            json!({"kind": "guest-hotspot", "guest_ssid": {"master": "wlan1"}, "address": "10.10.10.1/24"}),
+            json!({"kind": "guest-hotspot", "guest_ssid": {"master": "wlan1", "ssid": ""}, "address": "10.10.10.1/24"}),
+            json!({"kind": "guest-hotspot", "guest_ssid": {"master": "wlan1;x", "ssid": "G"}, "address": "10.10.10.1/24"}),
+            json!({"kind": "guest-hotspot", "guest_ssid": {"master": "wlan1", "ssid": "G", "vlan": 5}, "address": "10.10.10.1/24"}),
+        ] {
+            assert!(compile(&bad, &mut Fake::default()).unwrap().is_err(), "{bad}");
+        }
+    }
+
+    /// Guest Wi-Fi and portal in one change: the SSID's interface is the hotspot's, and a revert removes both.
+    #[test]
+    fn guest_wifi_and_portal_in_one_batch() {
+        for (pkg, master) in [("wireless", "wlan1"), ("wifi", "wifi1")] {
+            let v = json!({"kind": "batch", "title": "Guest Wi-Fi with portal", "intents": [
+                {"kind": "wifi-guest", "package": pkg, "master": master, "ssid": "Guests", "passphrase": "guestpass1"},
+                {"kind": "guest-hotspot", "guest_ssid": {"master": master, "ssid": "Guests"}, "address": "10.10.10.1/24", "login": "voucher"},
+            ]});
+            let p = crate::apply::compile_value(&v, &mut Fake::default()).unwrap();
+            let cli = p.cli();
+            let ifn = format!("tik-guest-guests-{master}");
+            assert!(cli.iter().any(|c| c.starts_with(&format!("/interface/{pkg}/add master-interface={master} name={ifn} "))), "{cli:?}");
+            assert!(cli.iter().any(|c| c == &format!("/ip/hotspot/add name=tik-guest interface={ifn} address-pool=tik-guest profile=tik-guest disabled=no")), "{cli:?}");
+            let wifi_at = cli.iter().position(|c| c.starts_with(&format!("/interface/{pkg}/add"))).unwrap();
+            assert!(wifi_at < cli.iter().position(|c| c.starts_with("/ip/address/add")).unwrap(), "the SSID exists before the portal uses it");
+            assert!(p.revertible);
+            let undo = p.undo_cli();
+            assert_eq!(undo[0], r#"/ip/hotspot/remove [find name="tik-guest"]"#, "the portal goes first");
+            assert!(undo.iter().any(|c| c == &format!(r#"/interface/{pkg}/remove [find comment="tik:guest:guests:{master}"]"#)), "{undo:?}");
+            let rs = crate::apply::revert_script("g", &p).unwrap();
+            assert!(!rs.contains("guestpass1"));
+        }
     }
 
     #[test]

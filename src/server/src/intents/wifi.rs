@@ -213,6 +213,13 @@ fn bps(s: &str) -> Result<u64, String> {
     (v.is_finite() && (0.0..=4_294_967_295.0).contains(&v)).then_some(v as u64).ok_or_else(bad)
 }
 
+/// The interface `wifi-guest` creates for `ssid` on `master`: a virtual AP that is not a bridge port, so it is its own
+/// layer-3 interface (`guest-hotspot` with `guest_ssid` puts the guest portal on it).
+pub fn guest_iface(master: &str, name: &str) -> Result<String, String> {
+    let (m, name) = (ifname(master)?, ssid(name)?);
+    ros_name(&format!("tik-guest-{}-{m}", slug(&name)))
+}
+
 fn slug(s: &str) -> String {
     let s: String = s.chars().filter(|c| c.is_ascii_alphanumeric()).take(20).collect::<String>().to_ascii_lowercase();
     if s.is_empty() { "guest".into() } else { s }
@@ -473,9 +480,8 @@ fn build(w: W, r: &mut dyn Router) -> Result<Plan, String> {
         }
         W::WifiGuest { package: pkg, master, ssid: name, passphrase: pass } => {
             let (m, name, pass) = (ifname(&master)?, ssid(&name)?, passphrase(&pass)?);
-            let s = slug(&name);
-            let c = format!("tik:guest:{s}:{m}");
-            let obj = format!("tik-guest-{s}-{m}");
+            let c = format!("tik:guest:{}:{m}", slug(&name));
+            let obj = guest_iface(&m, &name)?;
             let mut ops = vec![];
             let mut undo = vec![Op::on(pkg.path(), "remove", "comment", &c, vec![])];
             match pkg {
