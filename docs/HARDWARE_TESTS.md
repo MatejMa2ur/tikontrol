@@ -8,6 +8,7 @@ Read-only checks first; test anything that writes on a spare router or CHR, neve
 
 - [ ] **Topology** 🟨: a real downstream MikroTik switch and AP heard over MNDP/LLDP
 - [ ] **Settings → Networks (every control sends an intent: DHCP range/lease, options, mDNS, IGMP, VLAN filtering, remove)** 🟨: toggle IGMP and VLAN filtering on a CHR and let the 5-minute revert undo a lockout
+- [ ] **Settings → VPN** 🟨: connect a phone over a real WAN with WireGuard and L2TP/IPsec
 - [ ] **Settings → Security / CyberSecure (all sections on real data and intents)** 🟨: run the security checks below on a CHR
 - [ ] **Settings → Routing (add and remove port forwards, routes, DNS records)** 🟨: add, remove and revert each on a CHR; hand-made rows must have no Remove
 
@@ -49,6 +50,13 @@ Read-only checks first; test anything that writes on a spare router or CHR, neve
 ## Internet (WAN)
 
 - [ ] **ISP status / outage history (uptime % and outages from 7 days of minute samples; "down" = WAN link not running)** 🟨: pull the WAN cable for 2+ minutes: an outage with the right length appears and uptime drops
+
+## VPN
+
+- [ ] **WireGuard server + peers + QR (enable/disable and remove peers)** 🟨: a phone peer connects over a real WAN, disable stops it, remove + revert
+- [ ] **OpenVPN server (on/off, VPN users; refuses without a certificate and explains how to make one; certificate generation not built)** 🟨: older versions print `certificate=none`; log in with an ovpn VPN user
+- [ ] **L2TP/IPsec server (`use-ipsec=required` with a masked IPsec secret, VPN users add/remove)** 🟨: enable with a secret, check the dynamic IPsec peer, log in from a phone, revert leaves `use-ipsec` as it was
+- [ ] **Connected VPN users view (`/ppp/active` + WireGuard peers with a handshake in the last 3 minutes)** 🟨: field names `caller-id`/`encoding` on 7.18+ and WireGuard `last-handshake` format over the API
 
 ## Security / CyberSecure
 

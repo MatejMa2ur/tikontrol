@@ -12,7 +12,7 @@ Clean-room: we copy the behaviour, never the assets.
 **Backing:** `ROS` = RouterOS API on the router · `CMR` = MikroTik CMR server · `tik` = our own logic/DB · `✗` = nothing can back it
 
 <!-- progress:start -->
-**Progress:** 114 ✅ · 109 🟨 · 2 🎨 · 1 ⬜ · 8 ➖ (234 items, 50% done) · 25 🔌 waiting for a hardware test ([list](HARDWARE_TESTS.md))
+**Progress:** 114 ✅ · 109 🟨 · 2 🎨 · 1 ⬜ · 8 ➖ (234 items, 50% done) · 30 🔌 waiting for a hardware test ([list](HARDWARE_TESTS.md))
 <!-- progress:end -->
 
 ---
@@ -36,7 +36,7 @@ Clean-room: we copy the behaviour, never the assets.
 | P13 | Settings → WiFi | Settings · WiFi | 2 |🟨 |
 | P14 | Settings → Networks (every control sends an intent: DHCP range/lease, options, mDNS, IGMP, VLAN filtering, remove) 🔌 toggle IGMP and VLAN filtering on a CHR and let the 5-minute revert undo a lockout | Settings · Networks | 3 | 🟨 |
 | P15 | Settings → Internet | Settings · Internet | 3 |🟨 |
-| P16 | Settings → VPN | Settings · VPN | 2 | 🟨 |
+| P16 | Settings → VPN 🔌 connect a phone over a real WAN with WireGuard and L2TP/IPsec | Settings · VPN | 2 | 🟨 |
 | P17 | Settings → Security / CyberSecure (all sections on real data and intents) 🔌 run the security checks below on a CHR | Settings · Security | 3 | 🟨 |
 | P18 | Settings → Routing (add and remove port forwards, routes, DNS records) 🔌 add, remove and revert each on a CHR; hand-made rows must have no Remove | Settings · Routing | 2 | 🟨 |
 | P19 | Settings → Profiles | Settings · Profiles | 3 |🎨 |
@@ -219,14 +219,14 @@ Clean-room: we copy the behaviour, never the assets.
 ## VPN
 | Feature | Backing | Phase | Status |
 |---|---|---|---|
-| WireGuard server + peers + QR | ROS `/interface/wireguard` | 2 |🟨 |
-| OpenVPN server | ROS ovpn-server | 4 |🟨 |
-| L2TP/IPsec server | ROS | 4 |🟨 |
+| WireGuard server + peers + QR (enable/disable and remove peers) 🔌 a phone peer connects over a real WAN, disable stops it, remove + revert | ROS `/interface/wireguard` | 2 | 🟨 |
+| OpenVPN server (on/off, VPN users; refuses without a certificate and explains how to make one; certificate generation not built) 🔌 older versions print `certificate=none`; log in with an ovpn VPN user | ROS ovpn-server | 4 | 🟨 |
+| L2TP/IPsec server (`use-ipsec=required` with a masked IPsec secret, VPN users add/remove) 🔌 enable with a secret, check the dynamic IPsec peer, log in from a phone, revert leaves `use-ipsec` as it was | ROS | 4 | 🟨 |
 | VPN client (to a provider) | ROS wg / ovpn client | 3 | ✅ |
 | Site-to-site (WireGuard / IPsec) | ROS | 3 | ✅ |
 | Teleport (one-click remote access) | ROS Back To Home (`/ip/cloud`) | 2 | ✅ |
 | Policy-based routing through VPN | ROS routing rules / mangle | 3 | ✅ |
-| Connected VPN users view | ROS | 2 | 🟨 |
+| Connected VPN users view (`/ppp/active` + WireGuard peers with a handshake in the last 3 minutes) 🔌 field names `caller-id`/`encoding` on 7.18+ and WireGuard `last-handshake` format over the API | ROS | 2 | 🟨 |
 
 ## Security / CyberSecure
 | Feature | Backing | Phase | Status |
