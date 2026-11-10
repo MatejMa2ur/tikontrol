@@ -41,7 +41,9 @@ impl Op {
         }
         for (k, v) in &self.args {
             // secrets never reach the browser, the audit log or error messages
-            if SECRET_KEYS.contains(k) {
+            if *k == PLACE_BEFORE_TAG {
+                s.push_str(&format!(" place-before=[:pick [{}/find comment={}] 0]", self.path, quoted(v)));
+            } else if SECRET_KEYS.contains(k) {
                 s.push_str(&format!(" {k}=\"********\""));
             } else {
                 s.push_str(&format!(" {k}={}", cli_quote(v)));
@@ -54,6 +56,29 @@ impl Op {
     /// script is rendered from CLI text, where secrets are masked).
     pub fn has_secret(&self) -> bool {
         self.args.iter().any(|(k, _)| SECRET_KEYS.contains(k))
+    }
+
+    /// The op with a `PLACE_BEFORE_TAG` anchor looked up now: the first row with that comment, or none (appended).
+    fn resolved(&self, r: &mut dyn Router) -> Result<Op, String> {
+        let mut op = self.clone();
+        op.args.clear();
+        for (k, v) in &self.args {
+            if *k == PLACE_BEFORE_TAG {
+                let rows = r.run(&Cmd::new(&format!("{}/print", self.path)).proplist(&[".id"]).query("comment", v))?;
+                if let Some(id) = rows.first().and_then(|x| x.get(".id")) {
+                    op.args.push(("place-before", id.clone()));
+                }
+            } else {
+                op.args.push((k, v.clone()));
+            }
+        }
+        Ok(op)
+    }
+
+    /// The same op without its anchor: what the revert script falls back to when the anchor is gone.
+    fn unanchored(&self) -> Option<Op> {
+        let anchored = |k: &&str| *k == "place-before" || *k == PLACE_BEFORE_TAG;
+        (self.verb == "add" && self.args.iter().any(|(k, _)| anchored(k))).then(|| Op { args: self.args.iter().filter(|(k, _)| !anchored(k)).cloned().collect(), ..self.clone() })
     }
 
     fn valid(&self) -> bool {
@@ -69,7 +94,20 @@ impl Op {
             }
             c
         };
+        if self.args.iter().any(|(k, _)| *k == PLACE_BEFORE_TAG) {
+            return self.resolved(r)?.run(r);
+        }
         match &self.find {
+            None if self.verb == "add" && self.args.iter().any(|(k, _)| *k == "place-before") => {
+                // the anchor may be gone (removed and re-added in the same batch): the rule still goes in, at the end
+                r.run(&with_args(Cmd::new(&full))).or_else(|_| {
+                    let mut c = Cmd::new(&full);
+                    for (k, v) in self.args.iter().filter(|(k, _)| *k != "place-before") {
+                        c = c.arg(k, v);
+                    }
+                    r.run(&c)
+                }).map(|_| 1)
+            }
             None => r.run(&with_args(Cmd::new(&full))).map(|_| 1),
             Some((k, v)) => {
                 let rows = r.run(&Cmd::new(&format!("{}/print", self.path)).proplist(&[".id"]).query(k, v))?;
@@ -86,6 +124,11 @@ impl Op {
         }
     }
 }
+
+/// Internal argument: put the new row before the first row with this comment, looked up when the op runs
+/// (rendered as `place-before=[:pick [find comment=...] 0]`). For anchors that a batch removes and re-adds,
+/// whose `.id` would be stale by then.
+pub const PLACE_BEFORE_TAG: &str = "place-before-tag";
 
 /// Argument names whose values are secrets: masked in every CLI rendering and never allowed in an inverse.
 pub const SECRET_KEYS: &[&str] = &["password", "secret", "wpa-pre-shared-key", "wpa2-pre-shared-key", "wpa3-pre-shared-key", "private-pre-shared-key", "security.passphrase", "passphrase", "private-key", "preshared-key", "ipsec-secret"];
@@ -588,7 +631,11 @@ pub fn later(date: &str, time: &str, secs: u64) -> Option<(String, String)> {
 pub fn revert_script(id: &str, plan: &Plan) -> Result<String, String> {
     let mut parts = vec![format!("/system/scheduler/remove [find name=\"tik-revert-{id}\"]")];
     // each inverse in its own :do so one failure doesn't stop the rest
-    parts.extend(plan.undo_cli().into_iter().map(|c| format!(":do {{ {c} }} on-error={{}}")));
+    // an add whose anchor is gone is still made, at the end, rather than lost
+    parts.extend(plan.undo.iter().map(|op| match op.unanchored() {
+        Some(plain) => format!(":do {{ {} }} on-error={{ :do {{ {} }} on-error={{}} }}", op.to_cli(), plain.to_cli()),
+        None => format!(":do {{ {} }} on-error={{}}", op.to_cli()),
+    }));
     parts.push(format!(":log warning \"tikontrol: change {id} was not confirmed and has been reverted\""));
     let s = parts.join("; ");
     if !valid_value(&s) {
@@ -845,6 +892,33 @@ mod tests {
         let v = serde_json::json!({"kind": "block-domain", "domain": "example.com"});
         assert!(compile_value(&v, &mut Fake::default()).unwrap().title.contains("example.com"));
         assert!(compile_value(&serde_json::json!({"kind": "nope"}), &mut Fake::default()).is_err());
+    }
+
+    #[test]
+    fn anchors_are_looked_up_when_run_and_a_gone_anchor_still_adds() {
+        let op = Op::add("/ip/firewall/filter", vec![("chain", "forward".into()), (PLACE_BEFORE_TAG, "tik:app:b".into()), ("comment", "tik:app:a".into())]);
+        let mut f = Fake::default();
+        f.answers.insert("/ip/firewall/filter/print".into(), Ok(vec![row(&[(".id", "*9")])]));
+        op.run(&mut f).unwrap();
+        assert_eq!(f.seen[0], ["/ip/firewall/filter/print", "=.proplist=.id", "?comment=tik:app:b"]);
+        assert_eq!(f.seen[1], ["/ip/firewall/filter/add", "=chain=forward", "=place-before=*9", "=comment=tik:app:a"]);
+        // no such rule any more: appended
+        let mut f = Fake::default();
+        op.run(&mut f).unwrap();
+        assert_eq!(f.seen[1], ["/ip/firewall/filter/add", "=chain=forward", "=comment=tik:app:a"]);
+        // a stale .id: the router refuses it, the rule is added at the end instead
+        struct Stale(Vec<Vec<String>>);
+        impl Router for Stale {
+            fn run(&mut self, cmd: &Cmd) -> Result<Vec<crate::ros::conn::Row>, String> {
+                let w = cmd.words()?.to_vec();
+                let bad = w.iter().any(|x| x.starts_with("=place-before="));
+                self.0.push(w);
+                if bad { Err("no such item".into()) } else { Ok(vec![]) }
+            }
+        }
+        let mut s = Stale(vec![]);
+        Op::add("/ip/firewall/filter", vec![("chain", "forward".into()), ("place-before", "*7".into())]).run(&mut s).unwrap();
+        assert_eq!(s.0.last().unwrap(), &["/ip/firewall/filter/add", "=chain=forward"]);
     }
 
     #[test]

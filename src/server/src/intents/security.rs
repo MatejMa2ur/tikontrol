@@ -214,11 +214,17 @@ fn rebuild_in_place(r: &mut dyn Router, chain: &str, fields: &[&'static str], c:
     let mut undo = rebuild(r, FILTER, fields, c)?;
     let rows = print(r, FILTER, &[".id", "comment"], Some(("chain", chain)))?;
     let ours = |x: &crate::ros::conn::Row| x.get("comment").is_some_and(|v| v == c);
-    let next = rows.iter().rposition(ours).and_then(|i| rows[i + 1..].iter().find(|x| !ours(x))).and_then(|x| x.get(".id")).cloned();
-    if let Some(id) = next {
+    let next = rows.iter().rposition(ours).and_then(|i| rows[i + 1..].iter().find(|x| !ours(x)));
+    // a tikontrol rule next in line may be removed and re-added in the same batch, with a new .id by the
+    // time this undo runs (seen on CHR): anchor on its tag, looked up then. Other rules by their .id.
+    let anchor = next.and_then(|x| match x.get("comment") {
+        Some(t) if t.starts_with("tik:") => Some((crate::apply::PLACE_BEFORE_TAG, t.clone())),
+        _ => x.get(".id").map(|id| ("place-before", id.clone())),
+    });
+    if let Some((k, v)) = anchor {
         for op in &mut undo {
             let at = op.args.len().saturating_sub(1); // keep `comment` last, like `tagged`
-            op.args.insert(at, ("place-before", id.clone()));
+            op.args.insert(at, (k, v.clone()));
         }
     }
     Ok(undo)
@@ -492,6 +498,41 @@ mod tests {
         let mut f = Fake::default();
         f.answers.insert("/ip/firewall/filter/print".into(), Ok(vec![]));
         f
+    }
+
+    /// A filter table that honours `?k=v` queries, which `Fake` ignores.
+    struct Rules(Vec<crate::ros::conn::Row>);
+    impl Router for Rules {
+        fn run(&mut self, cmd: &crate::ros::cmd::Cmd) -> Result<Vec<crate::ros::conn::Row>, String> {
+            let w = cmd.words()?;
+            let q: Vec<(&str, &str)> = w.iter().filter_map(|x| x.strip_prefix('?')).filter_map(|x| x.split_once('=')).collect();
+            Ok(self.0.iter().filter(|r| q.iter().all(|(k, v)| r.get(*k).map(String::as_str) == Some(*v))).cloned().collect())
+        }
+    }
+
+    #[test]
+    fn unblocking_two_neighbours_in_one_batch_anchors_on_the_tag() {
+        let rule = |id: &str, c: &str, host: &str| row(&[(".id", id), ("chain", "forward"), ("comment", c), ("protocol", "tcp"), ("dst-port", "443"), ("tls-host", host), ("action", "reject"), ("reject-with", "tcp-reset")]);
+        let mut r = Rules(vec![
+            rule("*1", "tik:app:app.example", "app.example"),
+            rule("*2", "tik:app:app.example", "*.app.example"),
+            rule("*3", "tik:app:cdn.example", "cdn.example"),
+            rule("*4", "tik:app:cdn.example", "*.cdn.example"),
+            row(&[(".id", "*5"), ("chain", "forward"), ("comment", "defconf: fasttrack")]),
+            row(&[("name", "app.example"), ("type", "NXDOMAIN"), ("comment", "tik:app:app.example")]),
+            row(&[("name", "cdn.example"), ("type", "NXDOMAIN"), ("comment", "tik:app:cdn.example")]),
+        ]);
+        let p = go(json!({"kind": "unblock-domain", "domain": "app.example"}), &mut Fake::default());
+        assert!(p.is_err(), "nothing blocked on an empty router");
+        let app = compile(&json!({"kind": "unblock-domain", "domain": "app.example"}), &mut r).unwrap().unwrap();
+        let cdn = compile(&json!({"kind": "unblock-domain", "domain": "cdn.example"}), &mut r).unwrap().unwrap();
+        // the next rule after app.example's is cdn.example's, which the same batch removes: by tag, looked up later
+        assert!(app.undo_cli().iter().any(|c| c.contains(r#"place-before=[:pick [/ip/firewall/filter/find comment="tik:app:cdn.example"] 0]"#)), "{:?}", app.undo_cli());
+        // a rule that isn't ours stays where it is: its .id is fine
+        assert!(cdn.undo_cli().iter().any(|c| c.contains("place-before=*5")), "{:?}", cdn.undo_cli());
+        // the revert script still adds the rule, at the end, if the anchor is gone
+        let script = crate::apply::revert_script("x", &app).unwrap();
+        assert!(script.contains(r#"on-error={ :do { /ip/firewall/filter/add chain=forward protocol=tcp dst-port=443 tls-host=app.example action=reject reject-with=tcp-reset comment=tik:app:app.example } on-error={} }"#), "{script}");
     }
 
     #[test]
