@@ -221,14 +221,16 @@
   <Section title="tikontrol users" desc="Who can sign in to tikontrol. Viewers see everything but change nothing.">
     <table><thead><tr><th>Name</th><th>Role</th><th></th></tr></thead>
       <tbody>{#each admins as a}<tr class="nohover"><td><b>{a.name}</b>{#if a.you} <span class="muted small">(you)</span>{/if}</td><td><span class="pill">{a.role}</span></td>
-        <td class="r">{#if isAdmin && !a.you}<button class="btn small" onclick={() => removeAdmin(a.name)}>Remove</button>{/if}</td></tr>{/each}</tbody></table>
+        <td class="r">{#if isAdmin && !a.you}<button class="btn small" onclick={() => removeAdmin(a.name)}>Remove</button>{/if}</td></tr>
+        {:else}<tr class="nohover"><td colspan="3" class="muted">No tikontrol accounts yet: MikroTik accounts sign in without one.</td></tr>{/each}</tbody></table>
     {#if isAdmin}
       <div class="add"><input type="text" bind:value={nu.name} placeholder="Username" aria-label="New username" autocomplete="off" /><input type="password" bind:value={nu.password} placeholder="Password (12+ characters)" aria-label="New user's password" autocomplete="new-password" />
         <select bind:value={nu.role} aria-label="Role"><option value="viewer">viewer</option><option value="admin">admin</option></select>
         <button class="btn primary" disabled={!nu.name || nu.password.length < 12} onclick={addAdmin}><Icon name="plus" size={14} /> Add</button></div>
     {/if}
-    <div class="add"><input type="password" bind:value={pw.current} placeholder="Current password" aria-label="Current password" autocomplete="current-password" /><input type="password" bind:value={pw.next} placeholder="New password" aria-label="New password" autocomplete="new-password" />
-      <button class="btn" disabled={!pw.current || pw.next.length < 12} onclick={changePassword}>Change my password</button></div>
+    {#if session.me?.mikrotik}<p class="muted small">You signed in with a MikroTik account: change its password on the router (System → Users).</p>
+    {:else}<div class="add"><input type="password" bind:value={pw.current} placeholder="Current password" aria-label="Current password" autocomplete="current-password" /><input type="password" bind:value={pw.next} placeholder="New password" aria-label="New password" autocomplete="new-password" />
+      <button class="btn" disabled={!pw.current || pw.next.length < 12} onclick={changePassword}>Change my password</button></div>{/if}
     {#if msg}<div class="ok small" role="status">{msg}</div>{/if}
     {#if err}<div class="err small" role="alert">{err}</div>{/if}
   </Section>
