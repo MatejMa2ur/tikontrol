@@ -11,7 +11,7 @@ Clean-room: we copy the behaviour, never the assets.
 **Backing:** `ROS` = RouterOS API on the router · `CMR` = MikroTik CMR server · `tik` = our own logic/DB · `✗` = nothing can back it
 
 <!-- progress:start -->
-**Progress:** 107 ✅ · 109 🟨 · 8 🎨 · 2 ⬜ · 8 ➖ (234 items, 47% done)
+**Progress:** 113 ✅ · 109 🟨 · 3 🎨 · 1 ⬜ · 8 ➖ (234 items, 50% done)
 <!-- progress:end -->
 
 ---
@@ -58,7 +58,7 @@ Clean-room: we copy the behaviour, never the assets.
 | Client count (wired / wireless / guest) | ROS | 1 | 🟨 |
 | Gateway resources (CPU, RAM, temp, uptime) (CPU/RAM/uptime verified on CHR; temperature needs a sensor) | ROS `/system/resource`, health | 1 | 🟨 |
 | Top clients by traffic | ROS kid-control + tik | 1 | 🟨 |
-| Top applications | CMR apptraffic | 3 | ⬜ |
+| Top applications | CMR apptraffic | 3 | ✅ |
 | Traffic Identification card (by client now, by app once CMR is wired) | ROS reg-table bytes · CMR | 1 | 🟨 |
 | WiFi Technology card (clients by standard + band, activity, experience) | ROS reg-table | 1 | 🟨 |
 | Most active clients / access points strips | ROS + tik | 1 | 🟨 |
@@ -73,17 +73,17 @@ Clean-room: we copy the behaviour, never the assets.
 ## UniFi Devices / Topology
 | Feature | Backing | Phase | Status |
 |---|---|---|---|
-| Device list (name, model, IP, version, uptime, state; other devices' stats need the CMR server) (this router verified on CHR; others need a second MikroTik / CMR) | ROS this router + `/ip/neighbor` · CMR `/cmr/device` | 3 | 🟨 |
-| Device adoption (one-click; needs CMR server) | CMR pairing | 3 |🎨 |
+| Device list (name, model, IP, version, uptime, state; other devices' stats need the CMR server) (this router and CMR-managed devices verified on CHR) | ROS this router + `/ip/neighbor` · CMR `/cmr/device` | 3 | ✅ |
+| Device adoption (one-click; needs CMR server) | CMR pairing | 3 | ✅ |
 | Auto-detect make, model, CPU, memory and WiFi capabilities | ROS `/system/resource`, `/system/routerboard` | 1 | ✅ |
 | Device drawing: our own SVG of the port side per detected model (case colour, ports, USB, live link LEDs; generic box for unknown models) | tik (`hardware.ts` faceOf) | 2 | ✅ |
 | Device detail: CPU/RAM/temperature history (this router; temperature only where `/system/health` has a sensor) | tik history · CMR dashboard for others | 3 | 🟨 |
 | Device restart / locate (blink LED) | CMR reboot · ROS `/system/routerboard` LED | 3 | 🟨 |
 | Firmware update per device | CMR / ROS | 3 | 🟨 |
-| Scheduled / rolling fleet updates (needs CMR server) | CMR upgrade rules | 3 |🎨 |
+| Scheduled / rolling fleet updates (needs CMR server) | CMR upgrade rules | 3 | ✅ |
 | Topology map (auto layout, wired + wireless links) | CMR layout · ROS neighbor + bridge host | 2 | 🟨 |
 | Topology Spotlight (highlight/filter) | tik | 3 | 🟨 |
-| Device Supervisor (health anomalies; needs CMR server) | CMR state alerts | 4 |🎨 |
+| Device Supervisor (health anomalies; needs CMR server) | CMR state alerts | 4 | ✅ |
 | Blueprints / config drift inspector (diff of the reader's structured prints, not `/export`: over the API with only `read` it returns an empty `!done`, and exports risk secrets) | tik (snapshot diff) | 4 | ✅ |
 | Device SSH credentials management (public keys only; writer needs the `policy` policy) | ROS `/user/ssh-keys` | 3 | ✅ |
 | Device LED control / Etherlighting | ROS LED · Etherlighting ✗ (UI hw) | 4 | 🟨 |
@@ -145,7 +145,7 @@ Clean-room: we copy the behaviour, never the assets.
 ## Insights / Traffic
 | Feature | Backing | Phase | Status |
 |---|---|---|---|
-| Traffic by application / category | CMR apptraffic | 3 |🎨 |
+| Traffic by application / category | CMR apptraffic | 3 | ✅ |
 | Traffic by client over time | tik | 2 | 🟨 |
 | Top domains | ROS DNS cache + tik | 3 | ✅ |
 | Flow log (src, dst, port, bytes) | ROS traffic-flow (IPFIX) → tik collector | 3 | ✅ |
@@ -174,7 +174,7 @@ Clean-room: we copy the behaviour, never the assets.
 |---|---|---|---|
 | Create/edit SSID (name, password, security WPA2/WPA3) | ROS wireless/wifi · CMR wifi | 2 |🟨 |
 | Band selection (2.4 / 5 / 6 GHz) | ROS | 2 |🟨 |
-| Which APs broadcast it | CMR labels | 3 |🎨 |
+| Which APs broadcast it (label selection verified on CHR; broadcasting needs hardware AP) | CMR labels | 3 | 🟨 |
 | Network/VLAN per SSID | ROS bridge port PVID | 3 |🟨 |
 | Guest network (isolation, portal) | ROS + hotspot | 3 |🟨 |
 | Client isolation | ROS default-forwarding / wifi datapath | 2 |🟨 |
