@@ -7,3 +7,7 @@ Read-only checks first; test anything that writes on a spare router or CHR, neve
 ## Alarm Manager / Notifications
 
 - [ ] **Channels: email (SMTP, TLS/STARTTLS), push (ntfy), Telegram, webhook** 🟨: send a test through each real service (an SMTP provider on 465 and 587, ntfy.sh, a Telegram bot, a Home Assistant webhook)
+
+## Control plane / System
+
+- [ ] **Backups (scheduled, download, restore): list verified on CHR; tikontrol downloads its own `tik-*.rsc` exports (admin only, no secrets), full `.backup` files stay on the router** 🟨: download a tik-*.rsc as the reader with `/file/read` (RouterOS 7.13+); check which policy the reader needs

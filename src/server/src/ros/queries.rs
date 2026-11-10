@@ -130,6 +130,8 @@ const QUERIES: &[Q] = &[
     q("ovpn", "/interface/ovpn-server/server/print", &["name", "disabled", "port", "protocol"]),
     one("l2tp", "/interface/l2tp-server/server/print", &["enabled"]),
     q("backups", "/file/print", &["name", "type", "size", "last-modified"]).query(&[("type", "backup")]),
+    // tikontrol's text exports (tik-*.rsc); RouterOS lists .rsc files as type "script"
+    q("exports", "/file/print", &["name", "type", "size", "last-modified"]).query(&[("type", "script")]),
     q("addressLists", "/ip/firewall/address-list/print", &["list", "address", "dynamic", "comment"]),
     q("etherStats", "/interface/print", &["name", "rx-byte", "tx-byte", "rx-error", "tx-error", "rx-drop", "tx-drop"]).args(&[("stats", "")]).query(&[("type", "ether")]),
     one("ipv6", "/ipv6/settings/print", &["disable-ipv6"]),

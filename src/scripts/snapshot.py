@@ -87,6 +87,7 @@ Q = {
     "ovpn": "[/interface/ovpn-server/server/print as-value]",
     "l2tp": '({"enabled"=[/interface/l2tp-server/server/get enabled]})',
     "backups": "[/file/print as-value proplist=name,type,size,last-modified where type=backup]",
+    "exports": "[/file/print as-value proplist=name,type,size,last-modified where type=script]",
     "addressLists": "[/ip/firewall/address-list/print as-value proplist=list,address,dynamic,comment]",
     "etherStats": "[/interface/print stats as-value proplist=name,rx-byte,tx-byte,rx-error,tx-error,rx-drop,tx-drop where type=ether]",
     "etherMon": "[/interface/ethernet/monitor [find] once as-value]",

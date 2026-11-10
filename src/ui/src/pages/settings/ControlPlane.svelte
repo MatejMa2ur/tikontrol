@@ -9,7 +9,10 @@
   import { cmr, loadCmr } from '../../lib/cmr.svelte'
 
   const users: any[] = raw.users ?? []
-  const backups: any[] = raw.backups ?? []
+  // full backups plus tikontrol's own text exports (tik-*.rsc, listed by RouterOS as type "script")
+  const backups: any[] = [...(raw.backups ?? []), ...((raw.exports ?? []) as any[]).filter((f) => /(^|\/)tik-[\w-]+\.rsc$/.test(f.name ?? ''))]
+  // exports carry no passwords or keys, so they may be downloaded; .backup files stay on the router
+  const exportUrl = (name: string) => `/api/v1/tools/export?name=${encodeURIComponent(name)}${site ? `&site=${encodeURIComponent(site)}` : ''}`
   // SSH public keys (intents/users.rs): fingerprints only; tikontrol removes only keys it tagged
   const sshKeys: any[] = raw.sshKeys ?? []
   const tikKey = (k: any) => { const m = /^tik:ssh-key:[^:]+:(.+)$/.exec(k.comment ?? ''); return m ? { label: m[1] } : null }
@@ -239,13 +242,14 @@
   <p class="muted small">Public keys only (ed25519, ECDSA, or RSA of 3072+ bits). By default a user with a key can no longer use a password over SSH. Needs a writer with the <code>policy</code> policy.</p>
 </Section>
 
-<Section title="Backups" desc="A readable export without passwords and keys, saved on the router. Download it with WinBox or WebFig Files." ros="/file/print where type=backup">
+<Section title="Backups" desc="A readable export without passwords and keys, saved on the router; tikontrol can download it. Full backups hold passwords and keys, so they stay on the router (copy them with WinBox or WebFig Files)." ros="/file/print where type=backup">
   {#snippet actions()}<button class="btn primary" onclick={() => review('Back up now', [`/export file=tik-${today()}`], { kind: 'export-config', name: today() })}>Back up now</button>
     <button class="btn" title="Binary backup with passwords and keys, for restoring this same router" onclick={() => review('Full backup', [`/system/backup/save name=tik-${today()} dont-encrypt=yes`], { kind: 'save-backup', name: today() })}>Full backup</button>{/snippet}
   <table><thead><tr><th>File</th><th>Date</th><th class="r">Size</th><th></th></tr></thead>
     <tbody>{#each backups as b}<tr class="nohover"><td class="mono small">{b.name}</td><td>{b['last-modified']}</td><td class="r">{(b.size / 1024).toFixed(1)} KB</td>
       <td class="r">{#if b.name.endsWith('.backup')}<button class="btn small" onclick={() => review(`Restore ${b.name}`, [`/system/backup/load name=${b.name}`], { kind: 'restore-backup', name: b.name })}>Restore</button>
-        {:else}<button class="btn small" title="A script export is restored by hand on a reset router: tikontrol won't import a whole configuration over a running one" onclick={() => review(`Restore ${b.name}`, [`# on a router reset without defaults:`, `/import file-name=${b.name}`])}>How to restore</button>{/if}
+        {:else}{#if isBackend && isAdmin && /\.rsc$/.test(b.name)}<a class="btn small" href={exportUrl(b.name)} download>Download</a>{/if}
+          <button class="btn small" title="A script export is restored by hand on a reset router: tikontrol won't import a whole configuration over a running one" onclick={() => review(`Restore ${b.name}`, [`# on a router reset without defaults:`, `/import file-name=${b.name}`])}>How to restore</button>{/if}
         {#if ownFile(b.name)}<button class="btn small" onclick={() => review(`Delete ${b.name}`, [`/file/remove [find name="${b.name}"]`], { kind: 'remove-backup-file', name: b.name })}>Delete</button>{/if}</td></tr>{/each}</tbody></table>
   <div class="row muted small sched">Automatic: <button class="btn small" onclick={() => review('Weekly backups', ['/system/scheduler/add name=tik-backup interval=7d on-event="/export file=tik-auto"'], { kind: 'backup-schedule', enabled: true, interval: '7d' })}>Weekly backups</button></div>
 </Section>

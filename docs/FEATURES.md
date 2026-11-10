@@ -12,7 +12,7 @@ Clean-room: we copy the behaviour, never the assets.
 **Backing:** `ROS` = RouterOS API on the router · `CMR` = MikroTik CMR server · `tik` = our own logic/DB · `✗` = nothing can back it
 
 <!-- progress:start -->
-**Progress:** 113 ✅ · 109 🟨 · 3 🎨 · 1 ⬜ · 8 ➖ (234 items, 50% done) · 1 🔌 waiting for a hardware test ([list](HARDWARE_TESTS.md))
+**Progress:** 113 ✅ · 109 🟨 · 3 🎨 · 1 ⬜ · 8 ➖ (234 items, 50% done) · 2 🔌 waiting for a hardware test ([list](HARDWARE_TESTS.md))
 <!-- progress:end -->
 
 ---
@@ -278,7 +278,7 @@ Clean-room: we copy the behaviour, never the assets.
 | Admin users + roles | tik (own users) + ROS `/user` | 2 | ✅ |
 | SSO / cloud account | ✗ local auth only | – | ➖ |
 | Sign in with MikroTik account (role from router group, password only in session memory, changes run as that user) | tik + ROS login | 2 | 🟨 |
-| Backups (scheduled, download, restore) (list verified on CHR; no download from tikontrol yet) | ROS `/system/backup` + `/export` | 2 | 🟨 |
+| Backups (scheduled, download, restore): list verified on CHR; tikontrol downloads its own `tik-*.rsc` exports (admin only, no secrets), full `.backup` files stay on the router 🔌 download a tik-*.rsc as the reader with `/file/read` (RouterOS 7.13+); check which policy the reader needs | ROS `/system/backup` + `/export` | 2 | 🟨 |
 | Firmware/app updates (channel, auto-update window) | ROS / CMR | 2 | 🟨 |
 | Integrations / local API (+ API keys) | tik REST | 4 | ✅ |
 | Console (terminal in browser) | ROS (SSH/API terminal) | 3 | ✅ |

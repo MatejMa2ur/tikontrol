@@ -83,8 +83,11 @@ const DNS_KEYS: &[&str] = &["name", "type", "data", "ttl"];
 
 pub fn route(app: &Arc<App>, req: &Req, s: &Session) -> Option<Resp> {
     let tool = req.path.strip_prefix("/api/v1/tools/")?;
-    if !matches!(tool, "ping" | "traceroute" | "dns" | "console" | "wifi-scan") {
+    if !matches!(tool, "ping" | "traceroute" | "dns" | "console" | "wifi-scan" | "export") {
         return None;
+    }
+    if tool == "export" {
+        return Some(export(app, req, s));
     }
     if tool == "console" && req.method == "GET" {
         return Some(Resp::json(200, &json!(crate::ros::queries::console_commands())));
@@ -143,6 +146,70 @@ fn wifi_scan(app: &Arc<App>, req: &Req, s: &Session) -> Resp {
     let rows = crate::features::writer(app, s).and_then(|mut r| r.run(&cmd));
     match rows {
         Ok(rows) => Resp::json(200, &json!({ "tool": "wifi-scan", "command": cmd.to_cli(), "rows": pick(latest(rows), SCAN_KEYS), "note": "SSIDs and names come from other devices: shown as text only." })),
+        Err(e) => Resp::error(502, &e),
+    }
+}
+
+pub const EXPORT_CHUNK: usize = 32 * 1024;
+pub const EXPORT_MAX: usize = 4 * 1024 * 1024;
+
+/// Only tikontrol's own text exports: `[disk/]tik-<name>.rsc`. Full `.backup` files hold passwords
+/// and keys, so they never leave the router through tikontrol.
+pub fn export_name(n: &str) -> Result<&str, String> {
+    let (dir, file) = n.rsplit_once('/').map_or(("", n), |(d, f)| (d, f));
+    let dir_ok = dir.is_empty() || (dir.len() <= 32 && dir.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'-' || b == b'_'));
+    let stem = file.strip_prefix("tik-").and_then(|f| f.strip_suffix(".rsc"));
+    match stem {
+        Some(st) if dir_ok && !st.is_empty() && st.len() <= 40 && st.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'-' || b == b'_') => Ok(n),
+        _ => Err("only tikontrol's own exports (tik-*.rsc) can be downloaded".into()),
+    }
+}
+
+/// Reads a router file in chunks with `/file/read` (RouterOS 7.13+), capped at EXPORT_MAX.
+pub fn read_file(r: &mut dyn crate::ros::conn::Router, name: &str) -> Result<Vec<u8>, String> {
+    let mut out: Vec<u8> = Vec::new();
+    loop {
+        let cmd = Cmd::new("/file/read").arg("file", name).arg("offset", &out.len().to_string()).arg("chunk-size", &EXPORT_CHUNK.to_string());
+        let rows = r.run(&cmd)?;
+        let data = rows.iter().find_map(|row| row.get("data")).map(|d| d.as_bytes().to_vec()).unwrap_or_default();
+        let n = data.len();
+        out.extend_from_slice(&data);
+        if out.len() > EXPORT_MAX {
+            return Err("the file is larger than 4 MB".into());
+        }
+        if n < EXPORT_CHUNK {
+            return Ok(out);
+        }
+    }
+}
+
+/// GET /api/v1/tools/export?name=tik-auto.rsc: downloads one of tikontrol's configuration exports.
+/// Admin only, read over the reader connection. RouterOS leaves secrets out of `/export` unless
+/// `show-sensitive` is given, which tikontrol never does.
+fn export(app: &Arc<App>, req: &Req, s: &Session) -> Resp {
+    if req.method != "GET" {
+        return Resp::error(405, "use GET");
+    }
+    if s.role != crate::store::Role::Admin {
+        return Resp::error(403, "admin role required");
+    }
+    let name = req.param("name").unwrap_or_default();
+    let name = match export_name(&name) {
+        Ok(n) => n.to_string(),
+        Err(e) => return Resp::error(400, &e),
+    };
+    if app.demo.is_some() {
+        return Resp::error(409, "demo mode: downloads need a real router");
+    }
+    if let Err(wait) = limit(&s.csrf, Instant::now()) {
+        return Resp::error(429, "one download at a time: wait a moment").with("retry-after", wait.to_string());
+    }
+    match app.open(As::Reader).and_then(|mut r| read_file(&mut *r, &name)) {
+        Ok(b) if b.is_empty() => Resp::error(404, "the file is empty or the reader may not read files"),
+        Ok(b) => {
+            let file = name.rsplit('/').next().unwrap_or("tik-export.rsc").to_string();
+            Resp::new(200, "text/plain; charset=utf-8", b).with("content-disposition", format!("attachment; filename=\"{file}\"")).with("cache-control", "no-store".into()).with("x-content-type-options", "nosniff".into())
+        }
         Err(e) => Resp::error(502, &e),
     }
 }
@@ -267,6 +334,34 @@ mod tests {
         assert_eq!(call(r#"{"package":"other","interface":"wlan1","confirm":true}"#), 400);
         // read-only mode: refused before anything reaches the router
         assert_eq!(call(r#"{"package":"wireless","interface":"wlan1","confirm":true}"#), 403);
+    }
+
+    #[test]
+    fn exports_only_tik_rsc_files_and_read_in_chunks() {
+        assert!(export_name("tik-auto.rsc").is_ok());
+        assert!(export_name("usb1/tik-2026-11-10.rsc").is_ok());
+        for bad in ["tik-auto.backup", "user.rsc", "../tik-a.rsc", "a/b/tik-a.rsc", "tik-.rsc", "tik-a b.rsc", "tik-a\".rsc"] {
+            assert!(export_name(bad).is_err(), "{bad}");
+        }
+        struct Files(Vec<String>);
+        impl crate::ros::conn::Router for Files {
+            fn run(&mut self, cmd: &Cmd) -> Result<Vec<Row>, String> {
+                self.0.push(cmd.to_cli());
+                let off: usize = cmd.to_cli().split("offset=").nth(1).and_then(|s| s.split(' ').next()).and_then(|s| s.parse().ok()).unwrap();
+                let total = EXPORT_CHUNK + 10;
+                let n = total.saturating_sub(off).min(EXPORT_CHUNK);
+                Ok(vec![[("data".to_string(), "x".repeat(n))].into_iter().collect()])
+            }
+        }
+        let mut f = Files(vec![]);
+        assert_eq!(read_file(&mut f, "tik-auto.rsc").unwrap().len(), EXPORT_CHUNK + 10);
+        assert_eq!(f.0.len(), 2);
+        assert!(f.0[1].starts_with("/file/read file=tik-auto.rsc offset=32768"), "{}", f.0[1]);
+        // viewers and bad names are refused before anything reaches the router
+        let app = Arc::new(app_with_router("read,api,test", Mode::ReadOnly));
+        let (c, csrf) = admin_session(&app);
+        assert_eq!(handle(&app, with_session(req("GET", "/api/v1/tools/export?name=tik-auto.backup", ""), &c, &csrf)).status, 400);
+        assert_eq!(handle(&app, with_session(req("POST", "/api/v1/tools/export?name=tik-auto.rsc", ""), &c, &csrf)).status, 405);
     }
 
     #[test]
