@@ -338,7 +338,10 @@ def export(d=None):
 def diff(a, b):
     sa, sb = set(a), set(b)
     d = [f"- {l}" for l in a if l not in sb] + [f"+ {l}" for l in b if l not in sa]
-    return d or ["(same lines, different order)"]
+    if d:
+        return d
+    i = next((i for i, (x, y) in enumerate(zip(a, b)) if x != y), 0)
+    return ["(same lines, different order) from line %d:" % i] + [f"  was {x}" for x in a[i:i + 4]] + [f"  now {y}" for y in b[i:i + 4]]
 
 
 def same(a, b, ordered=True):
