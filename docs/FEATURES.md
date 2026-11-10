@@ -12,7 +12,7 @@ Clean-room: we copy the behaviour, never the assets.
 **Backing:** `ROS` = RouterOS API on the router · `CMR` = MikroTik CMR server · `tik` = our own logic/DB · `✗` = nothing can back it
 
 <!-- progress:start -->
-**Progress:** 121 ✅ · 104 🟨 · 0 🎨 · 1 ⬜ · 9 ➖ (235 items, 54% done) · 105 🔌 waiting for a hardware test ([list](HARDWARE_TESTS.md))
+**Progress:** 122 ✅ · 104 🟨 · 0 🎨 · 1 ⬜ · 9 ➖ (236 items, 54% done) · 105 🔌 waiting for a hardware test ([list](HARDWARE_TESTS.md))
 <!-- progress:end -->
 
 ---
@@ -76,6 +76,7 @@ Clean-room: we copy the behaviour, never the assets.
 |---|---|---|---|
 | Device list (name, model, IP, version, uptime, state; other devices' stats need the CMR server) (this router and CMR-managed devices verified on CHR) | ROS this router + `/ip/neighbor` · CMR `/cmr/device` | 3 | ✅ |
 | Device adoption (one-click; needs CMR server) | CMR pairing | 3 | ✅ |
+| Guided setup for a newly found MikroTik (update, API-SSL certificate, add as router; RouterOS 6/SwOS get a "RouterOS 7 needed" note) (API-SSL commands run on a fresh CHR, then added as a router; the firmware step needs a RouterBOARD) | tik + `policy::api_ssl_commands` · ROS `/ip/neighbor` | 3 | ✅ |
 | Auto-detect make, model, CPU, memory and WiFi capabilities | ROS `/system/resource`, `/system/routerboard` | 1 | ✅ |
 | Device drawing: our own SVG of the port side per detected model (case colour, ports, USB, live link LEDs; generic box for unknown models) | tik (`hardware.ts` faceOf) | 2 | ✅ |
 | Device detail: CPU/RAM/temperature history (this router; temperature only where `/system/health` has a sensor) 🔌 temperature history on a board with a sensor | tik history · CMR dashboard for others | 3 | 🟨 |
