@@ -129,6 +129,7 @@
         <Field label="PoE output" help="Now: {poeText(edit)}{pc['poe-priority'] != null ? ` · priority ${pc['poe-priority']}` : ''}{pc['poe-voltage'] ? ` · voltage ${pc['poe-voltage']}` : ''}">
           <select bind:value={f.poe} aria-label="PoE output mode"><option value="auto-on">Auto (powers detected PoE devices)</option><option value="off">Off</option><option value="forced-on">Forced on</option></select>
           <button class="btn" disabled={f.poe === pc['poe-out']} onclick={() => go(`PoE ${f.poe} on ${edit}`, `/interface/ethernet/poe/set [find name="${edit}"] poe-out=${f.poe}`, { kind: 'set-poe', interface: edit, mode: f.poe })}>Review</button>
+          {#if pc['poe-out'] !== 'off'}<button class="btn" title="Cut power for 5 seconds to restart the powered device" onclick={() => go(`Power-cycle ${edit}`, `/interface/ethernet/poe/power-cycle [find name="${edit}"] duration=5s`, { kind: 'poe-power-cycle', interface: edit, seconds: 5 })}>Power-cycle</button>{/if}
         </Field>
       {:else}<Field label="PoE output" na="{router.board ?? 'This router'} reports no PoE output on {edit}"><span></span></Field>{/if}
       {#if mirrorOk}

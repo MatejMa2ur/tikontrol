@@ -103,6 +103,8 @@ enum N {
         tagged: Vec<u16>,
     },
     SetPoe { interface: String, mode: String },
+    /// Cuts PoE power on a port for a few seconds to restart the device behind it.
+    PoePowerCycle { interface: String, #[serde(default = "poe_secs")] seconds: u8 },
 }
 
 fn yes() -> bool {
@@ -131,6 +133,7 @@ const KINDS: &[&str] = &[
     "set-bridge-port",
     "port-profile",
     "set-poe",
+    "poe-power-cycle",
 ];
 
 pub fn compile(v: &serde_json::Value, r: &mut dyn Router) -> Option<Result<Plan, String>> {
@@ -669,7 +672,31 @@ fn build(i: &N, r: &mut dyn Router) -> Result<Plan, String> {
             }
             p
         }
+        PoePowerCycle { interface, seconds } => {
+            let ifn = ifname(interface)?;
+            if !(1..=60).contains(seconds) {
+                return Err("power-cycle for 1-60 seconds".into());
+            }
+            let path = "/interface/ethernet/poe";
+            let rows = print(r, path, &["poe-out"], Some(("name", &ifn)))?;
+            let mode = rows.first().and_then(|x| x.get("poe-out")).cloned().ok_or("this port has no PoE output")?;
+            if mode == "off" {
+                return Err("PoE is off on this port: there is nothing to power-cycle".into());
+            }
+            Plan {
+                title: format!("Power-cycle the device on {ifn}"),
+                risk: Risk::Medium,
+                warnings: vec![format!("The device powered from {ifn} loses power for {seconds} s and restarts. Power comes back by itself; nothing to revert.")],
+                ops: vec![Op::on(path, "power-cycle", "name", &ifn, vec![("duration", format!("{seconds}s"))])],
+                undo: vec![],
+                revertible: false,
+            }
+        }
     })
+}
+
+fn poe_secs() -> u8 {
+    5
 }
 
 /// `vlan-ids` like "10,20-30" contains `v`.
@@ -843,6 +870,13 @@ mod tests {
         assert_eq!(p.cli(), [r#"/interface/ethernet/set [find name="ether4"] disabled=yes"#]);
         assert_eq!(p.undo_cli(), [r#"/interface/ethernet/set [find name="ether4"] disabled=no"#]);
         assert!(go(json!({"kind":"set-poe","interface":"ether2","mode":"auto-on"}), &mut f).unwrap_err().contains("no PoE"));
+        assert!(go(json!({"kind":"poe-power-cycle","interface":"ether2"}), &mut f).unwrap_err().contains("no PoE"));
+        let mut g = Fake::default();
+        g.answers.insert("/interface/ethernet/poe/print".into(), Ok(vec![row(&[("poe-out", "auto-on")])]));
+        let p = go(json!({"kind":"poe-power-cycle","interface":"ether2","seconds":3}), &mut g).unwrap();
+        assert_eq!(p.cli(), [r#"/interface/ethernet/poe/power-cycle [find name="ether2"] duration=3s"#]);
+        assert!(!p.revertible);
+        assert!(go(json!({"kind":"poe-power-cycle","interface":"ether2","seconds":0}), &mut g).is_err());
         f.answers.insert("/ip/dhcp-server/network/print".into(), Ok(vec![row(&[("gateway", "10.0.30.1"), ("dns-server", "10.0.30.1"), ("dhcp-option", "")])]));
         let p = go(json!({"kind":"set-dhcp-network","address":"10.0.30.0/24","dns":["9.9.9.9"]}), &mut f).unwrap();
         assert_eq!(p.undo_cli(), [r#"/ip/dhcp-server/network/set [find address="10.0.30.0/24"] dns-server=10.0.30.1"#]);

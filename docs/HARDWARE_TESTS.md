@@ -7,6 +7,7 @@ Read-only checks first; test anything that writes on a spare router or CHR, neve
 ## Pages (navigation)
 
 - [ ] **Topology** 🟨: a real downstream MikroTik switch and AP heard over MNDP/LLDP
+- [ ] **Settings → Networks (every control sends an intent: DHCP range/lease, options, mDNS, IGMP, VLAN filtering, remove)** 🟨: toggle IGMP and VLAN filtering on a CHR and let the 5-minute revert undo a lockout
 - [ ] **Settings → Routing (add and remove port forwards, routes, DNS records)** 🟨: add, remove and revert each on a CHR; hand-made rows must have no Remove
 
 ## Dashboard
@@ -28,7 +29,7 @@ Read-only checks first; test anything that writes on a spare router or CHR, neve
 
 ## Ports
 
-- [ ] **PoE status / power cycle (status and auto/off/forced per port; power-cycle not yet)** 🟨: a PoE-out board (hEX PoE, CRS…P): print/monitor field names, set-poe and its revert; a board without PoE only logs a `poe` error
+- [ ] **PoE status / power cycle (status, auto/off/forced per port, 5 s power-cycle)** 🟨: power-cycle a powered device too; a PoE-out board (hEX PoE, CRS…P): print/monitor field names, set-poe and its revert; a board without PoE only logs a `poe` error
 
 ## Alarm Manager / Notifications
 
@@ -39,6 +40,10 @@ Read-only checks first; test anything that writes on a spare router or CHR, neve
 - [ ] **Guest network (isolation, portal, remove)** 🟨: create and remove a guest SSID on both Wi-Fi packages; guests isolated
 - [ ] **WiFi schedule (on/off by time, remove)** 🟨: the radio turns off and on at the set times
 - [ ] **MAC filter (allow/deny per MAC, remove)** 🟨: add and remove a rule on a `wireless` board and a `wifi` board
+
+## Networks
+
+- [ ] **IPv6 (prefix delegation, SLAAC, DHCPv6 server per network)** 🟨: a real ISP prefix: check `address-pool` with a delegated pool on 7.18+, a client getting an address with the RA managed flag, and remove + revert
 
 ## Internet (WAN)
 

@@ -12,7 +12,7 @@ Clean-room: we copy the behaviour, never the assets.
 **Backing:** `ROS` = RouterOS API on the router · `CMR` = MikroTik CMR server · `tik` = our own logic/DB · `✗` = nothing can back it
 
 <!-- progress:start -->
-**Progress:** 114 ✅ · 108 🟨 · 3 🎨 · 1 ⬜ · 8 ➖ (234 items, 50% done) · 19 🔌 waiting for a hardware test ([list](HARDWARE_TESTS.md))
+**Progress:** 114 ✅ · 108 🟨 · 3 🎨 · 1 ⬜ · 8 ➖ (234 items, 50% done) · 21 🔌 waiting for a hardware test ([list](HARDWARE_TESTS.md))
 <!-- progress:end -->
 
 ---
@@ -34,7 +34,7 @@ Clean-room: we copy the behaviour, never the assets.
 | P11 | System Log (events, admin activity, security, updates) | Events | 1 | ✅ |
 | P12 | Hotspot Manager | Guest portal | 4 |🎨 |
 | P13 | Settings → WiFi | Settings · WiFi | 2 |🟨 |
-| P14 | Settings → Networks | Settings · Networks | 3 |🟨 |
+| P14 | Settings → Networks (every control sends an intent: DHCP range/lease, options, mDNS, IGMP, VLAN filtering, remove) 🔌 toggle IGMP and VLAN filtering on a CHR and let the 5-minute revert undo a lockout | Settings · Networks | 3 | 🟨 |
 | P15 | Settings → Internet | Settings · Internet | 3 |🟨 |
 | P16 | Settings → VPN | Settings · VPN | 2 | 🟨 |
 | P17 | Settings → Security / CyberSecure | Settings · Security | 3 |🎨 |
@@ -120,7 +120,7 @@ Clean-room: we copy the behaviour, never the assets.
 | Port grid with link state, speed, duplex (link state verified on CHR; speed/duplex need a physical port (virtio reports none)) | ROS `/interface/ethernet` monitor | 2 | 🟨 |
 | Which client is on which port | ROS bridge host | 2 | 🟨 |
 | Per-port traffic / errors | ROS | 2 | ✅ |
-| PoE status / power cycle (status and auto/off/forced per port; power-cycle not yet) 🔌 a PoE-out board (hEX PoE, CRS…P): print/monitor field names, set-poe and its revert; a board without PoE only logs a `poe` error | ROS `/interface/ethernet/poe` (hw dependent) | 3 | 🟨 |
+| PoE status / power cycle (status, auto/off/forced per port, 5 s power-cycle) 🔌 power-cycle a powered device too; a PoE-out board (hEX PoE, CRS…P): print/monitor field names, set-poe and its revert; a board without PoE only logs a `poe` error | ROS `/interface/ethernet/poe` (hw dependent) | 3 | 🟨 |
 | Port profile (VLAN access/trunk, native VLAN) | ROS bridge VLAN · CMR vlan | 3 | ✅ |
 | Port disable / enable | ROS | 2 | ✅ |
 | Port mirroring | ROS switch mirror | 4 | 🟨 |
@@ -197,7 +197,7 @@ Clean-room: we copy the behaviour, never the assets.
 | DHCP range, lease time, DNS, gateway | ROS dhcp-server | 3 | ✅ |
 | DHCP options (custom) | ROS dhcp option | 4 | ✅ |
 | Network isolation | ROS firewall | 3 | ✅ |
-| IPv6 (prefix delegation, SLAAC; DHCPv6 server not yet) | ROS ipv6 | 4 |🟨 |
+| IPv6 (prefix delegation, SLAAC, DHCPv6 server per network) 🔌 a real ISP prefix: check `address-pool` with a delegated pool on 7.18+, a client getting an address with the RA managed flag, and remove + revert | ROS ipv6 | 4 | 🟨 |
 | IGMP snooping / multicast | ROS bridge igmp-snooping | 4 | ✅ |
 | mDNS reflector across networks | ROS `/ip/dns mdns-repeat-ifaces` | 3 | ✅ |
 | Content filtering per network (DHCP DNS: family-safe resolver or router ad list; bypassable) | ROS DNS / adlist per network (limited) | 4 |🟨 |
