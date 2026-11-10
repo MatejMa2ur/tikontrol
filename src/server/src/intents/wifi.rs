@@ -637,6 +637,10 @@ fn build(w: W, r: &mut dyn Router) -> Result<Plan, String> {
             if on == off {
                 return Err("on and off times must differ".into());
             }
+            // the jobs would fail every night without a word: the interface must exist in this package
+            if r.run(&Cmd::new(&format!("{}/print", pkg.path())).proplist(&["name"]).query("name", &i)).map_or(true, |rows| rows.is_empty()) {
+                return Err(format!("this router has no Wi-Fi interface {i} ({})", pkg.path()));
+            }
             let c = format!("tik:wifisched:{i}");
             let old = r.run(&Cmd::new(&format!("{SCHED}/print")).proplist(&SCHED_KEYS).query("comment", &c))?;
             let ev = |verb: &str| format!("{}/{verb} [find name=\"{i}\"]", pkg.path());
@@ -1006,7 +1010,11 @@ mod tests {
         f.answers.insert("/interface/wireless/access-list/print".into(), Ok(vec![row(&[(".id", "*1")])]));
         let p = go(json!({"kind": "wifi-access-list", "mac": "aa:bb:cc:dd:ee:01", "allow": false}), &mut f).unwrap();
         assert!(p.cli()[1].contains("authentication=no") && p.cli()[1].ends_with("place-before=*1"));
-        let p = go(json!({"kind": "wifi-schedule", "interface": "wlan1", "on": "7:00", "off": "23:30"}), &mut Fake::default()).unwrap();
+        // no such interface (a CHR has none): refused, the jobs would fail every night
+        assert!(go(json!({"kind": "wifi-schedule", "interface": "wlan1", "on": "7:00", "off": "23:30"}), &mut Fake::default()).unwrap_err().contains("no Wi-Fi interface wlan1"));
+        let mut f = Fake::default();
+        f.answers.insert("/interface/wireless/print".into(), Ok(vec![row(&[("name", "wlan1")])]));
+        let p = go(json!({"kind": "wifi-schedule", "interface": "wlan1", "on": "7:00", "off": "23:30"}), &mut f).unwrap();
         assert_eq!(p.cli()[1], r#"/system/scheduler/add name=tik-wifi-off-wlan1 start-time=23:30:00 interval=1d policy=read,write,test on-event="/interface/wireless/disable [find name=\"wlan1\"]" comment=tik:wifisched:wlan1"#);
         assert_eq!(p.undo_cli(), [r#"/system/scheduler/remove [find comment="tik:wifisched:wlan1"]"#]);
         assert!(go(json!({"kind": "remove-wifi-schedule", "interface": "wlan1"}), &mut Fake::default()).is_err());
