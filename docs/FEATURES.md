@@ -12,7 +12,7 @@ Clean-room: we copy the behaviour, never the assets.
 **Backing:** `ROS` = RouterOS API on the router · `CMR` = MikroTik CMR server · `tik` = our own logic/DB · `✗` = nothing can back it
 
 <!-- progress:start -->
-**Progress:** 115 ✅ · 110 🟨 · 0 🎨 · 1 ⬜ · 8 ➖ (234 items, 51% done) · 34 🔌 waiting for a hardware test ([list](HARDWARE_TESTS.md))
+**Progress:** 117 ✅ · 108 🟨 · 0 🎨 · 1 ⬜ · 8 ➖ (234 items, 52% done) · 34 🔌 waiting for a hardware test ([list](HARDWARE_TESTS.md))
 <!-- progress:end -->
 
 ---
@@ -100,7 +100,7 @@ Clean-room: we copy the behaviour, never the assets.
 | Live per-client throughput (wired via kid-control device counters) 🔌 compare a wired client's rate with `/interface/monitor-traffic` on its port | ROS kid-control / reg-table bytes | 1 | 🟨 |
 | Per-client traffic history (hourly bytes, wired and Wi-Fi) 🔌 a day of history on a real router with wired and Wi-Fi clients | tik SQLite | 2 | 🟨 |
 | Per-client apps / domains (flow destinations per client, named from the DNS cache; the cache itself has no client field) | tik flows + DNS cache (CMR is per-device) | 3 | 🟨 |
-| Rename / alias, custom icon, notes | tik | 1 | 🟨 |
+| Rename / alias, custom icon, notes (stored on the server, checked end to end in a browser: `src/scripts/ui-e2e.mjs`) | tik | 1 | ✅ |
 | Fixed IP (reservation) | ROS lease make-static | 2 | ✅ |
 | Local DNS record for client | ROS `/ip/dns/static` | 2 | ✅ |
 | Block / unblock | ROS address-list + filter | 2 | ✅ |
@@ -140,7 +140,7 @@ Clean-room: we copy the behaviour, never the assets.
 | WiFi connectivity success (association / auth / DHCP / DNS) | tik from log + leases | 2 | 🟨 |
 | Radio link quality (CCQ buckets, channel, power, noise; needs hardware (Wi-Fi AP)) | ROS wireless monitor | 2 | 🟨 |
 | Roaming journeys (Connectivity view) | tik · CMR wifi-logs | 3 | 🟨 |
-| Coverage map / floorplan (Design Center): saved plan, drag/arrow-key AP pins, server-validated (PNG/JPEG/WebP, 200 KB, 32 APs); not yet tried in a browser | tik (manual floorplan, no RF model) | 4 |🟨 |
+| Coverage map / floorplan (Design Center): saved plan, drag/arrow-key AP pins, server-validated (PNG/JPEG/WebP, 200 KB, 32 APs); checked end to end in a browser (`src/scripts/ui-e2e.mjs`) | tik (manual floorplan, no RF model) | 4 | ✅ |
 | WiFiman (client-side speed/coverage app) | ✗ | – | ➖ |
 
 ## Insights / Traffic
