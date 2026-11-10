@@ -12,7 +12,7 @@ Clean-room: we copy the behaviour, never the assets.
 **Backing:** `ROS` = RouterOS API on the router · `CMR` = MikroTik CMR server · `tik` = our own logic/DB · `✗` = nothing can back it
 
 <!-- progress:start -->
-**Progress:** 120 ✅ · 105 🟨 · 0 🎨 · 1 ⬜ · 9 ➖ (235 items, 53% done) · 104 🔌 waiting for a hardware test ([list](HARDWARE_TESTS.md))
+**Progress:** 120 ✅ · 105 🟨 · 0 🎨 · 1 ⬜ · 9 ➖ (235 items, 53% done) · 105 🔌 waiting for a hardware test ([list](HARDWARE_TESTS.md))
 <!-- progress:end -->
 
 ---
@@ -291,7 +291,7 @@ Clean-room: we copy the behaviour, never the assets.
 | Debug tools: ping, traceroute, DNS cache lookup (verified on CHR) | ROS `/ping`, `/tool/traceroute`, DNS cache | 3 | ✅ |
 | Packet capture: not offered, because it needs the `sniff` policy, which tikontrol's users must not have (least privilege); use WinBox Tools → Packet Sniffer | ✗ by design | – | ➖ |
 | Safe apply (auto-revert) | tik + ROS scheduler | 3 | ✅ |
-| "Show in RouterOS" for every object | tik | 2 | 🟨 |
+| "Show in RouterOS" for every object (every router-backed section; read-only commands with secret fields left out, guarded by `tests/ros.test.ts`) 🔌 paste the `proplist=`, `count-only` and `where` forms on a router, incl. dotted wifi fields | tik | 2 | 🟨 |
 
 ## Platform
 | Feature | Backing | Phase | Status |
