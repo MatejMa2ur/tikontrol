@@ -177,7 +177,7 @@ Clean-room: we copy the behaviour, never the assets.
 | Band selection (2.4 / 5 / 6 GHz) 🔌 a real multi-band AP | ROS | 2 | 🟨 |
 | Which APs broadcast it (label selection verified on CHR; broadcasting needs hardware AP) 🔌 real APs through CMR labels broadcast the SSID | CMR labels | 3 | 🟨 |
 | Network/VLAN per SSID 🔌 a Wi-Fi client gets an address from the SSID's VLAN | ROS bridge port PVID | 3 | 🟨 |
-| Guest network (isolation, portal, remove) 🔌 create and remove a guest SSID on both Wi-Fi packages; guests isolated | ROS + hotspot | 3 | 🟨 |
+| Guest network (isolation, portal, remove; guest SSID + portal in one change) 🔌 a phone joins the new guest SSID and sees the portal; on the wifi package check the virtual AP isn't bridged; create and remove a guest SSID on both Wi-Fi packages; guests isolated | ROS + hotspot | 3 | 🟨 |
 | Client isolation 🔌 two clients on one SSID can't reach each other | ROS default-forwarding / wifi datapath | 2 | 🟨 |
 | Hide SSID 🔌 the SSID disappears from a phone's list; joining by name still works | ROS | 2 | 🟨 |
 | WiFi schedule (on/off by time, remove) 🔌 the radio turns off and on at the set times | ROS scheduler | 3 | 🟨 |
@@ -236,7 +236,7 @@ Clean-room: we copy the behaviour, never the assets.
 | Simple app blocking (saved state, several apps in one batch, unblock) 🔌 block and revert the 4 YouTube domains as one change; check apps really stop | ROS tls-host + DNS · CMR app classes | 3 | 🟨 |
 | Traffic rules (block/limit by client, app, time) | ROS filter + queues + scheduler | 3 | ✅ |
 | Ad blocking | ROS `/ip/dns/adlist` | 2 | ✅ |
-| Content filtering (family, adult): add, enable/disable and remove ad-lists by URL; no built-in presets 🔌 `set-adlist` on an https list; a blocked name stops resolving | ROS adlist / DNS | 2 | 🟨 |
+| Content filtering (family, adult): presets (adult, gambling, family: third-party lists the router fetches, labelled), plus add, enable/disable and remove ad-lists by URL 🔌 add each preset: `name-count` > 0 and memory OK on a small router; `set-adlist` on an https list; a blocked name stops resolving | ROS adlist / DNS | 2 | 🟨 |
 | Region (country) blocking | ROS address-lists + tik feed | 4 | ✅ |
 | IP groups / port groups | ROS address-lists | 3 | ✅ |
 | Device isolation (per client) | ROS bridge filter | 4 | ✅ |

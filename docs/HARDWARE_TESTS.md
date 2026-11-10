@@ -99,7 +99,7 @@ Cross-cutting questions (dotted proplists, Safe apply under device mode or after
 - [ ] **Band selection (2.4 / 5 / 6 GHz)** 🟨: a real multi-band AP
 - [ ] **Which APs broadcast it (label selection verified on CHR; broadcasting needs hardware AP)** 🟨: real APs through CMR labels broadcast the SSID
 - [ ] **Network/VLAN per SSID** 🟨: a Wi-Fi client gets an address from the SSID's VLAN
-- [ ] **Guest network (isolation, portal, remove)** 🟨: create and remove a guest SSID on both Wi-Fi packages; guests isolated
+- [ ] **Guest network (isolation, portal, remove; guest SSID + portal in one change)** 🟨: a phone joins the new guest SSID and sees the portal; on the wifi package check the virtual AP isn't bridged; create and remove a guest SSID on both Wi-Fi packages; guests isolated
 - [ ] **Client isolation** 🟨: two clients on one SSID can't reach each other
 - [ ] **Hide SSID** 🟨: the SSID disappears from a phone's list; joining by name still works
 - [ ] **WiFi schedule (on/off by time, remove)** 🟨: the radio turns off and on at the set times
@@ -133,7 +133,7 @@ Cross-cutting questions (dotted proplists, Safe apply under device mode or after
 ## Security / CyberSecure
 
 - [ ] **Simple app blocking (saved state, several apps in one batch, unblock)** 🟨: block and revert the 4 YouTube domains as one change; check apps really stop
-- [ ] **Content filtering (family, adult): add, enable/disable and remove ad-lists by URL; no built-in presets** 🟨: `set-adlist` on an https list; a blocked name stops resolving
+- [ ] **Content filtering (family, adult): presets (adult, gambling, family: third-party lists the router fetches, labelled), plus add, enable/disable and remove ad-lists by URL** 🟨: add each preset: `name-count` > 0 and memory OK on a small router; `set-adlist` on an https list; a blocked name stops resolving
 - [ ] **Security audit (insecure services, unrestricted management services, open DNS resolver, default admin user, UPnP, outdated RouterOS)** 🟨: check that an unrestricted service's empty `address` comes back over the API and the finding clears once restricted
 
 ## Routing
