@@ -133,8 +133,15 @@ const QUERIES: &[Q] = &[
     // optional: boards without sensors return nothing (or an error) for this key
     q("health", "/system/health/print", &["name", "value", "type"]),
     one("trafficFlow", "/ip/traffic-flow/print", &["enabled"]),
-    q("ovpn", "/interface/ovpn-server/server/print", &["name", "disabled", "port", "protocol"]),
-    one("l2tp", "/interface/l2tp-server/server/print", &["enabled"]),
+    // 7.17+ lists several servers with `disabled`; older versions have one with `enabled`
+    q("ovpn", "/interface/ovpn-server/server/print", &["name", "disabled", "enabled", "port", "protocol", "certificate"]),
+    // never ipsec-secret
+    one("l2tp", "/interface/l2tp-server/server/print", &["enabled", "use-ipsec"]),
+    // connected L2TP/OpenVPN users; names and caller-id come from remote devices: plain text only
+    q("pppActive", "/ppp/active/print", &["name", "service", "caller-id", "address", "uptime", "encoding"]),
+    // never password
+    q("pppSecrets", "/ppp/secret/print", &["name", "service", "profile", "disabled", "comment"]),
+    q("pppProfiles", "/ppp/profile/print", &["name"]),
     q("backups", "/file/print", &["name", "type", "size", "last-modified"]).query(&[("type", "backup")]),
     // tikontrol's text exports (tik-*.rsc); RouterOS lists .rsc files as type "script"
     q("exports", "/file/print", &["name", "type", "size", "last-modified"]).query(&[("type", "script")]),
@@ -419,6 +426,11 @@ pub mod tests {
         let cloud = f.seen.iter().find(|w| w[0] == "/ip/cloud/print").unwrap();
         assert_eq!(cloud[1], "=.proplist=public-address,dns-name,back-to-home-vpn,ddns-enabled");
         assert!(!f.seen.iter().flatten().any(|w| w.contains("private-key") || w.contains("on-event") || w.contains("passphrase")));
+        // PPP passwords and the L2TP IPsec secret are never asked for
+        let props = |p: &str| f.seen.iter().find(|w| w[0] == p).unwrap()[1].clone();
+        assert_eq!(props("/ppp/secret/print"), "=.proplist=name,service,profile,disabled,comment");
+        assert_eq!(props("/interface/l2tp-server/server/print"), "=.proplist=enabled,use-ipsec");
+        assert_eq!(props("/ppp/active/print"), "=.proplist=name,service,caller-id,address,uptime,encoding");
     }
 
     #[test]

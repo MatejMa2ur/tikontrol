@@ -1,10 +1,12 @@
 //! VPN (docs/FEATURES.md "VPN"): WireGuard server, peers, client to a provider (with policy routing),
-//! site-to-site, Back To Home, and L2TP/OpenVPN server on/off. Adding a WireGuard peer is the core
-//! `wireguard-peer` intent in apply.rs; this area adds removing and pausing peers.
+//! site-to-site, Back To Home, L2TP/IPsec and OpenVPN servers, and VPN users (`/ppp/secret`). Adding a
+//! WireGuard peer is the core `wireguard-peer` intent in apply.rs; this area adds removing and pausing peers.
 //!
 //! Everything created is tagged `comment=tik:<kind>:<name>` and the inverse removes exactly that, in
-//! reverse order. A provider's private key may be sent once to create a client interface: it is
-//! masked in every CLI text and never part of an inverse.
+//! reverse order. Secrets (a provider's private key, the L2TP IPsec secret, a VPN user's password) are
+//! sent to the router once: they are masked in every CLI text (`apply::SECRET_KEYS`), never echoed in
+//! errors, and never part of an inverse. tikontrol never reads them back, so an inverse that would need
+//! an old secret restores only the non-secret fields, and removing a VPN user can't be reverted.
 
 use crate::apply::{cidr, dns_name, ipv4, plan, ros_name, wg_key, yn, Op, Plan, Risk};
 use crate::ros::cmd::Cmd;
@@ -28,12 +30,25 @@ enum V {
     WireguardPeerEnabled { public_key: String, enabled: bool },
     BackToHome { enabled: bool },
     /// `server`: "l2tp" or "ovpn"; `name` picks one OpenVPN server on RouterOS versions that have several.
+    /// For L2TP, enabling also sets `use-ipsec=required`; `ipsec_secret` (the pre-shared key) is needed
+    /// unless IPsec is already required, and is only sent when enabling.
     VpnServer {
         server: String,
         enabled: bool,
         #[serde(default)]
         name: String,
+        #[serde(default)]
+        ipsec_secret: String,
     },
+    /// A `/ppp/secret` for L2TP or OpenVPN logins, tagged `tik:vpn-user:<name>`.
+    VpnUser {
+        name: String,
+        password: String,
+        service: String,
+        #[serde(default = "default_profile")]
+        profile: String,
+    },
+    RemoveVpnUser { name: String },
     /// Tunnel to a provider; `sources` (LAN subnets or device /32s) are routed through it.
     WireguardClient {
         name: String,
@@ -63,7 +78,11 @@ fn yes() -> bool {
     true
 }
 
-const KINDS: &[&str] = &["wireguard-server", "remove-wireguard-peer", "wireguard-peer-enabled", "back-to-home", "vpn-server", "wireguard-client", "site-to-site"];
+fn default_profile() -> String {
+    "default-encryption".into()
+}
+
+const KINDS: &[&str] = &["wireguard-server", "remove-wireguard-peer", "wireguard-peer-enabled", "back-to-home", "vpn-server", "wireguard-client", "site-to-site", "vpn-user", "remove-vpn-user"];
 
 pub fn compile(v: &Value, r: &mut dyn Router) -> Option<Result<Plan, String>> {
     let kind = v.get("kind")?.as_str()?;
@@ -122,6 +141,22 @@ fn accept_udp(r: &mut dyn Router, port: &str, c: &str) -> Result<Op, String> {
         args.push(("place-before", id.clone()));
     }
     Ok(Op::add(FILTER, args))
+}
+
+const SECRETS: &str = "/ppp/secret";
+const NO_CERT: &str = "the OpenVPN server has no certificate, so it can't accept connections: create and sign a CA and a server certificate in RouterOS (/certificate) and pick it on the server first";
+
+/// VPN user names: 1-32 of [A-Za-z0-9._-], starting with a letter or digit.
+fn vpn_user(s: &str) -> Result<String, String> {
+    let ok = (1..=32).contains(&s.len()) && s.bytes().all(|b| b.is_ascii_alphanumeric() || b"._-".contains(&b)) && s.as_bytes()[0].is_ascii_alphanumeric();
+    ok.then(|| s.to_string()).ok_or_else(|| "invalid VPN user name (1-32 letters, digits, . _ -, starting with a letter or digit)".into())
+}
+
+/// Passwords and pre-shared secrets: 12-64 printable ASCII characters, no spaces. The value is never
+/// part of the error, so it can't reach a log or the browser.
+fn vpn_secret(s: &str, what: &str) -> Result<String, String> {
+    let ok = (12..=64).contains(&s.len()) && s.bytes().all(|b| (0x21..0x7f).contains(&b));
+    ok.then(|| s.to_string()).ok_or_else(|| format!("{what} must be 12-64 printable ASCII characters without spaces"))
 }
 
 fn is_true(v: &str) -> bool {
@@ -189,35 +224,67 @@ fn build(x: V, r: &mut dyn Router) -> Result<Plan, String> {
             }
             Ok(p)
         }
-        V::VpnServer { server, enabled, name } => match server.as_str() {
+        V::VpnServer { server, enabled, name, ipsec_secret } => match server.as_str() {
             "l2tp" => {
                 let path = "/interface/l2tp-server/server";
+                // never ipsec-secret: tikontrol doesn't read secrets back
                 let rows = r.run(&Cmd::new("/interface/l2tp-server/server/print").proplist(&["enabled", "use-ipsec"]))?;
                 let cur = rows.first().ok_or("no L2TP server on this router")?;
                 let was = cur.get("enabled").is_some_and(|v| is_true(v));
-                let set = |on: bool| Op { path, verb: "set", find: None, args: vec![("enabled", yn(on))] };
-                let mut p = plan(format!("{} the L2TP/IPsec server", if enabled { "Enable" } else { "Disable" }), Risk::Medium, vec![set(enabled)], vec![set(was)]);
+                let was_ipsec = cur.get("use-ipsec").filter(|v| !v.is_empty()).cloned();
+                let secret = if ipsec_secret.is_empty() { None } else { Some(vpn_secret(&ipsec_secret, "the IPsec secret")?) };
+                let required = was_ipsec.as_deref() == Some("required");
+                if !enabled && secret.is_some() {
+                    return Err("the IPsec secret is only sent when enabling L2TP".into());
+                }
+                if enabled && secret.is_none() && !required {
+                    return Err("L2TP needs an IPsec pre-shared secret (12-64 characters): without IPsec it is unencrypted".into());
+                }
+                let mut args = vec![("enabled", yn(enabled))];
+                let mut back = vec![("enabled", yn(was))];
                 if enabled {
-                    p.warnings.push("Remote devices can try to log in with PPP secrets: allow UDP 500, 4500 and 1701 on input only if you need it.".into());
-                    if cur.get("use-ipsec").is_none_or(|v| v != "required") {
-                        p.warnings.push("use-ipsec is not \"required\": L2TP without IPsec is unencrypted. Set use-ipsec=required and an IPsec secret in RouterOS (tikontrol doesn't handle that secret).".into());
+                    args.push(("use-ipsec", "required".into()));
+                    if let Some(old) = was_ipsec {
+                        back.push(("use-ipsec", old));
+                    }
+                }
+                let has_secret = secret.is_some();
+                if let Some(s) = secret {
+                    args.push(("ipsec-secret", s));
+                }
+                let set = |args| Op { path, verb: "set", find: None, args };
+                let mut p = plan(format!("{} the L2TP/IPsec server", if enabled { "Enable" } else { "Disable" }), Risk::Medium, vec![set(args)], vec![set(back)]);
+                if enabled {
+                    p.warnings.push("Remote devices can try to log in with VPN users: allow UDP 500, 4500 and 1701 on input only if you need it.".into());
+                    if has_secret {
+                        p.warnings.push("The IPsec secret is sent to the router once; tikontrol doesn't store it and can't show it again. Give it to each device yourself.".into());
+                        if required {
+                            p.warnings.push("This replaces the current IPsec secret. An automatic revert can't bring the old one back (tikontrol never reads secrets): devices must use the new one.".into());
+                        }
                     }
                 }
                 Ok(p)
             }
             "ovpn" => {
                 let path = "/interface/ovpn-server/server";
-                let rows = r.run(&Cmd::new("/interface/ovpn-server/server/print").proplist(&["name", "disabled", "enabled"]))?;
+                let rows = r.run(&Cmd::new("/interface/ovpn-server/server/print").proplist(&["name", "disabled", "enabled", "certificate"]))?;
                 let named = rows.iter().any(|x| x.contains_key("name"));
+                let no_cert = |x: &Row| x.get("certificate").is_some_and(|c| c.is_empty() || c == "none");
                 let (ops, undo, label) = if named {
                     // 7.17+: several servers, each with disabled=
                     let n = ifname(&name).map_err(|_| "pick the OpenVPN server by name")?;
                     let cur = rows.iter().find(|x| x.get("name") == Some(&n)).ok_or("no OpenVPN server with that name")?;
+                    if enabled && no_cert(cur) {
+                        return Err(NO_CERT.into());
+                    }
                     let was_on = !cur.get("disabled").is_some_and(|v| is_true(v));
                     let set = |on: bool| Op::on(path, "set", "name", &n, vec![("disabled", yn(!on))]);
                     (vec![set(enabled)], vec![set(was_on)], format!("OpenVPN server {n}"))
                 } else {
                     let cur = rows.first().ok_or("no OpenVPN server on this router: create one with a certificate in RouterOS first")?;
+                    if enabled && no_cert(cur) {
+                        return Err(NO_CERT.into());
+                    }
                     let was = cur.get("enabled").is_some_and(|v| is_true(v));
                     let set = |on: bool| Op { path, verb: "set", find: None, args: vec![("enabled", yn(on))] };
                     (vec![set(enabled)], vec![set(was)], "the OpenVPN server".to_string())
@@ -230,6 +297,48 @@ fn build(x: V, r: &mut dyn Router) -> Result<Plan, String> {
             }
             _ => Err("server must be l2tp or ovpn".into()),
         },
+        V::VpnUser { name, password, service, profile } => {
+            let n = vpn_user(&name)?;
+            let pw = vpn_secret(&password, "the password")?;
+            if pw.to_ascii_lowercase().contains(&n.to_ascii_lowercase()) {
+                return Err("the password must not contain the user name".into());
+            }
+            let svc = match service.as_str() {
+                "l2tp" | "ovpn" => service.clone(),
+                _ => return Err("service must be l2tp or ovpn".into()),
+            };
+            let prof = ros_name(&profile)?;
+            if r.run(&Cmd::new("/ppp/profile/print").proplist(&["name"]).query("name", &prof))?.is_empty() {
+                return Err(format!("the router has no PPP profile {prof:?}"));
+            }
+            if !r.run(&Cmd::new("/ppp/secret/print").proplist(&["name"]).query("name", &n))?.is_empty() {
+                return Err(format!("a VPN user {n:?} already exists"));
+            }
+            let c = format!("tik:vpn-user:{n}");
+            let op = Op::add(SECRETS, vec![("name", n.clone()), ("password", pw), ("service", svc.clone()), ("profile", prof.clone()), ("comment", c.clone())]);
+            let mut p = plan(format!("Add {} VPN user {n}", if svc == "l2tp" { "L2TP" } else { "OpenVPN" }), Risk::Medium, vec![op], vec![rm(SECRETS, &c)]);
+            p.warnings.push("The password is sent to the router once; tikontrol doesn't store it and can't show it again.".into());
+            if prof == "default" {
+                p.warnings.push("The \"default\" profile doesn't require encryption: prefer \"default-encryption\".".into());
+            }
+            Ok(p)
+        }
+        V::RemoveVpnUser { name } => {
+            let n = vpn_user(&name)?;
+            let c = format!("tik:vpn-user:{n}");
+            if r.run(&Cmd::new("/ppp/secret/print").proplist(&["name"]).query("comment", &c))?.is_empty() {
+                return Err("only VPN users created by tikontrol can be removed here".into());
+            }
+            Ok(Plan {
+                title: format!("Remove VPN user {n}"),
+                risk: Risk::Medium,
+                warnings: vec!["The user is disconnected and can't log in any more. This can't be undone automatically: tikontrol never reads passwords, add the user again to bring it back.".into()],
+                // the secret first, so the kicked session can't log in again
+                ops: vec![rm(SECRETS, &c), Op::on("/ppp/active", "remove", "name", &n, vec![])],
+                undo: vec![],
+                revertible: false,
+            })
+        }
         V::WireguardClient { name, private_key, address, public_key, endpoint, endpoint_port, sources } => {
             let (n, a, key, ep, epp) = (ifname(&name)?, cidr(&address)?, wg_key(&public_key)?, host(&endpoint)?, port(endpoint_port)?);
             let priv_key = if private_key.is_empty() { None } else { Some(wg_key(&private_key).map_err(|_| "invalid WireGuard private key")?) };
@@ -344,13 +453,128 @@ mod tests {
     #[test]
     fn vpn_servers_restore_their_state() {
         let mut f = Fake::default();
-        f.answers.insert("/interface/l2tp-server/server/print".into(), Ok(vec![row(&[("enabled", "false"), ("use-ipsec", "no")])]));
-        let p = compile_value(&json!({"kind": "vpn-server", "server": "l2tp", "enabled": true}), &mut f).unwrap();
-        assert_eq!((p.cli()[0].as_str(), p.undo_cli()[0].as_str(), p.risk), ("/interface/l2tp-server/server/set enabled=yes", "/interface/l2tp-server/server/set enabled=no", Risk::Medium));
-        assert!(p.warnings.iter().any(|w| w.contains("unencrypted")));
-        f.answers.insert("/interface/ovpn-server/server/print".into(), Ok(vec![row(&[("name", "ovpn1"), ("disabled", "true")])]));
+        f.answers.insert("/interface/l2tp-server/server/print".into(), Ok(vec![row(&[("enabled", "true"), ("use-ipsec", "required")])]));
+        let p = compile_value(&json!({"kind": "vpn-server", "server": "l2tp", "enabled": false}), &mut f).unwrap();
+        assert_eq!((p.cli()[0].as_str(), p.undo_cli()[0].as_str(), p.risk), ("/interface/l2tp-server/server/set enabled=no", "/interface/l2tp-server/server/set enabled=yes", Risk::Medium));
+        f.answers.insert("/interface/ovpn-server/server/print".into(), Ok(vec![row(&[("name", "ovpn1"), ("disabled", "true"), ("certificate", "srv")])]));
         let p = compile_value(&json!({"kind": "vpn-server", "server": "ovpn", "name": "ovpn1", "enabled": true}), &mut f).unwrap();
         assert_eq!(p.undo_cli(), [r#"/interface/ovpn-server/server/set [find name="ovpn1"] disabled=yes"#]);
+        // no certificate: enabling is refused in plain words, disabling still works
+        for rows in [vec![row(&[("name", "ovpn1"), ("disabled", "true"), ("certificate", "none")])], vec![row(&[("enabled", "false"), ("certificate", "none")])]] {
+            f.answers.insert("/interface/ovpn-server/server/print".into(), Ok(rows));
+            let e = compile_value(&json!({"kind": "vpn-server", "server": "ovpn", "name": "ovpn1", "enabled": true}), &mut f).unwrap_err();
+            assert!(e.contains("no certificate"), "{e}");
+            assert!(compile_value(&json!({"kind": "vpn-server", "server": "ovpn", "name": "ovpn1", "enabled": false}), &mut f).is_ok());
+        }
+    }
+
+    const PSK: &str = "Psk-not-real-4711";
+    const PW: &str = "Pw-not-real-0815";
+
+    fn l2tp(enabled: &str, ipsec: &str) -> Fake {
+        let mut f = Fake::default();
+        f.answers.insert("/interface/l2tp-server/server/print".into(), Ok(vec![row(&[("enabled", enabled), ("use-ipsec", ipsec)])]));
+        f
+    }
+
+    #[test]
+    fn l2tp_requires_ipsec_and_masks_its_secret() {
+        let mut f = l2tp("false", "no");
+        let p = compile_value(&json!({"kind": "vpn-server", "server": "l2tp", "enabled": true, "ipsec_secret": PSK}), &mut f).unwrap();
+        assert_eq!(p.cli(), [r#"/interface/l2tp-server/server/set enabled=yes use-ipsec=required ipsec-secret="********""#]);
+        assert_eq!(p.undo_cli(), ["/interface/l2tp-server/server/set enabled=no use-ipsec=no"]);
+        assert!(p.ops[0].args.contains(&("ipsec-secret", PSK.to_string())), "the real secret still goes to the router");
+        let script = revert_script("c", &p).unwrap();
+        assert!(!script.contains(PSK) && !script.contains("ipsec-secret"));
+        assert!(!format!("{:?}{:?}{}", p.warnings, p.undo, p.title).contains(PSK));
+        // the secret is never read back
+        assert_eq!(f.seen[0][1], "=.proplist=enabled,use-ipsec");
+        // without IPsec already required, enabling needs a secret
+        let e = compile_value(&json!({"kind": "vpn-server", "server": "l2tp", "enabled": true}), &mut l2tp("false", "yes")).unwrap_err();
+        assert!(e.contains("IPsec pre-shared secret"), "{e}");
+        // IPsec already required: enabling keeps the router's secret
+        let p = compile_value(&json!({"kind": "vpn-server", "server": "l2tp", "enabled": true}), &mut l2tp("false", "required")).unwrap();
+        assert_eq!(p.cli(), ["/interface/l2tp-server/server/set enabled=yes use-ipsec=required"]);
+        // replacing an existing secret says the old one can't come back
+        let p = compile_value(&json!({"kind": "vpn-server", "server": "l2tp", "enabled": true, "ipsec_secret": PSK}), &mut l2tp("true", "required")).unwrap();
+        assert!(p.warnings.iter().any(|w| w.contains("can't bring the old one back")));
+    }
+
+    #[test]
+    fn l2tp_secret_is_validated_without_echoing_it() {
+        for bad in ["short-1", "has a space in it", "tab\tinside-secret", "newline\n/system/reboot", "ünïcödé-secret-x", &"x".repeat(65)] {
+            let e = compile_value(&json!({"kind": "vpn-server", "server": "l2tp", "enabled": true, "ipsec_secret": bad}), &mut l2tp("false", "no")).unwrap_err();
+            assert!(!e.contains(bad), "{e}");
+        }
+        assert!(compile_value(&json!({"kind": "vpn-server", "server": "l2tp", "enabled": false, "ipsec_secret": PSK}), &mut l2tp("true", "required")).is_err());
+    }
+
+    fn ppp(profile: bool, existing: bool) -> Fake {
+        let mut f = Fake::default();
+        if profile {
+            f.answers.insert("/ppp/profile/print".into(), Ok(vec![row(&[("name", "default-encryption")])]));
+        }
+        if existing {
+            f.answers.insert("/ppp/secret/print".into(), Ok(vec![row(&[("name", "alice")])]));
+        }
+        f
+    }
+
+    #[test]
+    fn vpn_user_is_tagged_masked_and_removed_by_its_tag() {
+        let mut f = ppp(true, false);
+        let p = compile_value(&json!({"kind": "vpn-user", "name": "alice", "password": PW, "service": "l2tp"}), &mut f).unwrap();
+        assert_eq!(p.cli(), [r#"/ppp/secret/add name=alice password="********" service=l2tp profile=default-encryption comment=tik:vpn-user:alice"#]);
+        assert_eq!(p.undo_cli(), [r#"/ppp/secret/remove [find comment="tik:vpn-user:alice"]"#]);
+        assert!(p.revertible);
+        assert!(p.ops[0].args.contains(&("password", PW.to_string())));
+        let script = revert_script("c", &p).unwrap();
+        assert!(!script.contains(PW) && !script.contains("password"));
+        assert!(!format!("{:?}{:?}{}", p.warnings, p.undo, p.title).contains(PW));
+        // never asks for the password
+        assert!(f.seen.iter().all(|w| w.iter().all(|x| !x.contains("password"))));
+        let p = compile_value(&json!({"kind": "vpn-user", "name": "bob.m-1", "password": PW, "service": "ovpn", "profile": "default-encryption"}), &mut ppp(true, false)).unwrap();
+        assert_eq!(p.title, "Add OpenVPN VPN user bob.m-1");
+        // an existing name, or a profile the router doesn't have, is refused
+        assert!(compile_value(&json!({"kind": "vpn-user", "name": "alice", "password": PW, "service": "l2tp"}), &mut ppp(true, true)).unwrap_err().contains("already exists"));
+        assert!(compile_value(&json!({"kind": "vpn-user", "name": "alice", "password": PW, "service": "l2tp"}), &mut ppp(false, false)).unwrap_err().contains("profile"));
+    }
+
+    #[test]
+    fn removing_a_vpn_user_only_touches_ours_and_is_not_revertible() {
+        let mut f = ppp(true, true);
+        let p = compile_value(&json!({"kind": "remove-vpn-user", "name": "alice"}), &mut f).unwrap();
+        assert_eq!(p.cli(), [r#"/ppp/secret/remove [find comment="tik:vpn-user:alice"]"#, r#"/ppp/active/remove [find name="alice"]"#]);
+        assert!(!p.revertible && p.undo.is_empty());
+        assert_eq!(f.seen[0], ["/ppp/secret/print", "=.proplist=name", "?comment=tik:vpn-user:alice"]);
+        assert!(compile_value(&json!({"kind": "remove-vpn-user", "name": "alice"}), &mut ppp(true, false)).unwrap_err().contains("created by tikontrol"));
+    }
+
+    #[test]
+    fn vpn_user_rejects_injection_and_weak_input() {
+        let bad = [
+            json!({"kind": "vpn-user", "name": "a b", "password": PW, "service": "l2tp"}),
+            json!({"kind": "vpn-user", "name": "x\" password=1", "password": PW, "service": "l2tp"}),
+            json!({"kind": "vpn-user", "name": "x;/system/reboot", "password": PW, "service": "l2tp"}),
+            json!({"kind": "vpn-user", "name": "x]", "password": PW, "service": "l2tp"}),
+            json!({"kind": "vpn-user", "name": "-x", "password": PW, "service": "l2tp"}),
+            json!({"kind": "vpn-user", "name": "", "password": PW, "service": "l2tp"}),
+            json!({"kind": "vpn-user", "name": "a".repeat(33), "password": PW, "service": "l2tp"}),
+            json!({"kind": "vpn-user", "name": "alice", "password": "short-pw", "service": "l2tp"}),
+            json!({"kind": "vpn-user", "name": "alice", "password": "p".repeat(65), "service": "l2tp"}),
+            json!({"kind": "vpn-user", "name": "alice", "password": "line\nbreak-password", "service": "l2tp"}),
+            json!({"kind": "vpn-user", "name": "alice", "password": "my-alice-password", "service": "l2tp"}),
+            json!({"kind": "vpn-user", "name": "alice", "password": PW, "service": "pptp"}),
+            json!({"kind": "vpn-user", "name": "alice", "password": PW, "service": "any"}),
+            json!({"kind": "vpn-user", "name": "alice", "password": PW, "service": "l2tp", "profile": "x\"y"}),
+            json!({"kind": "vpn-user", "name": "alice", "password": PW, "service": "l2tp", "group": "full"}),
+            json!({"kind": "remove-vpn-user", "name": "x\"; /system/reboot"}),
+        ];
+        for b in bad {
+            let e = compile_value(&b, &mut ppp(true, false)).unwrap_err();
+            let pw = b.get("password").and_then(|v| v.as_str()).unwrap_or("\u{0}");
+            assert!(!e.contains(pw), "error echoes the password: {e}");
+        }
     }
 
     #[test]

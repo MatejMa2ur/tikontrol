@@ -1240,7 +1240,8 @@
  },
  "ovpn": [],
  "l2tp": {
-  "enabled": false
+  "enabled": false,
+  "use-ipsec": "no"
  },
  "backups": [
   {
@@ -1844,5 +1845,44 @@
    "loss": 0
   }
  },
- "bridgeFilter": []
+ "bridgeFilter": [],
+ "pppSecrets": [
+  {
+   ".id": "*1",
+   "name": "laptop-user",
+   "service": "l2tp",
+   "profile": "default-encryption",
+   "disabled": false,
+   "comment": "tik:vpn-user:laptop-user"
+  },
+  {
+   ".id": "*2",
+   "name": "tablet-user",
+   "service": "ovpn",
+   "profile": "default-encryption",
+   "disabled": false,
+   "comment": "tik:vpn-user:tablet-user"
+  }
+ ],
+ "pppActive": [
+  {
+   ".id": "*1",
+   "name": "laptop-user",
+   "service": "l2tp",
+   "caller-id": "203.0.113.25",
+   "address": "10.12.0.100",
+   "uptime": "1h12m5s",
+   "encoding": "cbc(aes) + hmac(sha1)"
+  }
+ ],
+ "pppProfiles": [
+  {
+   ".id": "*0",
+   "name": "default"
+  },
+  {
+   ".id": "*FFFFFFFE",
+   "name": "default-encryption"
+  }
+ ]
 }

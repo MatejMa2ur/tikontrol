@@ -105,7 +105,10 @@ CASES = [
     ({"kind": "isolate-device", "mac": M2}, {"kind": "unisolate-device", "mac": M2}, "ok"),
     # vpn
     ({"kind": "wireguard-server", "name": "wg-home", "listen_port": 13231, "address": "10.9.0.1/24"}, None, "ok"),
-    ({"kind": "vpn-server", "server": "l2tp", "enabled": True}, None, "ok"),
+    ({"kind": "vpn-server", "server": "l2tp", "enabled": True, "ipsec_secret": "not-a-real-secret-1"}, None, "ok"),
+    ({"kind": "vpn-user", "name": "tik-vpn-test", "password": "not-a-real-secret-2", "service": "l2tp"}, {"kind": "remove-vpn-user", "name": "tik-vpn-test"}, "ok"),
+    ({"kind": "vpn-user", "name": "tik-vpn-test2", "password": "not-a-real-secret-3", "service": "ovpn", "profile": "no-such-profile"}, None, "error"),
+    ({"kind": "remove-vpn-user", "name": "tik-not-ours"}, None, "error"),
     ({"kind": "vpn-server", "server": "ovpn", "enabled": True, "name": "ovpn-test"}, None, "ok"),
     ({"kind": "wireguard-client", "name": "wg-vpn", "address": "10.66.0.2/32", "public_key": WGKEY, "endpoint": "vpn.example.com", "endpoint_port": 51820, "sources": ["192.168.88.80"]}, None, "ok"),
     ({"kind": "site-to-site", "name": "wg-s2s", "listen_port": 13232, "address": "10.77.0.1/30", "public_key": WGKEY2, "endpoint": "office.example.com", "endpoint_port": 13232, "remote_subnets": ["10.200.0.0/24"]}, None, "ok"),

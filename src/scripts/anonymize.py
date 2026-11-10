@@ -135,6 +135,13 @@ if isinstance(d.get("dnsCache"), list):
 for i, p in enumerate(d.get("wgPeers") or []):
     p["comment"] = f"back-to-home-vpn device {i + 1}"
     p["name"] = f"peer{i + 1}"
+# VPN users are people and caller-id is their public IP: replace with a fixed fictional set
+d["pppSecrets"] = [
+    {".id": "*1", "name": "laptop-user", "service": "l2tp", "profile": "default-encryption", "disabled": False, "comment": "tik:vpn-user:laptop-user"},
+    {".id": "*2", "name": "tablet-user", "service": "ovpn", "profile": "default-encryption", "disabled": False, "comment": "tik:vpn-user:tablet-user"},
+]
+d["pppActive"] = [{".id": "*1", "name": "laptop-user", "service": "l2tp", "caller-id": "203.0.113.25", "address": "10.12.0.100", "uptime": "1h12m5s", "encoding": "cbc(aes) + hmac(sha1)"}]
+d["pppProfiles"] = [{".id": "*0", "name": "default"}, {".id": "*FFFFFFFE", "name": "default-encryption"}]
 
 sys.stdout.reconfigure(encoding="utf-8")
 sys.stdout.write(json.dumps(d, indent=1, ensure_ascii=False))
