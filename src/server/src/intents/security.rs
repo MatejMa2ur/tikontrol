@@ -424,10 +424,13 @@ fn build(i: &S, r: &mut dyn Router) -> Result<Plan, String> {
         }
         RemoveAdlist { url } => {
             let u = https_url(url)?;
-            if print(r, ADLIST, &["url"], Some(("url", &u)))?.is_empty() {
+            let Some(row) = print(r, ADLIST, &["url", "ssl-verify", "disabled"], Some(("url", &u)))?.into_iter().next() else {
                 return Err("no such list".into());
-            }
-            plan("Remove content filter list".into(), Risk::Low, vec![Op::on(ADLIST, "remove", "url", &u, vec![])], vec![Op::add(ADLIST, vec![("url", u.clone()), ("ssl-verify", "yes".into())])])
+            };
+            // the undo puts it back as it was: a disabled list stays disabled (seen on CHR)
+            let yn = |k: &str, default: bool| if row.get(k).map_or(default, |v| v == "true" || v == "yes") { "yes" } else { "no" }.to_string();
+            let back = Op::add(ADLIST, vec![("url", u.clone()), ("ssl-verify", yn("ssl-verify", true)), ("disabled", yn("disabled", false))]);
+            plan("Remove content filter list".into(), Risk::Low, vec![Op::on(ADLIST, "remove", "url", &u, vec![])], vec![back])
         }
         RegionBlock { country, url } => {
             let cc = country.trim().to_ascii_uppercase();
@@ -533,6 +536,15 @@ mod tests {
         // the revert script still adds the rule, at the end, if the anchor is gone
         let script = crate::apply::revert_script("x", &app).unwrap();
         assert!(script.contains(r#"on-error={ :do { /ip/firewall/filter/add chain=forward protocol=tcp dst-port=443 tls-host=app.example action=reject reject-with=tcp-reset comment=tik:app:app.example } on-error={} }"#), "{script}");
+    }
+
+    #[test]
+    fn removing_a_disabled_adlist_puts_it_back_disabled() {
+        let mut f = Fake::default();
+        f.answers.insert("/ip/dns/adlist/print".into(), Ok(vec![row(&[("url", "https://example.com/h.txt"), ("ssl-verify", "true"), ("disabled", "true")])]));
+        let p = go(json!({"kind": "remove-adlist", "url": "https://example.com/h.txt"}), &mut f).unwrap();
+        assert_eq!(p.undo_cli(), ["/ip/dns/adlist/add url=https://example.com/h.txt ssl-verify=yes disabled=yes"]);
+        assert!(go(json!({"kind": "remove-adlist", "url": "https://example.com/h.txt"}), &mut Fake::default()).is_err());
     }
 
     #[test]
