@@ -4,7 +4,8 @@
 //! VLAN interface, bridge VLAN entry, address, pool, DHCP server and network, interface-list member and
 //! isolation rules, all tagged `tik:net:<name>` so the inverse removes exactly them, in reverse order.
 //! Bridge VLAN filtering is never switched on as a side effect (docs/FEASIBILITY.md: lockout); it is its
-//! own high-risk intent, `set-vlan-filtering`.
+//! own high-risk intent, `set-vlan-filtering`. `dhcpv6-server` adds stateful DHCPv6 on a network that
+//! already has an IPv6 prefix from a pool (tagged `tik:dhcpv6:<interface>`).
 
 use crate::apply::{cidr, ipv4, plan, ros_name, yn, Op, Plan, Risk};
 use crate::ros::cmd::Cmd;
@@ -24,6 +25,7 @@ const DHCPS: &str = "/ip/dhcp-server";
 const DHCPN: &str = "/ip/dhcp-server/network";
 const DHCPO: &str = "/ip/dhcp-server/option";
 const V6ADDR: &str = "/ipv6/address";
+const V6DHCPS: &str = "/ipv6/dhcp-server";
 pub(crate) const FILTER: &str = "/ip/firewall/filter";
 
 #[derive(Debug, Deserialize)]
@@ -85,6 +87,9 @@ enum N {
         network: String,
     },
     RemoveDhcpOption { name: String },
+    /// Stateful DHCPv6 on a LAN interface from the IPv6 pool its address already comes from.
+    Dhcpv6Server { interface: String },
+    RemoveDhcpv6Server { interface: String },
     SetMdnsRepeat { interfaces: Vec<String> },
     SetIgmpSnooping { bridge: String, enabled: bool },
     SetPortEnabled { interface: String, enabled: bool },
@@ -117,6 +122,8 @@ const KINDS: &[&str] = &[
     "ipv6-lan",
     "dhcp-option",
     "remove-dhcp-option",
+    "dhcpv6-server",
+    "remove-dhcpv6-server",
     "set-mdns-repeat",
     "set-igmp-snooping",
     "set-port-enabled",
@@ -398,7 +405,18 @@ fn build(i: &N, r: &mut dyn Router) -> Result<Plan, String> {
             if undo.is_empty() {
                 return Err("only networks created by tikontrol can be removed here".into());
             }
-            let ops = NET_PARTS.iter().rev().map(|(path, _)| remove(path, &c)).collect();
+            let mut ops: Vec<Op> = vec![];
+            // IPv6 added later from the edit dialog is tagged by interface, not by network: remove it first
+            if let Some(ifn) = print(r, VLAN_IF, &["name"], Some(("comment", &c)))?.first().and_then(|v| v.get("name")).cloned() {
+                for (path, fields, tag) in [(V6ADDR, &["interface", "from-pool", "advertise"][..], format!("tik:v6lan:{ifn}")), (V6DHCPS, &["name", "interface", "address-pool"][..], format!("tik:dhcpv6:{ifn}"))] {
+                    let back = rebuild(r, path, fields, &tag)?;
+                    if !back.is_empty() {
+                        ops.insert(0, remove(path, &tag));
+                        undo.extend(back);
+                    }
+                }
+            }
+            ops.extend(NET_PARTS.iter().rev().map(|(path, _)| remove(path, &c)));
             let mut p = plan(format!("Remove network {name}"), Risk::Medium, ops, undo);
             p.warnings.push("Devices on this network lose their address and connection.".into());
             p
@@ -418,7 +436,11 @@ fn build(i: &N, r: &mut dyn Router) -> Result<Plan, String> {
                 let ports = print(r, BPORT, &["interface", "pvid", "frame-types"], Some(("bridge", &b)))?;
                 let vlans = print(r, BVLAN, &["vlan-ids", "tagged", "untagged"], Some(("bridge", &b)))?;
                 p.warnings.push(format!("Check first: {} ports and {} bridge VLAN entries. The port you manage the router from must be untagged in its PVID, and the bridge itself must be tagged in every VLAN the router serves.", ports.len(), vlans.len()));
-                p.warnings.push("If you are cut off, do nothing: the router turns filtering back off by itself in 5 minutes.".into());
+                let orphans = orphan_pvids(&ports, &vlans);
+                if !orphans.is_empty() {
+                    p.warnings.push(format!("These ports have a PVID with no bridge VLAN entry, so their untagged traffic will be dropped: {}. Fix them under Ports first.", orphans.join(", ")));
+                }
+                p.warnings.push("If you are cut off, do nothing: the router turns filtering back off by itself in 5 minutes. Only press Keep after this page loads again.".into());
             }
             p
         }
@@ -530,6 +552,44 @@ fn build(i: &N, r: &mut dyn Router) -> Result<Plan, String> {
             p.warnings.push("If a DHCP network still lists this option, remove it there too.".into());
             p
         }
+        Dhcpv6Server { interface } => {
+            let ifn = ifname(interface)?;
+            // feature detection: no IPv6 package or IPv6 turned off → refuse in plain words
+            let set = print(r, "/ipv6/settings", &["disable-ipv6"], None).map_err(|_| "this router has no IPv6 support (package missing)".to_string())?;
+            if truthy(set.first().and_then(|x| x.get("disable-ipv6"))) {
+                return Err("IPv6 is turned off on this router: turn it on under Internet → IPv6 first".into());
+            }
+            let pool = print(r, V6ADDR, &["from-pool"], Some(("interface", &ifn)))?
+                .iter()
+                .filter_map(|a| a.get("from-pool").filter(|p| !p.is_empty()).cloned())
+                .next()
+                .ok_or_else(|| format!("{ifn} has no IPv6 prefix from a pool yet: turn on IPv6 (SLAAC) for this network first"))?;
+            let pool = v6_pool(r, &pool)?;
+            if !print(r, V6DHCPS, &["name"], Some(("interface", &ifn)))?.is_empty() {
+                return Err(format!("{ifn} already has a DHCPv6 server"));
+            }
+            let c = format!("tik:dhcpv6:{ifn}");
+            let name = format!("tik-v6-{ifn}");
+            let mut p = plan(
+                format!("DHCPv6 server on {ifn} (pool {pool})"),
+                Risk::Low,
+                vec![Op::add(V6DHCPS, vec![("name", name), ("interface", ifn.clone()), ("address-pool", pool), ("comment", c.clone())])],
+                vec![remove(V6DHCPS, &c)],
+            );
+            p.warnings.push("SLAAC keeps working. Devices only ask DHCPv6 for an address when router advertisements set the managed flag (/ipv6/nd), which tikontrol leaves as it is.".into());
+            p
+        }
+        RemoveDhcpv6Server { interface } => {
+            let ifn = ifname(interface)?;
+            let c = format!("tik:dhcpv6:{ifn}");
+            let undo = rebuild(r, V6DHCPS, &["name", "interface", "address-pool"], &c)?;
+            if undo.is_empty() {
+                return Err("only DHCPv6 servers created by tikontrol can be removed here".into());
+            }
+            let mut p = plan(format!("Remove DHCPv6 server on {ifn}"), Risk::Low, vec![remove(V6DHCPS, &c)], undo);
+            p.warnings.push("Devices keep their DHCPv6 address until the lease ends; SLAAC addresses are not affected.".into());
+            p
+        }
         SetMdnsRepeat { interfaces } => {
             if interfaces.len() > 16 {
                 return Err("at most 16 interfaces".into());
@@ -610,6 +670,26 @@ fn build(i: &N, r: &mut dyn Router) -> Result<Plan, String> {
             p
         }
     })
+}
+
+/// `vlan-ids` like "10,20-30" contains `v`.
+fn vlan_ids_contain(ids: &str, v: u16) -> bool {
+    ids.split(',').any(|x| match x.trim().split_once('-') {
+        Some((a, b)) => a.parse::<u16>().is_ok_and(|a| a <= v) && b.parse::<u16>().is_ok_and(|b| v <= b),
+        None => x.trim().parse::<u16>() == Ok(v),
+    })
+}
+
+/// Ports (as "ether2 (PVID 30)") whose PVID is neither 1 (RouterOS adds that one by itself) nor in any bridge VLAN entry.
+fn orphan_pvids(ports: &[Row], vlans: &[Row]) -> Vec<String> {
+    ports
+        .iter()
+        .filter_map(|p| {
+            let pvid = p.get("pvid")?.parse::<u16>().ok()?;
+            let covered = pvid == 1 || vlans.iter().any(|v| v.get("vlan-ids").is_some_and(|ids| vlan_ids_contain(ids, pvid)));
+            (!covered).then(|| format!("{} (PVID {pvid})", p.get("interface").map_or("?", |s| s)))
+        })
+        .collect()
 }
 
 /// PVID, frame types and (for trunks) tagged membership in each VLAN's bridge entry.
@@ -720,12 +800,26 @@ mod tests {
         assert_eq!(p.ops.last().unwrap().path, VLAN_IF);
         assert_eq!(p.undo[0].path, VLAN_IF);
         assert!(go(json!({"kind":"remove-network","name":"none"}), &mut Fake::default()).is_err());
+        // DHCPv6 added later on vlan30 goes first, and comes back last
+        f.answers.insert("/ipv6/dhcp-server/print".into(), Ok(vec![row(&[("name", "tik-v6-vlan30"), ("interface", "vlan30"), ("address-pool", "tik-v6")])]));
+        let p = go(json!({"kind":"remove-network","name":"IoT"}), &mut f).unwrap();
+        assert_eq!(p.cli()[0], r#"/ipv6/dhcp-server/remove [find comment="tik:dhcpv6:vlan30"]"#);
+        assert_eq!(p.undo.last().unwrap().path, V6DHCPS);
     }
 
     #[test]
     fn high_risk_changes_are_flagged() {
         let p = go(json!({"kind":"set-vlan-filtering","bridge":"bridge","enabled":true}), &mut fake()).unwrap();
         assert_eq!(p.risk, Risk::High);
+        assert!(p.warnings.iter().any(|w| w.contains("cut off")));
+        let mut f = fake();
+        f.answers.insert("/interface/bridge/port/print".into(), Ok(vec![row(&[("interface", "ether2"), ("pvid", "30")]), row(&[("interface", "ether3"), ("pvid", "40")]), row(&[("interface", "ether4"), ("pvid", "1")])]));
+        f.answers.insert("/interface/bridge/vlan/print".into(), Ok(vec![row(&[("vlan-ids", "10,20-30")])]));
+        let w = go(json!({"kind":"set-vlan-filtering","bridge":"bridge","enabled":true}), &mut f).unwrap().warnings;
+        assert!(w.iter().any(|w| w.contains("ether3 (PVID 40)") && !w.contains("ether2") && !w.contains("ether4")), "{w:?}");
+        f.answers.insert("/interface/bridge/vlan/print".into(), Ok(vec![row(&[("vlan-ids", "10")])]));
+        let w = go(json!({"kind":"set-vlan-filtering","bridge":"bridge","enabled":true}), &mut f).unwrap().warnings;
+        assert!(w.iter().any(|w| w.contains("ether2 (PVID 30), ether3 (PVID 40)")), "{w:?}");
         assert_eq!(p.undo_cli(), [r#"/interface/bridge/set [find name="bridge"] vlan-filtering=no"#]);
         let mut f = fake();
         f.answers.insert("/interface/bridge/port/print".into(), Ok(vec![row(&[("bridge", "bridge"), ("pvid", "1"), ("frame-types", "admit-all")])]));
@@ -772,6 +866,38 @@ mod tests {
         for b in [json!({"kind":"ipv6-lan","interface":"vlan30","pool":"x\" ; /system/reboot"}), json!({"kind":"set-dhcp-network","address":"10.0.30.0/24","domain":"a b;c"}), json!({"kind":"ipv6-lan","interface":"vlan30","pool":""})] {
             assert!(go(b.clone(), &mut f).is_err(), "{b}");
         }
+    }
+
+    #[test]
+    fn dhcpv6_server_needs_ipv6_and_a_pool() {
+        let mut f = fake();
+        f.answers.insert("/ipv6/settings/print".into(), Ok(vec![row(&[("disable-ipv6", "true")])]));
+        assert!(go(json!({"kind":"dhcpv6-server","interface":"vlan30"}), &mut f).unwrap_err().contains("turned off"));
+        f.answers.insert("/ipv6/settings/print".into(), Err("no such command".into()));
+        assert!(go(json!({"kind":"dhcpv6-server","interface":"vlan30"}), &mut f).unwrap_err().contains("no IPv6 support"));
+        f.answers.insert("/ipv6/settings/print".into(), Ok(vec![row(&[("disable-ipv6", "false")])]));
+        assert!(go(json!({"kind":"dhcpv6-server","interface":"vlan30"}), &mut f).unwrap_err().contains("no IPv6 prefix"));
+        f.answers.insert("/ipv6/address/print".into(), Ok(vec![row(&[("from-pool", "")]), row(&[("from-pool", "tik-v6")])]));
+        assert!(go(json!({"kind":"dhcpv6-server","interface":"vlan30"}), &mut f).unwrap_err().contains("no IPv6 pool"));
+        f.answers.insert("/ipv6/pool/print".into(), Ok(vec![row(&[("name", "tik-v6")])]));
+        let p = go(json!({"kind":"dhcpv6-server","interface":"vlan30"}), &mut f).unwrap();
+        assert_eq!(p.cli(), ["/ipv6/dhcp-server/add name=tik-v6-vlan30 interface=vlan30 address-pool=tik-v6 comment=tik:dhcpv6:vlan30"]);
+        assert_eq!(p.undo_cli(), [r#"/ipv6/dhcp-server/remove [find comment="tik:dhcpv6:vlan30"]"#]);
+        f.answers.insert("/ipv6/dhcp-server/print".into(), Ok(vec![row(&[("name", "other"), ("interface", "vlan30"), ("address-pool", "tik-v6")])]));
+        assert!(go(json!({"kind":"dhcpv6-server","interface":"vlan30"}), &mut f).unwrap_err().contains("already has"));
+        for b in [json!({"kind":"dhcpv6-server","interface":"vlan30; /system/reboot"}), json!({"kind":"dhcpv6-server","interface":""}), json!({"kind":"dhcpv6-server","interface":"x","pool":"y"})] {
+            assert!(go(b.clone(), &mut f).is_err(), "{b}");
+        }
+    }
+
+    #[test]
+    fn remove_dhcpv6_server_rebuilds_ours_only() {
+        assert!(go(json!({"kind":"remove-dhcpv6-server","interface":"vlan30"}), &mut fake()).unwrap_err().contains("created by tikontrol"));
+        let mut f = fake();
+        f.answers.insert("/ipv6/dhcp-server/print".into(), Ok(vec![row(&[("name", "tik-v6-vlan30"), ("interface", "vlan30"), ("address-pool", "tik-v6")])]));
+        let p = go(json!({"kind":"remove-dhcpv6-server","interface":"vlan30"}), &mut f).unwrap();
+        assert_eq!(p.cli(), [r#"/ipv6/dhcp-server/remove [find comment="tik:dhcpv6:vlan30"]"#]);
+        assert_eq!(p.undo_cli(), ["/ipv6/dhcp-server/add name=tik-v6-vlan30 interface=vlan30 address-pool=tik-v6 comment=tik:dhcpv6:vlan30"]);
     }
 
     #[test]

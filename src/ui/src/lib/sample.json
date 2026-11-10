@@ -1059,10 +1059,21 @@
    ".id": "*6E",
    "address": "10.12.0.0/24",
    "comment": "defconf",
+   "dhcp-option": [
+    "tftp"
+   ],
    "dns-server": "10.12.0.1",
    "gateway": [
     "10.12.0.1"
    ]
+  }
+ ],
+ "dhcpOptions": [
+  {
+   ".id": "*A1",
+   "code": 66,
+   "name": "tftp",
+   "value": "s'boot.home.lan'"
   }
  ],
  "bridges": [
@@ -1317,6 +1328,7 @@
  "ipv6": {
   "disable-ipv6": false
  },
+ "ipv6DhcpServers": [],
  "kidControl": [],
  "services": [
   {

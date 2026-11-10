@@ -16,7 +16,7 @@ use std::sync::Arc;
 
 /// Snapshot keys that are configuration (not state like leases, ARP or logs).
 const MENUS: &[&str] = &[
-    "addresses", "adlist", "bonds", "bridgePorts", "bridgeVlans", "bridges", "bthUsers", "dhcpNetworks", "dhcpServers", "discovery", "dnsCfg", "dnsStatic", "filter", "hotspot", "kidControl", "listMembers",
+    "addresses", "adlist", "bonds", "bridgePorts", "bridgeVlans", "bridges", "bthUsers", "dhcpNetworks", "dhcpOptions", "dhcpServers", "discovery", "dnsCfg", "dnsStatic", "filter", "hotspot", "ipv6DhcpServers", "kidControl", "listMembers",
     "loggingRules", "nat", "ntp", "ovpn", "pools", "queues", "radius", "routes", "routingRules", "routingTables", "scheduler", "services", "snmp", "sshKeys", "trafficFlow", "upnp", "userGroups", "users",
     "vlans", "wgPeers", "wifi", "wifiNew", "wireguard",
 ];
