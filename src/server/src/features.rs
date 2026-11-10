@@ -38,6 +38,26 @@ fn changes() -> &'static Mutex<BTreeMap<String, Change>> {
     C.get_or_init(Mutex::default)
 }
 
+/// Previews a user may have waiting; a new one past this drops their oldest (it can be previewed again).
+const PREVIEWS_PER_USER: usize = 50;
+
+/// Housekeeping before a new preview is stored. Armed changes always stay; previews stay an hour, finished
+/// changes (kept, reverted, failed) ten minutes. Only waiting previews count against the per-user limit, so a
+/// long session of applying and keeping is never refused. False only when the map is still full (many users).
+fn make_room(c: &mut BTreeMap<String, Change>, user: &str, now: u64) -> bool {
+    c.retain(|_, x| match x.state {
+        State::Armed { .. } => true,
+        State::Previewed => now - x.created < 3600,
+        _ => now - x.created < 600,
+    });
+    let mut mine: Vec<(u64, String)> = c.iter().filter(|(_, x)| x.user == user && matches!(x.state, State::Previewed)).map(|(id, x)| (x.created, id.clone())).collect();
+    mine.sort();
+    while mine.len() >= PREVIEWS_PER_USER {
+        c.remove(&mine.remove(0).1);
+    }
+    c.len() < 1000
+}
+
 /// Seconds before the router's own revert at which "keep" is refused, so the two can't race.
 const MARGIN: u64 = 15;
 
@@ -143,8 +163,7 @@ pub fn route(app: &Arc<App>, req: &Req, s: &Session) -> Option<Resp> {
                 "window": WINDOW_SECS, "canApply": can_write_for(app, s, cmr).is_ok(), "reason": can_write_for(app, s, cmr).err(),
             });
             let mut c = lock(changes());
-            c.retain(|_, x| now() - x.created < 3600 || matches!(x.state, State::Armed { .. }));
-            if c.len() > 200 {
+            if !make_room(&mut c, &s.user, now()) {
                 return Some(Resp::error(429, "too many pending changes"));
             }
             c.insert(id, Change { plan, user: s.user.clone(), created: now(), state: State::Previewed, site: app.site.clone(), cmr });
@@ -241,6 +260,43 @@ pub fn route(app: &Arc<App>, req: &Req, s: &Session) -> Option<Resp> {
 fn refresh(app: &Arc<App>) {
     let a = app.clone();
     std::thread::spawn(move || a.poll(false));
+}
+
+#[cfg(test)]
+mod room_tests {
+    use super::*;
+    use crate::apply::{Plan, Risk};
+
+    fn ch(user: &str, created: u64, state: State) -> Change {
+        Change { plan: Plan { title: String::new(), risk: Risk::Low, warnings: vec![], ops: vec![], undo: vec![], revertible: true }, user: user.into(), created, state, site: String::new(), cmr: false }
+    }
+
+    #[test]
+    fn finished_changes_never_block_a_preview_and_old_previews_make_way() {
+        let mut c = BTreeMap::new();
+        // a long session: 300 changes applied and kept or reverted within the last ten minutes
+        for i in 0..300u64 {
+            c.insert(format!("k{i}"), ch("a", 10_000 - i, if i % 2 == 0 { State::Kept } else { State::Reverted }));
+        }
+        assert!(make_room(&mut c, "a", 10_000));
+        // finished changes go after ten minutes, armed ones never, previews after an hour
+        c.insert("armed".into(), ch("a", 1, State::Armed { deadline: 0 }));
+        c.insert("old-preview".into(), ch("b", 10_000, State::Previewed));
+        assert!(make_room(&mut c, "a", 10_000 + 3600));
+        assert_eq!(c.keys().collect::<Vec<_>>(), ["armed"]);
+        // the 51st waiting preview of one user drops their oldest; another user's are untouched
+        for i in 0..PREVIEWS_PER_USER as u64 {
+            c.insert(format!("p{i:02}"), ch("a", 20_000 + i, State::Previewed));
+        }
+        c.insert("other".into(), ch("b", 20_000, State::Previewed));
+        assert!(make_room(&mut c, "a", 20_100));
+        assert!(!c.contains_key("p00") && c.contains_key("p01") && c.contains_key("other"));
+        // still full after housekeeping: refused
+        for i in 0..1000 {
+            c.insert(format!("z{i}"), ch(&format!("u{i}"), 20_100, State::Previewed));
+        }
+        assert!(!make_room(&mut c, "a", 20_100));
+    }
 }
 
 #[cfg(test)]
