@@ -3,15 +3,16 @@
 
 Signs in as the CHR admin (password from $CHR_DIR/admin.pw, never printed) and checks what the read pages and
 tools return: router data, the router's own refusal of writes as the reader, debug tools, console allow-list,
-API keys (GET only) and MCP (read tools, privacy mode, no secrets). It changes nothing on the router; it
-enables MCP and creates an API key in tikontrol and removes both again.
+API keys (GET only) and MCP (read tools, privacy mode, no secrets). tikontrol changes nothing on the router; this
+script adds a throwaway PPP secret and hotspot user over SSH (to check their passwords never reach the snapshot)
+and removes them again. It enables MCP and creates an API key in tikontrol and removes both again.
 
     CHR_DIR=~/.cache/tikontrol-chr-ui python3 src/scripts/chr-read.py [https://127.0.0.1:9643]
 
 Expects the fictional activity this repo's CHR notes describe: static leases "Living room TV"
 (02:00:00:AA:BB:20 / 192.168.88.20), a netwatch, a WireGuard peer, a backup, a failed login among the last 40 log lines.
 """
-import http.cookiejar, json, os, re, ssl, sys, time, urllib.error, urllib.request
+import http.cookiejar, json, os, re, ssl, subprocess, sys, time, urllib.error, urllib.request
 
 BASE = sys.argv[1] if len(sys.argv) > 1 else "https://127.0.0.1:9643"
 DIR = os.path.expanduser(os.environ.get("CHR_DIR", "~/.cache/tikontrol-chr"))
@@ -68,6 +69,36 @@ check(any("login failure" in l.get("message", "") for l in d.get("log", [])), "f
 check(d.get("update", {}).get("installed-version") and d.get("resource", {}).get("version"), "updates: installed version + channel")
 check(isinstance(d.get("latency"), dict), "latency kept between pings")
 check(not any(k in json.dumps(d) for k in ("private-key", PW)), "snapshot carries no private key or admin password")
+
+
+def ros(cmd):
+    return subprocess.run([os.path.join(DIR, "ssh-chr.sh"), cmd], capture_output=True, text=True, timeout=60).stdout
+
+
+# newer read queries: all answer on a CHR (lists, maybe empty) and never carry a password or secret field
+errs = {e.get("key") for e in d.get("_errors", []) if isinstance(e, dict)}
+for k in ("pppActive", "pppSecrets", "hotspotUsers", "queueTree", "bridgeFilter", "dhcpOptions", "ipv6DhcpServers", "radius"):
+    check(isinstance(d.get(k), list) and k not in errs, f"snapshot has {k} ({len(d.get(k) or [])} rows)")
+check(not d.get("poe") and not d.get("poeMon"), f"no PoE rows on CHR (no PoE-out ports){' (poe logged in _errors)' if 'poe' in errs else ''}")
+# a PPP secret and a hotspot user with passwords, added over SSH: the rows show up, the passwords don't
+ppw, hpw = os.urandom(9).hex(), os.urandom(9).hex()
+ros(f'/ppp/secret/add name=tik-read-ppp password="{ppw}" service=l2tp comment="test: read"; /ip/hotspot/user/add name=tik-read-hs password="{hpw}" comment="test: read"')
+try:
+    seen = None
+    for _ in range(25):  # the snapshot is refreshed every TIK_POLL seconds (30 by default)
+        s, snap = c.call("GET", "/api/v1/snapshot")
+        if s == 200 and any(r.get("name") == "tik-read-ppp" for r in snap.get("pppSecrets", [])) and any(r.get("name") == "tik-read-hs" for r in snap.get("hotspotUsers", [])):
+            seen = snap
+            break
+        time.sleep(5)
+    check(seen is not None, "pppSecrets and hotspotUsers list the new rows")
+    if seen:
+        blob = json.dumps(seen)
+        check(ppw not in blob and hpw not in blob, "PPP secret and hotspot user passwords never reach the snapshot")
+        for k in ("pppSecrets", "hotspotUsers"):
+            check(not any("password" in r for r in seen.get(k, [])), f"{k} rows have no password field")
+finally:
+    ros('/ppp/secret/remove [find comment="test: read"]; /ip/hotspot/user/remove [find comment="test: read"]')
 
 for p in ["/api/v1/history?range=1h", "/api/v1/health/internet", "/api/v1/events", "/api/v1/alerts", "/api/v1/clients/offline", "/api/v1/flows", "/api/v1/admins", "/api/v1/retention"]:
     s, _ = c.call("GET", p)
