@@ -7,10 +7,12 @@ Read-only checks first; test anything that writes on a spare router or CHR, neve
 ## Pages (navigation)
 
 - [ ] **Topology** 🟨: a real downstream MikroTik switch and AP heard over MNDP/LLDP
+- [ ] **Hotspot Manager (loads the router's guest hotspot, vouchers, branded login page)** 🟨: run the guest portal checks below on a CHR with a client
 - [ ] **Settings → Networks (every control sends an intent: DHCP range/lease, options, mDNS, IGMP, VLAN filtering, remove)** 🟨: toggle IGMP and VLAN filtering on a CHR and let the 5-minute revert undo a lockout
 - [ ] **Settings → VPN** 🟨: connect a phone over a real WAN with WireGuard and L2TP/IPsec
 - [ ] **Settings → Security / CyberSecure (all sections on real data and intents)** 🟨: run the security checks below on a CHR
 - [ ] **Settings → Routing (add and remove port forwards, routes, DNS records)** 🟨: add, remove and revert each on a CHR; hand-made rows must have no Remove
+- [ ] **Settings → Profiles (real speed profiles, QoS rules and RADIUS servers, with remove)** 🟨: remove a speed profile, a QoS rule and a tagged RADIUS server on a CHR
 
 ## Dashboard
 
@@ -63,6 +65,11 @@ Read-only checks first; test anything that writes on a spare router or CHR, neve
 - [ ] **Simple app blocking (saved state, several apps in one batch, unblock)** 🟨: block and revert the 4 YouTube domains as one change; check apps really stop
 - [ ] **Content filtering (family, adult): add, enable/disable and remove ad-lists by URL; no built-in presets** 🟨: `set-adlist` on an https list; a blocked name stops resolving
 - [ ] **Security audit (insecure services, unrestricted management services, open DNS resolver, default admin user, UPnP, outdated RouterOS)** 🟨: check that an unrestricted service's empty `address` comes back over the API and the finding clears once restricted
+
+## Hotspot / Guest portal
+
+- [ ] **Captive portal (branded: title, message and colour written as an escaped `login.html` in its own folder)** 🟨: `/file/add` with contents over the API; whether RouterOS serves its built-in status/logout pages for files missing from `tik-guest-html`; trial and voucher logins work
+- [ ] **Guest session overview (active guests, vouchers grouped by batch with used state)** 🟨: real hotspot guests logged in; a used voucher shows uptime
 
 ## Control plane / System
 

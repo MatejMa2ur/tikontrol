@@ -12,7 +12,7 @@ Clean-room: we copy the behaviour, never the assets.
 **Backing:** `ROS` = RouterOS API on the router · `CMR` = MikroTik CMR server · `tik` = our own logic/DB · `✗` = nothing can back it
 
 <!-- progress:start -->
-**Progress:** 114 ✅ · 109 🟨 · 2 🎨 · 1 ⬜ · 8 ➖ (234 items, 50% done) · 30 🔌 waiting for a hardware test ([list](HARDWARE_TESTS.md))
+**Progress:** 114 ✅ · 111 🟨 · 0 🎨 · 1 ⬜ · 8 ➖ (234 items, 50% done) · 34 🔌 waiting for a hardware test ([list](HARDWARE_TESTS.md))
 <!-- progress:end -->
 
 ---
@@ -32,14 +32,14 @@ Clean-room: we copy the behaviour, never the assets.
 | P9 | Insights / Traffic flows | Traffic | 3 | ✅ |
 | P10 | Alarm Manager | Alerts | 2 | ✅ |
 | P11 | System Log (events, admin activity, security, updates) | Events | 1 | ✅ |
-| P12 | Hotspot Manager | Guest portal | 4 |🎨 |
+| P12 | Hotspot Manager (loads the router's guest hotspot, vouchers, branded login page) 🔌 run the guest portal checks below on a CHR with a client | Guest portal | 4 | 🟨 |
 | P13 | Settings → WiFi | Settings · WiFi | 2 |🟨 |
 | P14 | Settings → Networks (every control sends an intent: DHCP range/lease, options, mDNS, IGMP, VLAN filtering, remove) 🔌 toggle IGMP and VLAN filtering on a CHR and let the 5-minute revert undo a lockout | Settings · Networks | 3 | 🟨 |
 | P15 | Settings → Internet | Settings · Internet | 3 |🟨 |
 | P16 | Settings → VPN 🔌 connect a phone over a real WAN with WireGuard and L2TP/IPsec | Settings · VPN | 2 | 🟨 |
 | P17 | Settings → Security / CyberSecure (all sections on real data and intents) 🔌 run the security checks below on a CHR | Settings · Security | 3 | 🟨 |
 | P18 | Settings → Routing (add and remove port forwards, routes, DNS records) 🔌 add, remove and revert each on a CHR; hand-made rows must have no Remove | Settings · Routing | 2 | 🟨 |
-| P19 | Settings → Profiles | Settings · Profiles | 3 |🎨 |
+| P19 | Settings → Profiles (real speed profiles, QoS rules and RADIUS servers, with remove) 🔌 remove a speed profile, a QoS rule and a tagged RADIUS server on a CHR | Settings · Profiles | 3 | 🟨 |
 | P20 | Settings → Control Plane (admins, backups, updates, integrations, console) | Settings · System | 2 | 🟨 |
 | P21 | Settings → System (site, logging, SNMP, device auth) | Settings · System | 2 | 🟨 |
 | P22 | Site Manager (multi-site, cloud) | Sites switcher (local routers only; no cloud: tikontrol never phones home) | 4 | ✅ |
@@ -266,11 +266,11 @@ Clean-room: we copy the behaviour, never the assets.
 ## Hotspot / Guest portal
 | Feature | Backing | Phase | Status |
 |---|---|---|---|
-| Captive portal (branded) | ROS `/ip/hotspot` + custom html | 4 | 🟨 |
+| Captive portal (branded: title, message and colour written as an escaped `login.html` in its own folder) 🔌 `/file/add` with contents over the API; whether RouterOS serves its built-in status/logout pages for files missing from `tik-guest-html`; trial and voucher logins work | ROS `/ip/hotspot` + custom html | 4 | 🟨 |
 | Vouchers (create, print, expiry) | ROS User Manager | 4 | ✅ |
 | Terms acceptance / password portal | ROS hotspot | 4 | ✅ |
 | Payments (Stripe etc.) | ✗ out of scope | – | ➖ |
-| Guest session overview | ROS hotspot active | 4 | 🟨 |
+| Guest session overview (active guests, vouchers grouped by batch with used state) 🔌 real hotspot guests logged in; a used voucher shows uptime | ROS hotspot active | 4 | 🟨 |
 
 ## Control plane / System
 | Feature | Backing | Phase | Status |
