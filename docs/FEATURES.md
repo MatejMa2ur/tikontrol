@@ -140,7 +140,7 @@ Clean-room: we copy the behaviour, never the assets.
 | WiFi connectivity success (association / auth / DHCP / DNS) 🔌 real associations and auth failures in the log | tik from log + leases | 2 | 🟨 |
 | Radio link quality (CCQ buckets, channel, power, noise; needs hardware (Wi-Fi AP)) 🔌 CCQ and noise from a real AP | ROS wireless monitor | 2 | 🟨 |
 | Roaming journeys (Connectivity view) 🔌 several APs, or CMR wifi-logs | tik · CMR wifi-logs | 3 | 🟨 |
-| Coverage map / floorplan (Design Center): saved plan, drag/arrow-key AP pins, server-validated (PNG/JPEG/WebP, 200 KB, 32 APs); checked end to end in a browser (`src/scripts/ui-e2e.mjs`) | tik (manual floorplan, no RF model) | 4 | ✅ |
+| Coverage map / floorplan (Design Center): saved plan, drag/arrow-key AP pins, server-validated (PNG/JPEG/WebP, 200 KB, 32 APs); predicted Wi-Fi heatmap per band (2.4/5/6 GHz) from a log-distance model with drawn walls and materials, set scale, measured points and fit of the path-loss exponent; model and grid tested, checked end to end in a browser (`src/scripts/ui-e2e.mjs`) 🔌 calibrate on a real AP: measure 5-10 points per band, check wall losses and that linked tx power is real output | tik (floorplan + RF prediction, Web Worker) | 4 | ✅ |
 | WiFiman (client-side speed/coverage app) | ✗ | – | ➖ |
 
 ## Insights / Traffic
