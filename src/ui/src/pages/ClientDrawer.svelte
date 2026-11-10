@@ -19,6 +19,8 @@
   let draft = $state('')
 
   const sq = $derived(signalQuality(c.signal))
+  // device isolation: tikontrol's tik:isolate:<MAC> bridge filters (isolate-device / unisolate-device)
+  const isolated = $derived((raw.bridgeFilter ?? []).some((r: any) => r.comment === `tik:isolate:${c.mac}`))
   // maker/model/type improved by what the device itself said over mDNS/SSDP (untrusted, text only)
   const me = $derived(identity(c))
   const said = $derived(saidBy(c))
@@ -142,6 +144,7 @@
       <button class="btn" disabled={c.fixedIp} onclick={() => review('Fixed IP', `/ip/dhcp-server/lease/make-static [find mac-address=${c.mac}]`, { kind: 'fixed-ip', mac: c.mac })}><Icon name="pin" size={14} /> {c.fixedIp ? 'Fixed IP' : 'Fix IP'}</button>
       {#if !c.wired}<button class="btn" onclick={() => review('Reconnect client', `/interface/wireless/registration-table/remove [find mac-address=${c.mac}]`, { kind: 'kick-wifi', mac: c.mac })}><Icon name="wifi" size={14} /> Reconnect</button>{/if}
       <button class="btn" onclick={() => { trafficDraft.mac = c.mac; location.hash = '#/settings/security' }}><Icon name="shield" size={14} /> Traffic rule</button>
+      <button class="btn" onclick={() => review(isolated ? `End isolation for ${displayName(c)}` : `Isolate ${displayName(c)}`, [`/interface/bridge/filter/${isolated ? 'remove' : 'add'} … comment=tik:isolate:${c.mac}`], { kind: isolated ? 'unisolate-device' : 'isolate-device', mac: c.mac })}><Icon name="lock" size={14} /> {isolated ? 'End isolation' : 'Isolate'}</button>
       {#if blocked}
         <button class="btn" onclick={() => review(`Unblock ${displayName(c)}`, [removeCmd('block')], { kind: 'unblock-client', mac: c.mac })}><Icon name="check" size={14} /> Unblock</button>
       {:else}

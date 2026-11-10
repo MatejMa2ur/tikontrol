@@ -65,7 +65,7 @@ test('the committed sample is fictional', () => {
   assert.equal(sample.clock['time-zone-name'], 'Etc/UTC')
   assert.doesNotMatch(text, /192\.168\./)
   assert.doesNotMatch(text, /\b\d+\.\d+\.\d+\.\d+\.\d+\b/) // a broken address, not a fake one
-  assert.doesNotMatch(text, /"(host-name|comment)":\s*"(?!Speaker|dev-vm|home-server|desktop-pc|smart-hub|defconf|back-to-home-vpn|special dummy|system default)/)
+  assert.doesNotMatch(text, /"(host-name|comment)":\s*"(?!Speaker|dev-vm|home-server|desktop-pc|smart-hub|defconf|back-to-home-vpn|special dummy|system default|tik:)/)
 })
 
 test('maps RouterOS band names', () => {

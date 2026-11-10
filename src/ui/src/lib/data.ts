@@ -7,7 +7,8 @@ import { bandLabel, detectHardware, normalizeWifi, parseChannel, standardOf } fr
 import { preload } from './backend'
 import { catOf, guessDevice, isPrivateMac, makerOf, type Kind } from './identify'
 import { guestTest } from './guest'
-export type { Kind }
+import { securityAudit, type Insight } from './security'
+export type { Kind, Insight }
 
 const files = import.meta.glob('./*.json', { eager: true, import: 'default' }) as Record<string, any>
 export const simulated = new URLSearchParams(location.search).get('device') === 'be3'
@@ -44,7 +45,6 @@ export type Client = {
 }
 export type Port = { name: string; up: boolean; wan: boolean; clients: string[] }
 export type Event = { time: string; cat: 'Clients' | 'WiFi' | 'System' | 'Security' | 'Admin'; level: 'info' | 'warning' | 'error'; text: string }
-export type Insight = { level: 'ok' | 'warn' | 'bad'; title: string; detail: string; ros: string; href?: string }
 
 // ---------- helpers ----------
 export function parseUptime(v: unknown): number | undefined {
@@ -226,16 +226,14 @@ const events: Event[] = log
   .reverse()
 
 // ---------- insights: "status first" (PLAN §0.6 rule 4) ----------
-const svc: any[] = raw.services ?? []
-const insecure = svc.filter((s) => ['telnet', 'ftp', 'www'].includes(s.name) && !s.disabled).map((s) => s.name)
+// security audit: services, open DNS, admin user, UPnP, RouterOS updates (src/ui/src/lib/security.ts)
+const audit = securityAudit(raw)
 const memPct = (1 - router.memFree / router.memTotal) * 100
 const flappers = clients.filter((c) => c.roams >= 4)
 const adlist = (raw.adlist ?? [])[0]
 
 const insights: Insight[] = [
-  insecure.length
-    ? { level: 'bad', title: `${insecure.join(', ')} enabled`, detail: 'These services send your router password unencrypted. Disable them or limit them to the LAN.', ros: `/ip/service/disable ${insecure.join(',')}` }
-    : { level: 'ok', title: 'Management services secured', detail: 'No plain-text management services enabled.', ros: '/ip/service/print' },
+  ...(audit.length ? audit : [{ level: 'ok' as const, title: 'No security issues found', detail: 'Management services, DNS, users, UPnP and RouterOS version look fine.', ros: '/ip/service/print' }]),
   ...(internet.doubleNat
     ? [{ level: 'warn' as const, title: 'Double NAT', detail: `Your WAN address ${internet.wanIp} is private: there's another router (${internet.gateway}) in front. Port forwards and some games/VPNs need it in bridge mode.`, ros: '/ip/dhcp-client/print' }]
     : []),
@@ -244,9 +242,6 @@ const insights: Insight[] = [
     : []),
   ...(flappers.length
     ? [{ level: 'warn' as const, title: `${flappers.length} device${flappers.length > 1 ? 's' : ''} switching bands`, detail: `${flappers.map((c) => c.name).join(', ')} keep hopping between 2.4 and 5 GHz on the same SSID. Usually weak 5 GHz signal at their location. Open the device to see why and how to fix it.`, ros: '/interface/wireless/registration-table/print', href: flappers.length === 1 ? `#/clients/${flappers[0].mac}` : '#/clients' }]
-    : []),
-  ...(raw.update?.['latest-version'] && raw.update['installed-version'] && raw.update['latest-version'] !== raw.update['installed-version']
-    ? [{ level: 'warn' as const, title: `RouterOS ${raw.update['latest-version']} is available`, detail: `You run ${raw.update['installed-version']} on the ${raw.update.channel ?? 'stable'} channel. Read the changelog and take a backup before upgrading.`, ros: '/system/package/update/check-for-updates' }]
     : []),
   ...(router.firmware && router.firmwareUpgrade && router.firmware !== router.firmwareUpgrade
     ? [{ level: 'warn' as const, title: 'RouterBOOT upgrade pending', detail: `Firmware ${router.firmware} → ${router.firmwareUpgrade} is ready and applies on next reboot.`, ros: '/system/routerboard/upgrade' }]

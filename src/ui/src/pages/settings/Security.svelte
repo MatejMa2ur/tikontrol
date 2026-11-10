@@ -4,39 +4,102 @@
 </script>
 
 <script lang="ts">
-  import { raw, insights, adblock, clients } from '../../lib/data'
-  import { review } from '../../lib/apply.svelte'
+  import { raw, adblock, clients } from '../../lib/data'
+  import { review, type Intent } from '../../lib/apply.svelte'
   import { prefs, displayName } from '../../lib/live.svelte'
+  import { securityAudit, zoneCell, zonesOf } from '../../lib/security'
   import Icon from '../../lib/Icon.svelte'
   import Section from '../../lib/ui/Section.svelte'
   import Field from '../../lib/ui/Field.svelte'
-  import Toggle from '../../lib/ui/Toggle.svelte'
 
+  // Data is read once per mount; the page re-mounts after every apply (App.svelte), so it stays current.
   const rules: any[] = raw.filter ?? []
-  const members: any[] = raw.listMembers ?? []
-  const lists: any[] = raw.addressLists ?? []
-  const zones = [...new Set(['LAN', 'WAN', ...members.map((m) => m.list)])]
-  // zone matrix from the defconf rules: LAN→anything allowed, WAN→LAN only established/dst-nat
-  const allow = (from: string, to: string) => (from === to ? 'Allow' : from === 'WAN' ? (to === 'Router' ? 'Block' : 'Return only') : to === 'Router' && from !== 'LAN' ? 'Block' : 'Allow')
+  const lists: any[] = (raw.addressLists ?? []).filter((l: any) => !l.dynamic)
+  const sched: any[] = raw.scheduler ?? []
+  /** the part after a tikontrol tag prefix, '' when the row is not ours */
+  const tagOf = (r: any, p: string) => (typeof r?.comment === 'string' && r.comment.startsWith(p) ? r.comment.slice(p.length) : '')
+  const count = (list: string) => lists.filter((l) => l.list === list).length
+  const BATCH = 8 // most intents one batch holds (src/server/src/apply.rs)
+  /** one intent, or a batch of up to 8 */
+  const send = (title: string, cmds: string[], parts: Intent[]) => review(title, cmds, parts.length === 1 ? parts[0] : { kind: 'batch', title, intents: parts })
 
-  const desc = (r: any) => [r.protocol, r['dst-port'] && `port ${r['dst-port']}`, r['connection-state'], r['in-interface-list'] && `from ${r['in-interface-list']}`].filter(Boolean).join(' · ') || 'any'
+  // ---------- audit ----------
+  const audit = securityAudit(raw)
+
+  // ---------- zones: from the real rules (src/ui/src/lib/security.ts) ----------
+  const zones = zonesOf(raw.listMembers ?? [])
+  const fallback = (from: string, to: string) => zoneCell(rules.filter((r) => r.comment !== `tik:zone:${from}:${to}`), from, to).effect
+  function setZone(from: string, to: string, e: Event) {
+    const sel = e.currentTarget as HTMLSelectElement, policy = sel.value
+    sel.value = zoneCell(rules, from, to).policy // the page re-mounts with the new state after apply
+    const c = `tik:zone:${from}:${to}`
+    review(`Zone ${from} → ${to}: ${policy}`, [`/ip/firewall/filter/remove [find comment="${c}"]`, ...(policy === 'default' ? [] : [`/ip/firewall/filter/add chain=forward in-interface-list=${from} out-interface-list=${to}${policy === 'block' ? ' connection-state=new action=drop' : ' action=accept'} comment=${c} place-before=0`])],
+      { kind: 'zone-policy', from, to, policy })
+  }
+
+  // ---------- firewall rules ----------
+  const desc = (r: any) => [r.protocol, r['src-address'] ?? r['src-address-list'] ?? (r['in-interface-list'] && `from ${r['in-interface-list']}`), (r['dst-address'] ?? r['dst-address-list'] ?? r['out-interface-list']) && `to ${r['dst-address'] ?? r['dst-address-list'] ?? r['out-interface-list']}`,
+    r['dst-port'] && `port ${r['dst-port']}`, r['connection-state'], r['tls-host'] && `TLS ${r['tls-host']}`].filter(Boolean).join(' · ') || 'any'
+  // an address, a/n or a-b goes as an address; anything else names an IP group
+  const isAddr = (s: string) => /^[\d./-]+$/.test(s.trim())
+  const where = (k: 'src' | 'dst', v: string) => (!v.trim() ? {} : isAddr(v) ? { [k]: v.trim() } : { [`${k}_list`]: v.trim() })
   let rule = $state({ name: '', action: 'drop', src: '', dst: '', port: '', proto: 'tcp' })
-  let geo = $state({ countries: '' })
-  // one intent per country (a batch holds at most 8); the server checks the codes again
-  const geoIntents = () => [...new Set(geo.countries.split(',').map((c) => c.trim().toUpperCase()).filter((c) => /^[A-Z]{2}$/.test(c)))].slice(0, 8)
-    .map((c) => ({ kind: 'region-block', country: c, url: `https://www.ipdeny.com/ipblocks/data/aggregated/${c.toLowerCase()}-aggregated.zone` }))
-  let group = $state({ name: '', items: '' })
-  let apps = $state<Record<string, boolean>>({ 'TikTok': false, 'Facebook': false, 'Steam': false, 'Netflix': false })
-  const APPDOM: Record<string, string> = { TikTok: 'tiktok.com', Facebook: 'facebook.com', Steam: 'steampowered.com', Netflix: 'netflix.com' }
-  const audit = insights.filter((i) => i.level !== 'ok')
+  const ruleIntent = () => ({ kind: 'firewall-rule', name: rule.name.trim(), action: rule.action, protocol: rule.proto, ...where('src', rule.src), ...where('dst', rule.dst), dst_port: rule.proto === 'icmp' ? '' : rule.port.trim() })
+  let inp = $state({ name: '', action: 'accept', src: '', port: '', proto: 'tcp' })
+  const inpIntent = () => ({ kind: 'input-rule', name: inp.name.trim(), action: inp.action, protocol: inp.proto, ...where('src', inp.src), dst_port: inp.proto === 'icmp' ? '' : inp.port.trim() })
+  const removeRule = (r: any) => {
+    const fw = tagOf(r, 'tik:fw:'), name = fw || tagOf(r, 'tik:input:')
+    review(fw ? `Remove firewall rule ${name}` : `Remove router access rule ${name}`, [`/ip/firewall/filter/remove [find comment="${r.comment}"]`], { kind: fw ? 'remove-firewall-rule' : 'remove-input-rule', name })
+  }
 
-  // Traffic rules: everything tagged tik:rule:<name> (filter rules and simple queues), grouped by name
-  const DAYS = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat']
+  // ---------- block apps: tik:app:<domain> DNS entries (src/server/src/intents/security.rs, block-domain) ----------
   const APPSETS: Record<string, string[]> = {
     YouTube: ['youtube.com', 'googlevideo.com', 'ytimg.com', 'youtu.be'], TikTok: ['tiktok.com', 'tiktokcdn.com', 'tiktokv.com'],
     Instagram: ['instagram.com', 'cdninstagram.com'], Facebook: ['facebook.com', 'fbcdn.net'], Netflix: ['netflix.com', 'nflxvideo.net'],
     Roblox: ['roblox.com', 'rbxcdn.com'], Steam: ['steampowered.com', 'steamcommunity.com'],
   }
+  const blockedDomains = [...new Set((raw.dnsStatic ?? []).map((r: any) => tagOf(r, 'tik:app:')).filter(Boolean))] as string[]
+  const isBlocked = (d: string) => blockedDomains.includes(d)
+  const appState = (a: string) => (APPSETS[a].every(isBlocked) ? 'on' : APPSETS[a].some(isBlocked) ? 'partly' : 'off')
+  let apps = $state<Record<string, boolean>>(Object.fromEntries(Object.keys(APPSETS).map((a) => [a, appState(a) === 'on'])))
+  let customDomain = $state('')
+  // the change from what the router has now: block what's missing for apps turned on, unblock apps turned off
+  const appIntents = (): Intent[] => {
+    const block = new Set<string>(), unblock = new Set<string>()
+    for (const a of Object.keys(APPSETS)) {
+      if (apps[a]) APPSETS[a].filter((d) => !isBlocked(d)).forEach((d) => block.add(d))
+      else if (appState(a) === 'on') APPSETS[a].forEach((d) => unblock.add(d))
+    }
+    const d = customDomain.trim().toLowerCase()
+    if (d && !isBlocked(d)) block.add(d)
+    return [...[...block].map((domain) => ({ kind: 'block-domain', domain, tls: true })), ...[...unblock].map((domain) => ({ kind: 'unblock-domain', domain }))]
+  }
+  const unblock = (d: string) => review(`Unblock ${d}`, [`/ip/firewall/filter/remove [find comment="tik:app:${d}"]`, `/ip/dns/static/remove [find comment="tik:app:${d}"]`], { kind: 'unblock-domain', domain: d })
+
+  // ---------- ad blocking / content filtering ----------
+  const adlists: any[] = raw.adlist ?? []
+  let adUrl = $state('')
+
+  // ---------- region blocking, threat feeds, IP groups (all tagged tik:) ----------
+  let geo = $state({ countries: '' })
+  // one intent per country (a batch holds at most 8); the server checks the codes again
+  const geoIntents = () => [...new Set(geo.countries.split(',').map((c) => c.trim().toUpperCase()).filter((c) => /^[A-Z]{2}$/.test(c)))].slice(0, BATCH)
+    .map((c) => ({ kind: 'region-block', country: c, url: `https://www.ipdeny.com/ipblocks/data/aggregated/${c.toLowerCase()}-aggregated.zone` }))
+  const regions = sched.map((s) => tagOf(s, 'tik:geo:')).filter(Boolean)
+  const feeds = sched.map((s) => tagOf(s, 'tik:threat:')).filter(Boolean)
+  const SPAMHAUS = 'spamhaus-drop'
+  const groups = [...new Set(lists.map((l) => tagOf(l, 'tik:group:')).filter(Boolean))]
+  // lists tikontrol doesn't manage (yours, or other tools'): shown, not changed
+  const others = [...new Set(lists.filter((l) => !String(l.comment ?? '').startsWith('tik:') && !String(l.list).startsWith('tik-')).map((l) => l.list as string))]
+  let group = $state({ name: '', items: '' })
+
+  // ---------- device isolation: tik:isolate:<MAC> bridge filters ----------
+  const isolated = [...new Set((raw.bridgeFilter ?? []).map((r: any) => tagOf(r, 'tik:isolate:')).filter(Boolean))] as string[]
+  const nameOf = (mac: string) => { const c = clients.find((x) => x.mac === mac); return c ? displayName(c) : mac }
+  let isoMac = $state('')
+
+  // Traffic rules: everything tagged tik:rule:<name> (filter rules and simple queues), grouped by name
+  const DAYS = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat']
   const gslug = (n: string) => n.trim().replace(/[^A-Za-z0-9_-]+/g, '-').slice(0, 32)
   // RouterOS prints `22h-23h59m59s,mon` or `22:00:00-...`: back to HH:MM
   const hhmm = (t: string) => { if (t.includes(':')) return t.slice(0, 5).padStart(5, '0'); const h = +(t.match(/(\d+)h/)?.[1] ?? 0), m = +(t.match(/(\d+)m/)?.[1] ?? 0); return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}` }
@@ -79,29 +142,54 @@
   const saveRule = () => review(`Traffic rule ${tr.name}`, [`# traffic rule ${tr.name}: ${whatDo(tr)} for ${who(tr)}, ${whenStr(tr)} (the tikontrol server compiles the commands)`], trIntent(tr))
 </script>
 
-<Section title="Security audit" desc="Things on this router worth fixing." ros="/ip/service/print">
-  {#each audit as a}<div class="row audit"><Icon name="alert" size={14} /><b>{a.title}</b><span class="muted small">{a.detail}</span></div>{:else}<div class="muted small">No issues found.</div>{/each}
+<Section title="Security audit" desc="Things on this router worth fixing." ros="/ip/service/print; /ip/dns/print; /user/print; /ip/upnp/print; /system/package/update/print">
+  {#each audit as a}<div class="row audit {a.level}"><Icon name="alert" size={14} /><b>{a.title}</b><span class="muted small grow">{a.detail}</span>
+    {#if a.fix}{@const f = a.fix}<button class="btn small" onclick={() => review(f.title, [a.ros], f.intent)}>{f.label}…</button>{/if}</div>
+  {:else}<div class="muted small">No issues found.</div>{/each}
 </Section>
 
-<Section title="Zones" desc="Interface lists act as zones. Default policy between zones:" ros="/interface/list/member/print">
-  <table class="matrix"><thead><tr><th>From \ To</th>{#each [...zones, 'Router'] as z}<th>{z}</th>{/each}</tr></thead>
-    <tbody>{#each zones as f}<tr class="nohover"><td><b>{f}</b></td>{#each [...zones, 'Router'] as t}{@const v = allow(f, t)}<td><span class="pill" class:ok={v === 'Allow'} class:bad={v === 'Block'}>{v}</span></td>{/each}</tr>{/each}</tbody></table>
+<Section title="Zones" desc="Interface lists act as zones. What new connections from a zone (row) to another (column) get. Default = what your other firewall rules do; Allow or Block adds a tikontrol rule first in the forward chain." ros="/interface/list/member/print; /ip/firewall/filter/print where comment~&quot;tik:zone:&quot;">
+  {#if zones.length < 2}<div class="muted small">Zones need at least two interface lists with members (/interface/list).</div>
+  {:else}
+  <div class="scroll"><table class="matrix"><thead><tr><th scope="col">From \ To</th>{#each zones as z}<th scope="col">{z}</th>{/each}<th scope="col">Router</th></tr></thead>
+    <tbody>{#each zones as f}{@const rc = zoneCell(rules, f, 'Router')}<tr class="nohover"><th scope="row">{f}</th>
+      {#each zones as t}<td>{#if f === t}<span class="muted">—</span>{:else}{@const c = zoneCell(rules, f, t)}
+        <span class="pill" class:ok={c.effect === 'Allow'} class:bad={c.effect === 'Block'} title={c.why}>{c.effect}</span>
+        <select class="zsel" aria-label="{f} to {t}" value={c.policy} onchange={(e) => setZone(f, t, e)}>
+          <option value="default">Default ({fallback(f, t)})</option><option value="allow">Allow</option><option value="block">Block</option></select>
+        <span class="muted tiny why">{c.why}</span>{/if}</td>{/each}
+      <td><span class="pill" class:ok={rc.effect === 'Allow'} class:bad={rc.effect === 'Block'} title={rc.why}>{rc.effect}</span><span class="muted tiny why">{rc.why}</span></td></tr>{/each}</tbody></table></div>
+  <div class="muted tiny">Router = connections to the router itself (input chain), read only here: change it with router access rules below. Interfaces in several lists can make a cell approximate.</div>
+  {/if}
 </Section>
 
-<Section title="Firewall rules" desc="{rules.length} rules, in order. tikontrol adds its own rules tagged tik:." ros="/ip/firewall/filter/print">
-  <table>
-    <thead><tr><th>#</th><th>Chain</th><th>Action</th><th>Match</th><th>Comment</th></tr></thead>
-    <tbody>{#each rules as r, i}<tr class="nohover" class:off={r.disabled}><td>{i}</td><td>{r.chain}</td><td><span class="pill" class:bad={r.action === 'drop' || r.action === 'reject'} class:ok={r.action === 'accept'}>{r.action}</span></td><td class="small">{desc(r)}</td><td class="muted small">{r.comment ?? ''}</td></tr>{/each}</tbody>
-  </table>
+<Section title="Firewall rules" desc="{rules.length} rules, in order. tikontrol's own rules (tagged tik:fw: and tik:input:) can be removed here." ros="/ip/firewall/filter/print">
+  <div class="scroll"><table>
+    <thead><tr><th>#</th><th>Chain</th><th>Action</th><th>Match</th><th>Comment</th><th><span class="sr">Actions</span></th></tr></thead>
+    <tbody>{#each rules as r, i}<tr class="nohover" class:off={r.disabled}><td>{i}</td><td>{r.chain}</td><td><span class="pill" class:bad={r.action === 'drop' || r.action === 'reject'} class:ok={r.action === 'accept'}>{r.action}</span></td><td class="small">{desc(r)}</td><td class="muted small">{r.comment ?? ''}</td>
+      <td class="r0">{#if tagOf(r, 'tik:fw:') || tagOf(r, 'tik:input:')}<button class="btn small" onclick={() => removeRule(r)}>Remove</button>{/if}</td></tr>{/each}</tbody>
+  </table></div>
+  <h4>Add a forward rule</h4>
   <div class="add">
-    <input type="text" bind:value={rule.name} placeholder="Rule name" />
-    <select bind:value={rule.action}><option>drop</option><option>accept</option><option>reject</option></select>
-    <input type="text" bind:value={rule.src} placeholder="Source IP / group" />
-    <input type="text" bind:value={rule.dst} placeholder="Destination" />
-    <select bind:value={rule.proto}><option>tcp</option><option>udp</option><option>icmp</option></select>
-    <input type="text" bind:value={rule.port} placeholder="Port" style="width:80px" />
-    <button class="btn primary" disabled={!rule.name} onclick={() => review(`Firewall rule ${rule.name}`, [`/ip/firewall/filter/add chain=forward action=${rule.action} protocol=${rule.proto}${rule.src ? ` src-address=${rule.src}` : ''}${rule.dst ? ` dst-address=${rule.dst}` : ''}${rule.port ? ` dst-port=${rule.port}` : ''} comment="tik:fw:${rule.name}"`], { kind: 'firewall-rule', name: rule.name, action: rule.action, protocol: rule.proto, src: rule.src, dst: rule.dst, dst_port: rule.proto === 'icmp' ? '' : rule.port })}><Icon name="plus" size={14} /> Add</button>
+    <input type="text" bind:value={rule.name} placeholder="Rule name" aria-label="Rule name" maxlength="32" />
+    <select bind:value={rule.action} aria-label="Action"><option>drop</option><option>accept</option><option>reject</option></select>
+    <input type="text" bind:value={rule.src} placeholder="Source IP or IP group" aria-label="Source" />
+    <input type="text" bind:value={rule.dst} placeholder="Destination IP or IP group" aria-label="Destination" />
+    <select bind:value={rule.proto} aria-label="Protocol"><option>tcp</option><option>udp</option><option>icmp</option></select>
+    <input type="text" bind:value={rule.port} placeholder="Port" aria-label="Port" style="width:80px" disabled={rule.proto === 'icmp'} />
+    <button class="btn primary" disabled={!rule.name.trim()} onclick={() => review(`Firewall rule ${rule.name}`, [`# /ip/firewall/filter/add chain=forward action=${rule.action} protocol=${rule.proto} … comment=tik:fw:${rule.name} (first in the chain)`], ruleIntent())}><Icon name="plus" size={14} /> Add</button>
   </div>
+  <h4 id="input-rules">Router access rules (input chain)</h4>
+  <div class="warnbox small" role="note"><Icon name="alert" size={14} /> High risk: these rules decide who can reach the router itself, including WinBox, SSH, WebFig and the API tikontrol uses. A wrong rule locks you and tikontrol out. If that happens, wait: Safe apply removes the rule by itself after 5 minutes.</div>
+  <div class="add">
+    <input type="text" bind:value={inp.name} placeholder="Rule name" aria-label="Router access rule name" maxlength="32" />
+    <select bind:value={inp.action} aria-label="Router access action"><option>accept</option><option>drop</option><option>reject</option></select>
+    <input type="text" bind:value={inp.src} placeholder="Source IP or IP group" aria-label="Router access source" />
+    <select bind:value={inp.proto} aria-label="Router access protocol"><option>tcp</option><option>udp</option><option>icmp</option></select>
+    <input type="text" bind:value={inp.port} placeholder="Port, e.g. 8291" aria-label="Router access port" style="width:110px" disabled={inp.proto === 'icmp'} />
+    <button class="btn primary" disabled={!inp.name.trim() || (inp.action !== 'accept' && !inp.src.trim() && !(inp.proto !== 'icmp' && inp.port.trim()))} onclick={() => review(`Router access rule ${inp.name}`, [`# /ip/firewall/filter/add chain=input action=${inp.action} protocol=${inp.proto} … comment=tik:input:${inp.name} (first in the chain)`], inpIntent())}><Icon name="plus" size={14} /> Add</button>
+  </div>
+  {#if inp.action !== 'accept'}<div class="muted tiny">A drop or reject rule needs a source or a port: dropping everything would lock you out.</div>{/if}
 </Section>
 
 <Section id="traffic-rules" title="Traffic rules" desc="Block internet, block apps and domains, or limit speed for a client, a client group or a network, optionally on a schedule." ros="/ip/firewall/filter/print where comment~&quot;tik:rule:&quot;; /queue/simple/print where comment~&quot;tik:rule:&quot;">
@@ -137,38 +225,81 @@
     <button class="btn primary" disabled={!tr.name.trim() || !tr.value.trim() || (tr.action === 'limit' && !tr.down.trim()) || (tr.action === 'domains' && !tr.domains.trim()) || !tr.from !== !tr.to} onclick={saveRule}>Review & apply</button></div>
 </Section>
 
-<Section title="Block apps" desc="Domain-based blocking (DNS + TLS SNI). True per-app detection needs CMR.">
-  <div class="apps">{#each Object.keys(apps) as a}<label class="row"><Toggle bind:checked={apps[a]} label={a} /> {a}</label>{/each}</div>
-  <div class="r"><button class="btn primary" onclick={() => { const on = Object.entries(apps).filter(([, v]) => v).map(([a]) => APPDOM[a]); review('App blocking', on.flatMap((d) => [`/ip/dns/static/add name=${d} type=NXDOMAIN match-subdomain=yes comment=tik:app:${d}`, `/ip/firewall/filter/add chain=forward protocol=tcp dst-port=443 tls-host=*.${d} action=reject reject-with=tcp-reset comment=tik:app:${d}`]), on.length === 1 ? { kind: 'block-domain', domain: on[0], tls: true } : undefined) }}>Review & apply</button></div>
+
+<Section title="Block apps" desc="Domain-based blocking (DNS + TLS SNI) for every device. True per-app detection needs CMR. For one client or a schedule, use a traffic rule above." ros="/ip/dns/static/print where comment~&quot;tik:app:&quot;">
+  <div class="apps">{#each Object.keys(APPSETS) as a}<label class="row"><input type="checkbox" bind:checked={apps[a]} /> {a}{#if appState(a) === 'partly'}<span class="muted tiny">(partly blocked)</span>{/if}</label>{/each}</div>
+  <Field label="Other domain" help="Subdomains are included"><input type="text" bind:value={customDomain} placeholder="example.com" aria-label="Other domain to block" /></Field>
+  {#if appIntents().length > BATCH}<div class="muted tiny">That is {appIntents().length} domain changes; one apply holds at most {BATCH}. Apply some apps first.</div>{/if}
+  <div class="r"><button class="btn primary" disabled={!appIntents().length || appIntents().length > BATCH} onclick={() => { const parts = appIntents(); send('App blocking', parts.map((i) => `# ${i.kind} ${i.domain}`), parts) }}>Review & apply</button></div>
+  {#if blockedDomains.length}
+    <table><thead><tr><th>Blocked domain</th><th><span class="sr">Actions</span></th></tr></thead>
+      <tbody>{#each blockedDomains as d}<tr class="nohover"><td class="mono small">{d}</td><td class="r0"><button class="btn small" onclick={() => unblock(d)}>Unblock</button></td></tr>{/each}</tbody></table>
+  {/if}
 </Section>
 
-<Section title="Ad blocking" desc="RouterOS DNS adlist." ros="/ip/dns/adlist/print">
+<Section title="Ad blocking & content filtering" desc="RouterOS DNS adlists: every name in a list resolves to nothing. Add an ad-block, family or adult-content list by its https URL (hosts format)." ros="/ip/dns/adlist/print">
   <Field label="Blocked names"><span>{adblock.names.toLocaleString()} · {adblock.hits.toLocaleString()} blocked lookups</span></Field>
+  {#if adlists.length}
+    <div class="scroll"><table><thead><tr><th>List</th><th>Names</th><th>Blocked</th><th>Status</th><th><span class="sr">Actions</span></th></tr></thead>
+      <tbody>{#each adlists as l}<tr class="nohover" class:off={l.disabled}><td class="mono small url">{l.url ?? '(local file)'}</td><td>{(l['name-count'] ?? 0).toLocaleString()}</td><td>{(l['match-count'] ?? 0).toLocaleString()}</td>
+        <td><span class="pill" class:ok={!l.disabled}>{l.disabled ? 'Off' : 'On'}</span></td>
+        <td class="r0">{#if l.url}<button class="btn small" onclick={() => review(`${l.disabled ? 'Enable' : 'Disable'} ad-block list`, [`/ip/dns/adlist/set [find url="${l.url}"] disabled=${l.disabled ? 'no' : 'yes'}`], { kind: 'set-adlist', url: l.url, disabled: !l.disabled })}>{l.disabled ? 'Enable' : 'Disable'}</button>
+          <button class="btn small" onclick={() => review('Remove content filter list', [`/ip/dns/adlist/remove [find url="${l.url}"]`], { kind: 'remove-adlist', url: l.url })}>Remove</button>{/if}</td></tr>{/each}</tbody></table></div>
+  {:else}<div class="muted small">No lists yet.</div>{/if}
+  <div class="add"><input type="url" bind:value={adUrl} placeholder="https://… hosts list" aria-label="List URL" style="flex:1" />
+    <button class="btn primary" disabled={!adUrl.trim().startsWith('https://')} onclick={() => review('Add content filter list', [`/ip/dns/adlist/add url=${adUrl.trim()} ssl-verify=yes`], { kind: 'add-adlist', url: adUrl.trim() })}><Icon name="plus" size={14} /> Add</button></div>
 </Section>
 
-<Section title="Region blocking" desc="Drop traffic from countries. Uses address lists filled from a GeoIP feed.">
-  <Field label="Countries" help="ISO codes, comma separated"><input type="text" bind:value={geo.countries} placeholder="e.g. KP, IR" /></Field>
-  <div class="r"><button class="btn primary" disabled={!geoIntents().length} onclick={() => { const parts = geoIntents(); review('Region blocking', parts.map((i) => `# block ${i.country} from ${i.url}`), parts.length === 1 ? parts[0] : { kind: 'batch', title: 'Region blocking', intents: parts }) }}>Review & apply</button></div>
+<Section title="Region blocking" desc="Drop traffic to and from countries. Address lists filled daily from the ipdeny.com GeoIP feed." ros="/system/scheduler/print where comment~&quot;tik:geo:&quot;">
+  {#if regions.length}
+    <table><thead><tr><th>Country</th><th>Addresses loaded</th><th><span class="sr">Actions</span></th></tr></thead>
+      <tbody>{#each regions as cc}<tr class="nohover"><td><b>{cc}</b></td><td>{count(`tik-geo-${cc}`).toLocaleString()}</td>
+        <td class="r0"><button class="btn small" onclick={() => review(`Unblock region ${cc}`, [`/system/scheduler/remove [find comment="tik:geo:${cc}"]`, `/system/script/remove [find comment="tik:geo:${cc}"]`, `/ip/firewall/raw/remove [find comment="tik:geo:${cc}"]`, `/ip/firewall/address-list/remove [find comment="tik:geo:${cc}"]`], { kind: 'remove-region-block', country: cc })}>Remove</button></td></tr>{/each}</tbody></table>
+  {/if}
+  <Field label="Block countries" help="ISO codes, comma separated, up to {BATCH} at once"><input type="text" bind:value={geo.countries} placeholder="e.g. KP, IR" aria-label="Countries to block" /></Field>
+  <div class="r"><button class="btn primary" disabled={!geoIntents().length} onclick={() => { const parts = geoIntents(); send('Region blocking', parts.map((i) => `# block ${i.country} from ${i.url}`), parts) }}>Review & apply</button></div>
 </Section>
 
-<Section title="IP & port groups" desc="Reusable lists for rules." ros="/ip/firewall/address-list/print">
-  {#if !lists.length}<div class="muted small">No address lists yet.</div>{/if}
-  {#each lists as l}<div class="mono small">{l.list}: {l.address}</div>{/each}
-  <div class="add"><input type="text" bind:value={group.name} placeholder="Group name" /><input type="text" bind:value={group.items} placeholder="IPs, comma separated" style="flex:1" />
-    <button class="btn primary" disabled={!group.name} onclick={() => review(`Group ${group.name}`, group.items.split(',').map((ip) => `/ip/firewall/address-list/add list=${group.name} address=${ip.trim()} comment=tik:group:${group.name}`), { kind: 'address-group', name: group.name, addresses: group.items.split(',').map((ip) => ip.trim()).filter(Boolean) })}><Icon name="plus" size={14} /> Add</button></div>
+<Section title="IP groups" desc="Reusable address lists for rules: type a group name as the source or destination of a firewall rule." ros="/ip/firewall/address-list/print">
+  {#each groups as g}{@const rows = lists.filter((l) => l.comment === `tik:group:${g}`)}
+    <div class="row grp"><b>{g}</b><span class="mono small grow">{rows.map((l) => l.address).join(', ')}</span>
+      <button class="btn small" onclick={() => review(`Remove IP group ${g}`, [`/ip/firewall/address-list/remove [find comment="tik:group:${g}"]`], { kind: 'remove-address-group', name: g })}>Remove</button></div>
+  {/each}
+  {#each others as o}<div class="row grp"><b>{o}</b><span class="muted small grow">{count(o)} address{count(o) === 1 ? '' : 'es'} · not made by tikontrol</span></div>{/each}
+  {#if !groups.length && !others.length}<div class="muted small">No address lists yet.</div>{/if}
+  <div class="add"><input type="text" bind:value={group.name} placeholder="Group name" aria-label="Group name" maxlength="32" /><input type="text" bind:value={group.items} placeholder="IPs, networks or ranges, comma separated" aria-label="Group addresses" style="flex:1" />
+    <button class="btn primary" disabled={!group.name.trim() || !group.items.trim()} onclick={() => { const addresses = group.items.split(',').map((ip) => ip.trim()).filter(Boolean); review(`Group ${group.name}`, addresses.map((ip) => `/ip/firewall/address-list/add list=${group.name.trim()} address=${ip} comment=tik:group:${group.name.trim()}`), { kind: 'address-group', name: group.name.trim(), addresses }) }}><Icon name="plus" size={14} /> Add</button></div>
+  <div class="muted tiny">Port groups are not offered: RouterOS has no port lists, so rules take ports directly.</div>
+</Section>
+
+<Section title="Device isolation" desc="Stop a device from talking to other devices on the same bridge. It keeps internet access." ros="/interface/bridge/filter/print where comment~&quot;tik:isolate:&quot;">
+  {#each isolated as m}<div class="row grp"><b>{nameOf(m)}</b><span class="mono small grow">{m}</span>
+    <button class="btn small" onclick={() => review(`End isolation for ${nameOf(m)}`, [`/interface/bridge/filter/remove [find comment="tik:isolate:${m}"]`], { kind: 'unisolate-device', mac: m })}>End isolation</button></div>
+  {:else}<div class="muted small">No isolated devices.</div>{/each}
+  <div class="add"><select bind:value={isoMac} aria-label="Device to isolate"><option value="">Device…</option>{#each clients.filter((c) => !isolated.includes(c.mac)) as c}<option value={c.mac}>{displayName(c)} · {c.mac}</option>{/each}</select>
+    <button class="btn primary" disabled={!isoMac} onclick={() => review(`Isolate ${nameOf(isoMac)}`, [`/interface/bridge/filter/add chain=forward src-mac-address=${isoMac}/FF:FF:FF:FF:FF:FF action=drop comment=tik:isolate:${isoMac}`, `/interface/bridge/filter/add chain=forward dst-mac-address=${isoMac}/FF:FF:FF:FF:FF:FF action=drop comment=tik:isolate:${isoMac}`], { kind: 'isolate-device', mac: isoMac })}>Isolate</button></div>
 </Section>
 
 <Section title="Threat management">
   <Field label="IDS / IPS" na="Not available in RouterOS (no Suricata on this hardware)"><span></span></Field>
   <Field label="Honeypot" na="Not available in RouterOS"><span></span></Field>
-  <Field label="Threat feeds" help="Drop known-bad IPs (Spamhaus DROP)"><button class="btn" onclick={() => review('Threat feed', ['# Spamhaus DROP list, refreshed daily'], { kind: 'threat-feed', name: 'spamhaus-drop', url: 'https://www.spamhaus.org/drop/drop.txt' })}>Enable</button></Field>
+  <Field label="Threat feed" help="Drop known-bad IPs (Spamhaus DROP), refreshed daily">
+    {#if feeds.includes(SPAMHAUS)}<span class="pill ok">On</span> <span class="muted small">{count(`tik-threat-${SPAMHAUS}`).toLocaleString()} addresses</span>
+      <button class="btn small" onclick={() => review('Remove threat feed', [`# remove the ${SPAMHAUS} script, schedule, raw rules and address list (tik:threat:${SPAMHAUS})`], { kind: 'remove-threat-feed', name: SPAMHAUS })}>Turn off</button>
+    {:else}<span class="pill">Off</span> <button class="btn" onclick={() => review('Threat feed', ['# Spamhaus DROP list, refreshed daily'], { kind: 'threat-feed', name: SPAMHAUS, url: 'https://www.spamhaus.org/drop/drop.txt' })}>Turn on</button>{/if}
+  </Field>
+  {#each feeds.filter((f) => f !== SPAMHAUS) as f}<Field label="Feed {f}"><span class="pill ok">On</span> <span class="muted small">{count(`tik-threat-${f}`).toLocaleString()} addresses</span>
+    <button class="btn small" onclick={() => review(`Remove threat feed ${f}`, [`# remove tik:threat:${f}`], { kind: 'remove-threat-feed', name: f })}>Remove</button></Field>{/each}
 </Section>
 
 <style>
-  .audit { gap: 8px; padding: 6px 0; color: var(--warn); flex-wrap: wrap; }
+  .audit { gap: 8px; padding: 6px 0; flex-wrap: wrap; color: var(--warn); }
+  .audit.bad { color: var(--bad); }
   .audit b { color: var(--text); }
+  .grow { flex: 1; min-width: 0; }
   .add { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 10px; }
   .apps { display: flex; gap: 18px; flex-wrap: wrap; }
+  .apps .row { gap: 6px; }
   .off { opacity: .45; }
   .days { display: flex; gap: 2px; }
   .day { padding: 4px 7px; border: 1px solid var(--line); background: var(--panel2); border-radius: 6px; cursor: pointer; font-size: 12px; color: var(--muted); }
@@ -177,4 +308,12 @@
   .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
   .r { text-align: right; margin-top: 10px; }
   .small { font-size: 12px; }
+  .scroll { overflow-x: auto; }
+  .matrix td { vertical-align: top; }
+  .zsel { display: block; margin-top: 4px; font-size: 12px; }
+  .why { display: block; max-width: 160px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .url { max-width: 360px; overflow-wrap: anywhere; }
+  .grp { gap: 10px; padding: 6px 0; border-top: 1px solid var(--line); }
+  h4 { margin: 16px 0 4px; font-size: 13px; }
+  .warnbox { display: flex; gap: 8px; align-items: center; padding: 8px 10px; border-radius: 8px; background: color-mix(in srgb, var(--warn) 14%, transparent); color: var(--warn); margin: 8px 0; }
 </style>

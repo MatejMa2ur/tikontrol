@@ -901,6 +901,13 @@
    "disabled": false,
    "name": "router.lan",
    "type": "A"
+  },
+  {
+   ".id": "*6A",
+   "comment": "tik:app:tiktok.com",
+   "disabled": false,
+   "name": "tiktok.com",
+   "type": "NXDOMAIN"
   }
  ],
  "dnsCfg": {
@@ -1017,7 +1024,16 @@
    ]
   }
  ],
- "scheduler": [],
+ "scheduler": [
+  {
+   ".id": "*A1",
+   "comment": "tik:threat:spamhaus-drop",
+   "disabled": false,
+   "interval": "1d",
+   "name": "tik-threat-spamhaus-drop",
+   "start-time": "startup"
+  }
+ ],
  "clock": {
   "time-zone-name": "Etc/UTC",
   "date": "2026-01-15",
@@ -1235,7 +1251,22 @@
    "type": "backup"
   }
  ],
- "addressLists": [],
+ "addressLists": [
+  {
+   ".id": "*B1",
+   "address": "10.12.0.20",
+   "comment": "tik:group:servers",
+   "dynamic": false,
+   "list": "servers"
+  },
+  {
+   ".id": "*B2",
+   "address": "10.12.0.21",
+   "comment": "tik:group:servers",
+   "dynamic": false,
+   "list": "servers"
+  }
+ ],
  "etherStats": [
   {
    ".id": "*7F",
@@ -1812,5 +1843,6 @@
    "ms": 8.0,
    "loss": 0
   }
- }
+ },
+ "bridgeFilter": []
 }

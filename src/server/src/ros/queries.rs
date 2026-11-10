@@ -63,7 +63,7 @@ const QUERIES: &[Q] = &[
     q("bridgeHosts", "/interface/bridge/host/print", &["mac-address", "interface", "on-interface", "local"]),
     one("dns", "/ip/dns/print", &["cache-size", "cache-used"]),
     q("adlist", "/ip/dns/adlist/print", &["url", "name-count", "match-count", "disabled"]),
-    q("filter", "/ip/firewall/filter/print", &["chain", "action", "comment", "disabled", "in-interface-list", "connection-state", "src-mac-address", "src-address", "src-address-list", "protocol", "tls-host", "time"]).arrays(&["connection-state"]),
+    q("filter", "/ip/firewall/filter/print", &["chain", "action", "comment", "disabled", "in-interface-list", "connection-state", "src-mac-address", "src-address", "src-address-list", "protocol", "tls-host", "time", "out-interface-list", "dst-address", "dst-address-list", "dst-port"]).arrays(&["connection-state"]),
     q("nat", "/ip/firewall/nat/print", &["chain", "action", "protocol", "dst-port", "to-addresses", "to-ports", "comment", "disabled"]),
     q("addresses", "/ip/address/print", &["address", "interface", "comment"]),
     q("linkQuality", "/interface/wireless/registration-table/print", &["mac-address", "tx-ccq", "p-throughput"]),
@@ -109,6 +109,8 @@ const QUERIES: &[Q] = &[
     q("dhcpOptions", "/ip/dhcp-server/option/print", &["name", "code", "value", "comment"]),
     q("vlans", "/interface/vlan/print", &["name", "vlan-id", "interface", "comment"]),
     q("bridges", "/interface/bridge/print", &["name", "vlan-filtering", "protocol-mode", "igmp-snooping", "comment"]),
+    // device isolation (tik:isolate:<mac>) lives here
+    q("bridgeFilter", "/interface/bridge/filter/print", &["chain", "action", "src-mac-address", "dst-mac-address", "disabled", "comment"]),
     q("bridgePorts", "/interface/bridge/port/print", &["interface", "bridge", "pvid", "frame-types", "hw", "disabled", "comment", "edge", "bpdu-guard"]),
     // Ports advanced: each menu only answers when the router / switch chip has it (feature detection)
     q("bonds", "/interface/bonding/print", &["name", "slaves", "mode", "running", "disabled", "comment"]).arrays(&["slaves"]),
