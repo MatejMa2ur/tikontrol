@@ -242,6 +242,22 @@ pub struct Reading {
     pub wan_running: bool,
     /// mac -> (interface, bytes counter as seen by the AP: rx = client upload, tx = client download)
     pub stations: Stations,
+    /// mac -> (bytes down, bytes up) from kid-control's device table, for clients that are not
+    /// Wi-Fi stations (wired). Empty when kid-control tracks no devices.
+    pub wired: Counters,
+}
+
+/// mac -> (bytes down, bytes up)
+pub type Counters = BTreeMap<String, (u64, u64)>;
+
+/// Kid-control device rows → per-MAC counters, leaving out Wi-Fi stations (counted from the AP).
+pub fn wired_counters(rows: &[Row], stations: &Stations) -> Counters {
+    let n = |r: &Row, k: &str| r.get(k).and_then(|v| v.parse::<u64>().ok()).unwrap_or(0);
+    rows.iter()
+        .filter_map(|r| Some((r.get("mac-address")?.to_ascii_uppercase(), (n(r, "bytes-down"), n(r, "bytes-up")))))
+        .filter(|(m, _)| !stations.contains_key(m) && !stations.keys().any(|s| s.eq_ignore_ascii_case(m)))
+        .take(MAX_CLIENTS * 2)
+        .collect()
 }
 
 pub fn read(r: &mut dyn Router, wan_if: &str) -> Result<Reading, String> {
@@ -264,6 +280,8 @@ pub fn read(r: &mut dyn Router, wan_if: &str) -> Result<Reading, String> {
             }
         }
     }
+    // optional: kid-control's device table counts per-device bytes for wired clients too
+    let wired = r.run(&Cmd::new("/ip/kid-control/device/print").proplist(&["mac-address", "bytes-down", "bytes-up"])).map(|rows| wired_counters(&rows, &stations)).unwrap_or_default();
     Ok(Reading {
         rx: num(&m, "rx-bits-per-second"),
         tx: num(&m, "tx-bits-per-second"),
@@ -275,6 +293,7 @@ pub fn read(r: &mut dyn Router, wan_if: &str) -> Result<Reading, String> {
         temp,
         wan_running: running.first().and_then(|r| r.get("running")).is_none_or(|v| v == "true"),
         stations,
+        wired,
     })
 }
 
@@ -286,6 +305,7 @@ pub struct Live {
     cv: Condvar,
     pub subscribers: Mutex<usize>,
     prev: Mutex<Option<(u64, Stations)>>,
+    prev_wired: Mutex<Counters>,
     /// last WAN link state the sampler saw (None until the first reading); read by the alert rules
     pub wan_up: Mutex<Option<bool>>,
     pub latency_ms: Mutex<f64>,
@@ -335,6 +355,19 @@ impl Live {
                     h.seen.remove(k);
                 }
             }
+            // wired clients: rates and hourly bytes only (joins/leaves come from DHCP/ARP elsewhere)
+            let mut pw = lock(&self.prev_wired);
+            if let Some((pt, _)) = prev.as_ref() {
+                let dt = t.saturating_sub(*pt).max(1) as f64;
+                for (mac, (down, up)) in &rd.wired {
+                    if let Some((od, ou)) = pw.get(mac) {
+                        let (dd, du) = (down.saturating_sub(*od), up.saturating_sub(*ou));
+                        rates.insert(mac.clone(), json!({ "rx": dd as f64 * 8.0 / dt, "tx": du as f64 * 8.0 / dt }));
+                        h.client_bytes(mac, t, dd, du);
+                    }
+                }
+            }
+            *pw = rd.wired.clone();
             *prev = Some((t, rd.stations.clone()));
         }
         let mut up = lock(&self.wan_up);
@@ -429,7 +462,7 @@ mod tests {
     use super::*;
 
     fn rd(st: &[(&str, &str, u64, u64)], up: bool) -> Reading {
-        Reading { rx: 1000.0, tx: 500.0, cpu: 5.0, mem: 40.0, temp: None, wan_running: up, stations: st.iter().map(|(m, i, d, u)| (m.to_string(), (i.to_string(), *d, *u))).collect() }
+        Reading { rx: 1000.0, tx: 500.0, cpu: 5.0, mem: 40.0, temp: None, wan_running: up, stations: st.iter().map(|(m, i, d, u)| (m.to_string(), (i.to_string(), *d, *u))).collect(), wired: Counters::new() }
     }
 
     #[test]
@@ -451,6 +484,26 @@ mod tests {
         let (_, f) = l.next_frame(0, Duration::from_millis(1)).unwrap();
         let v: Value = serde_json::from_str(&f).unwrap();
         assert_eq!(v["rate"]["BB"]["rx"], 0.0);
+    }
+
+    #[test]
+    fn wired_clients_get_rates_and_bytes_from_kid_control() {
+        let r = |m: &str, d: &str, u: &str| -> Row { [("mac-address", m), ("bytes-down", d), ("bytes-up", u)].iter().map(|(k, v)| (k.to_string(), v.to_string())).collect() };
+        let st: Stations = [("AA".to_string(), ("wlan1".to_string(), 0, 0))].into();
+        let w = wired_counters(&[r("aa", "5", "5"), r("CC", "100", "40"), [("bytes-down".to_string(), "1".to_string())].into()], &st);
+        assert_eq!(w.len(), 1, "Wi-Fi stations and rows without a MAC are left out");
+        assert_eq!(w["CC"], (100, 40));
+        let l = Live::default();
+        let mut a = rd(&[], true);
+        a.wired = [("CC".to_string(), (100, 40))].into();
+        l.ingest(100, a, &BTreeMap::new());
+        let mut b = rd(&[], true);
+        b.wired = [("CC".to_string(), (2100, 1040))].into();
+        l.ingest(102, b, &BTreeMap::new());
+        assert_eq!(lock(&l.history).clients["CC"].back().unwrap().1, 2000);
+        let (_, f) = l.next_frame(0, Duration::from_millis(1)).unwrap();
+        let v: Value = serde_json::from_str(&f).unwrap();
+        assert_eq!(v["rate"]["CC"]["rx"], 8000.0);
     }
 
     #[test]

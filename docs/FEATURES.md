@@ -12,7 +12,7 @@ Clean-room: we copy the behaviour, never the assets.
 **Backing:** `ROS` = RouterOS API on the router · `CMR` = MikroTik CMR server · `tik` = our own logic/DB · `✗` = nothing can back it
 
 <!-- progress:start -->
-**Progress:** 113 ✅ · 109 🟨 · 3 🎨 · 1 ⬜ · 8 ➖ (234 items, 50% done) · 4 🔌 waiting for a hardware test ([list](HARDWARE_TESTS.md))
+**Progress:** 113 ✅ · 109 🟨 · 3 🎨 · 1 ⬜ · 8 ➖ (234 items, 50% done) · 7 🔌 waiting for a hardware test ([list](HARDWARE_TESTS.md))
 <!-- progress:end -->
 
 ---
@@ -58,7 +58,7 @@ Clean-room: we copy the behaviour, never the assets.
 | ISP name, public IP, WAN IP (needs a real ISP WAN: the CHR sits behind QEMU NAT) | ROS `/ip/cloud`, dhcp-client | 1 | 🟨 |
 | Client count (wired / wireless / guest) | ROS | 1 | 🟨 |
 | Gateway resources (CPU, RAM, temp, uptime) (CPU/RAM/uptime verified on CHR; temperature needs a sensor) | ROS `/system/resource`, health | 1 | 🟨 |
-| Top clients by traffic | ROS kid-control + tik | 1 | 🟨 |
+| Top clients by traffic (Wi-Fi from the registration table, wired from kid-control's device table) 🔌 check that `/ip/kid-control/device` counts wired clients on a real router (it may need a kid-control profile) | ROS kid-control + tik | 1 | 🟨 |
 | Top applications | CMR apptraffic | 3 | ✅ |
 | Traffic Identification card (by client now, by app once CMR is wired) | ROS reg-table bytes · CMR | 1 | 🟨 |
 | WiFi Technology card (clients by standard + band, activity, experience) | ROS reg-table | 1 | 🟨 |
@@ -97,8 +97,8 @@ Clean-room: we copy the behaviour, never the assets.
 | Device fingerprint / auto icon (phone, TV, PC…): maker from the MAC (embedded IEEE table, private-address note), type + OS guess from hostname, DHCP vendor class and MNDP/LLDP neighbours, first/last seen | tik (OUI + hostname + DHCP class-id) · ROS `/ip/neighbor` | 1 | ✅ |
 | Active LAN discovery, opt-in: mDNS/DNS-SD + SSDP/UPnP names and models ("What the device says"), improves maker and type | tik (server on the LAN, link-local multicast only) | 2 | 🟨 |
 | Wired: switch port · Wireless: SSID, band, signal, rate | ROS bridge host + reg-table | 1 | 🟨 |
-| Live per-client throughput | ROS kid-control / reg-table bytes | 1 | 🟨 |
-| Per-client traffic history | tik SQLite | 2 | 🟨 |
+| Live per-client throughput (wired via kid-control device counters) 🔌 compare a wired client's rate with `/interface/monitor-traffic` on its port | ROS kid-control / reg-table bytes | 1 | 🟨 |
+| Per-client traffic history (hourly bytes, wired and Wi-Fi) 🔌 a day of history on a real router with wired and Wi-Fi clients | tik SQLite | 2 | 🟨 |
 | Per-client apps / domains (flow destinations per client, named from the DNS cache; the cache itself has no client field) | tik flows + DNS cache (CMR is per-device) | 3 | 🟨 |
 | Rename / alias, custom icon, notes | tik | 1 | 🟨 |
 | Fixed IP (reservation) | ROS lease make-static | 2 | ✅ |
