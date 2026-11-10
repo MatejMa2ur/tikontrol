@@ -12,7 +12,7 @@ Clean-room: we copy the behaviour, never the assets.
 **Backing:** `ROS` = RouterOS API on the router · `CMR` = MikroTik CMR server · `tik` = our own logic/DB · `✗` = nothing can back it
 
 <!-- progress:start -->
-**Progress:** 120 ✅ · 105 🟨 · 0 🎨 · 1 ⬜ · 9 ➖ (235 items, 53% done) · 37 🔌 waiting for a hardware test ([list](HARDWARE_TESTS.md))
+**Progress:** 120 ✅ · 105 🟨 · 0 🎨 · 1 ⬜ · 9 ➖ (235 items, 53% done) · 104 🔌 waiting for a hardware test ([list](HARDWARE_TESTS.md))
 <!-- progress:end -->
 
 ---
@@ -28,20 +28,20 @@ Clean-room: we copy the behaviour, never the assets.
 | P5 | Client Devices (list) | Clients | 1 | ✅ |
 | P6 | Client detail (overview / insights / settings) | Client drawer | 1 | ✅ |
 | P7 | Ports (port manager) | Ports | 2 | ✅ |
-| P8 | Radios (Radio Manager, coverage, connectivity; needs hardware (Wi-Fi AP)) | Radios | 3 |🟨 |
+| P8 | Radios (Radio Manager, coverage, connectivity; needs hardware (Wi-Fi AP)) 🔌 a real Wi-Fi AP: radios, monitor, scan, coverage | Radios | 3 | 🟨 |
 | P9 | Insights / Traffic flows | Traffic | 3 | ✅ |
 | P10 | Alarm Manager | Alerts | 2 | ✅ |
 | P11 | System Log (events, admin activity, security, updates) | Events | 1 | ✅ |
 | P12 | Hotspot Manager (loads the router's guest hotspot, vouchers, branded login page) 🔌 run the guest portal checks below on a CHR with a client | Guest portal | 4 | 🟨 |
-| P13 | Settings → WiFi | Settings · WiFi | 2 |🟨 |
+| P13 | Settings → WiFi 🔌 a real AP on both the `wireless` and `wifi` packages: create, edit and remove SSIDs | Settings · WiFi | 2 | 🟨 |
 | P14 | Settings → Networks (every control sends an intent: DHCP range/lease, options, mDNS, IGMP, VLAN filtering, remove) 🔌 toggle IGMP and VLAN filtering on a CHR and let the 5-minute revert undo a lockout | Settings · Networks | 3 | 🟨 |
-| P15 | Settings → Internet | Settings · Internet | 3 |🟨 |
+| P15 | Settings → Internet 🔌 a real ISP line: DHCP/PPPoE/static, tagged WAN VLAN, failover, prefix delegation | Settings · Internet | 3 | 🟨 |
 | P16 | Settings → VPN 🔌 connect a phone over a real WAN with WireGuard and L2TP/IPsec | Settings · VPN | 2 | 🟨 |
 | P17 | Settings → Security / CyberSecure (all sections on real data and intents) 🔌 run the security checks below on a CHR | Settings · Security | 3 | 🟨 |
 | P18 | Settings → Routing (add and remove port forwards, routes, DNS records) 🔌 add, remove and revert each on a CHR; hand-made rows must have no Remove | Settings · Routing | 2 | 🟨 |
 | P19 | Settings → Profiles (real speed profiles, QoS rules and RADIUS servers, with remove) 🔌 remove a speed profile, a QoS rule and a tagged RADIUS server on a CHR | Settings · Profiles | 3 | 🟨 |
-| P20 | Settings → Control Plane (admins, backups, updates, integrations, console) | Settings · System | 2 | 🟨 |
-| P21 | Settings → System (site, logging, SNMP, device auth) | Settings · System | 2 | 🟨 |
+| P20 | Settings → Control Plane (admins, backups, updates, integrations, console) 🔌 backups, update window, console and API keys on a CHR | Settings · System | 2 | 🟨 |
+| P21 | Settings → System (site, logging, SNMP, device auth) 🔌 site settings, remote syslog, SNMP and service hardening on a CHR | Settings · System | 2 | 🟨 |
 | P22 | Site Manager (multi-site, cloud) | Sites switcher (local routers only; no cloud: tikontrol never phones home) | 4 | ✅ |
 | P23 | Login / onboarding wizard | Login + first-run wizard | 1 | ✅ |
 | P24 | Global search (⌘K): clients, devices, SSIDs, settings pages | Command palette | 2 | ✅ |
@@ -55,20 +55,20 @@ Clean-room: we copy the behaviour, never the assets.
 | Internet health (WAN up, latency, packet loss) | ROS netwatch + tik | 1 | ✅ |
 | WAN live throughput (down/up) graph | ROS monitor-traffic | 1 | ✅ |
 | Max download/upload speed indicators | tik | 1 | ✅ |
-| ISP name, public IP, WAN IP (needs a real ISP WAN: the CHR sits behind QEMU NAT) | ROS `/ip/cloud`, dhcp-client | 1 | 🟨 |
+| ISP name, public IP, WAN IP (needs a real ISP WAN: the CHR sits behind QEMU NAT) 🔌 a real ISP WAN: public IP and WAN IP shown; the ISP name has no source without an outside lookup, so it is not shown | ROS `/ip/cloud`, dhcp-client | 1 | 🟨 |
 | Client count (wired / wireless / guest; guests from hotspot users, guest Wi-Fi interfaces and guest subnets) 🔌 a real guest SSID and hotspot: guests counted, main-LAN clients not | ROS | 1 | 🟨 |
-| Gateway resources (CPU, RAM, temp, uptime) (CPU/RAM/uptime verified on CHR; temperature needs a sensor) | ROS `/system/resource`, health | 1 | 🟨 |
+| Gateway resources (CPU, RAM, temp, uptime) (CPU/RAM/uptime verified on CHR; temperature needs a sensor) 🔌 temperature on a board with a `/system/health` sensor | ROS `/system/resource`, health | 1 | 🟨 |
 | Top clients by traffic (Wi-Fi from the registration table, wired from kid-control's device table) 🔌 check that `/ip/kid-control/device` counts wired clients on a real router (it may need a kid-control profile) | ROS kid-control + tik | 1 | 🟨 |
 | Top applications | CMR apptraffic | 3 | ✅ |
-| Traffic Identification card (by client now, by app once CMR is wired) | ROS reg-table bytes · CMR | 1 | 🟨 |
-| WiFi Technology card (clients by standard + band, activity, experience) | ROS reg-table | 1 | 🟨 |
-| Most active clients / access points strips | ROS + tik | 1 | 🟨 |
+| Traffic Identification card (by client now, by app once CMR is wired) 🔌 by-app view with a real CMR server | ROS reg-table bytes · CMR | 1 | 🟨 |
+| WiFi Technology card (clients by standard + band, activity, experience) 🔌 Wi-Fi clients on a real AP (standards and bands) | ROS reg-table | 1 | 🟨 |
+| Most active clients / access points strips 🔌 real Wi-Fi clients and traffic | ROS + tik | 1 | 🟨 |
 | Internet Activity chart: client count cells + down/up, 1H/1D/1W | tik history | 2 | ✅ |
 | Gateway column (WAN/gateway IP, uptime from stored history, latency to 3 resolvers, channel widths) 🔌 real WAN latency and Wi-Fi channel widths | ROS | 1 | 🟨 |
-| WiFi experience / satisfaction score | tik (signal + rate heuristic) | 2 | 🟨 |
-| Recent critical events | ROS log + tik | 1 | 🟨 |
-| Firmware update available banner | ROS / CMR | 2 | 🟨 |
-| Speed test (run + history) | tik server (HTTPS, Cloudflare by default, opt-in) | 3 | 🟨 |
+| WiFi experience / satisfaction score 🔌 scores match how real Wi-Fi clients behave | tik (signal + rate heuristic) | 2 | 🟨 |
+| Recent critical events 🔌 real log errors and a WAN flap show up | ROS log + tik | 1 | 🟨 |
+| Firmware update available banner 🔌 a router with a real pending RouterOS/RouterBOOT update | ROS / CMR | 2 | 🟨 |
+| Speed test (run + history) 🔌 run against Cloudflare on a real WAN; results near the line speed | tik server (HTTPS, Cloudflare by default, opt-in) | 3 | 🟨 |
 | Customisable widgets / layout (reorder, hide/show, normal or full width per card; stored on the server and checked in a browser) | tik | 4 | ✅ |
 
 ## UniFi Devices / Topology
@@ -78,68 +78,68 @@ Clean-room: we copy the behaviour, never the assets.
 | Device adoption (one-click; needs CMR server) | CMR pairing | 3 | ✅ |
 | Auto-detect make, model, CPU, memory and WiFi capabilities | ROS `/system/resource`, `/system/routerboard` | 1 | ✅ |
 | Device drawing: our own SVG of the port side per detected model (case colour, ports, USB, live link LEDs; generic box for unknown models) | tik (`hardware.ts` faceOf) | 2 | ✅ |
-| Device detail: CPU/RAM/temperature history (this router; temperature only where `/system/health` has a sensor) | tik history · CMR dashboard for others | 3 | 🟨 |
-| Device restart / locate (blink LED) | CMR reboot · ROS `/system/routerboard` LED | 3 | 🟨 |
-| Firmware update per device | CMR / ROS | 3 | 🟨 |
+| Device detail: CPU/RAM/temperature history (this router; temperature only where `/system/health` has a sensor) 🔌 temperature history on a board with a sensor | tik history · CMR dashboard for others | 3 | 🟨 |
+| Device restart / locate (blink LED) 🔌 the LED blinks on a real RouterBOARD; restart through CMR | CMR reboot · ROS `/system/routerboard` LED | 3 | 🟨 |
+| Firmware update per device 🔌 CMR upgrade of a real managed device | CMR / ROS | 3 | 🟨 |
 | Scheduled / rolling fleet updates (needs CMR server) | CMR upgrade rules | 3 | ✅ |
 | Topology map (auto layout, wired + wireless links; MNDP/LLDP neighbours as intermediate switch/AP nodes with their port's clients) 🔌 check with a real switch and AP behind the router, including a daisy chain | CMR layout · ROS neighbor + bridge host | 2 | 🟨 |
 | Topology Spotlight (highlight/filter) 🔌 check on a real multi-device topology | tik | 3 | 🟨 |
 | Device Supervisor (health anomalies; needs CMR server) | CMR state alerts | 4 | ✅ |
 | Blueprints / config drift inspector (diff of the reader's structured prints, not `/export`: over the API with only `read` it returns an empty `!done`, and exports risk secrets) | tik (snapshot diff) | 4 | ✅ |
 | Device SSH credentials management (public keys only; writer needs the `policy` policy) | ROS `/user/ssh-keys` | 3 | ✅ |
-| Device LED control / Etherlighting | ROS LED · Etherlighting ✗ (UI hw) | 4 | 🟨 |
+| Device LED control / Etherlighting 🔌 `set-leds` turns the LEDs off on a real board | ROS LED · Etherlighting ✗ (UI hw) | 4 | 🟨 |
 | Shadow mode / gateway HA | ✗ (VRRP is possible but out of scope) | – | ➖ |
 
 ## Client Devices
 | Feature | Backing | Phase | Status |
 |---|---|---|---|
-| Client list: name, IP, MAC, vendor, connection, uptime (leases + ARP verified on CHR; wireless rows need Wi-Fi hardware) | ROS leases + ARP + reg-table + bridge host | 1 | 🟨 |
+| Client list: name, IP, MAC, vendor, connection, uptime (leases + ARP verified on CHR; wireless rows need Wi-Fi hardware) 🔌 wireless rows on a real AP | ROS leases + ARP + reg-table + bridge host | 1 | 🟨 |
 | Device fingerprint / auto icon (phone, TV, PC…): maker from the MAC (embedded IEEE table, private-address note), type + OS guess from hostname, DHCP vendor class and MNDP/LLDP neighbours, first/last seen | tik (OUI + hostname + DHCP class-id) · ROS `/ip/neighbor` | 1 | ✅ |
-| Active LAN discovery, opt-in: mDNS/DNS-SD + SSDP/UPnP names and models ("What the device says"), improves maker and type | tik (server on the LAN, link-local multicast only) | 2 | 🟨 |
-| Wired: switch port · Wireless: SSID, band, signal, rate | ROS bridge host + reg-table | 1 | 🟨 |
+| Active LAN discovery, opt-in: mDNS/DNS-SD + SSDP/UPnP names and models ("What the device says"), improves maker and type 🔌 mDNS/SSDP answers from real LAN devices (TV, printer, speaker) | tik (server on the LAN, link-local multicast only) | 2 | 🟨 |
+| Wired: switch port · Wireless: SSID, band, signal, rate 🔌 physical ports with clients and a real AP | ROS bridge host + reg-table | 1 | 🟨 |
 | Live per-client throughput (wired via kid-control device counters) 🔌 compare a wired client's rate with `/interface/monitor-traffic` on its port | ROS kid-control / reg-table bytes | 1 | 🟨 |
 | Per-client traffic history (hourly bytes, wired and Wi-Fi) 🔌 a day of history on a real router with wired and Wi-Fi clients | tik SQLite | 2 | 🟨 |
-| Per-client apps / domains (flow destinations per client, named from the DNS cache; the cache itself has no client field) | tik flows + DNS cache (CMR is per-device) | 3 | 🟨 |
+| Per-client apps / domains (flow destinations per client, named from the DNS cache; the cache itself has no client field) | tik flows + DNS cache (CMR is per-device) 🔌 real traffic-flow export plus the DNS cache | 3 | 🟨 |
 | Rename / alias, custom icon, notes (stored on the server, checked end to end in a browser: `src/scripts/ui-e2e.mjs`) | tik | 1 | ✅ |
 | Fixed IP (reservation) | ROS lease make-static | 2 | ✅ |
 | Local DNS record for client | ROS `/ip/dns/static` | 2 | ✅ |
 | Block / unblock | ROS address-list + filter | 2 | ✅ |
 | Pause internet / schedules | ROS kid-control | 2 | ✅ |
 | Speed limit (client groups) | ROS simple queues | 2 | ✅ |
-| "Why is this client on 2.4 GHz?": reasons, band history from the log, Safe apply fixes (channel 36, 40 MHz, own 5 GHz SSID, signal-range access list) | tik from log + monitor · ROS wireless/wifi | 3 | 🟨 |
-| Kick / reconnect wireless client | ROS reg-table remove | 2 | 🟨 |
-| Override network/VLAN for client (client drawer: set/remove; needs hardware (Wi-Fi AP), CHR refusal tested) | ROS (MAC-based VLAN / access list) | 4 |🟨 |
+| "Why is this client on 2.4 GHz?": reasons, band history from the log, Safe apply fixes (channel 36, 40 MHz, own 5 GHz SSID, signal-range access list) 🔌 a dual-band AP with a client that hops bands | tik from log + monitor · ROS wireless/wifi | 3 | 🟨 |
+| Kick / reconnect wireless client 🔌 kick a client on a real AP with each Wi-Fi package | ROS reg-table remove | 2 | 🟨 |
+| Override network/VLAN for client (client drawer: set/remove; needs hardware (Wi-Fi AP), CHR refusal tested) 🔌 a client lands in the chosen VLAN on a real AP | ROS (MAC-based VLAN / access list) | 4 | 🟨 |
 | Offline / historical clients list | tik | 2 | ✅ |
-| Roaming history (which AP, when) | tik (reg-table changes) · CMR wifi-logs | 3 | 🟨 |
+| Roaming history (which AP, when) 🔌 several APs and a client walking between them | tik (reg-table changes) · CMR wifi-logs | 3 | 🟨 |
 | Filters (wired / wireless / guest / offline) and search | tik | 1 | ✅ |
 | Client groups (deleting one offers to remove its address list, mangle and queue objects in one batch; leftovers listed) 🔌 apply members and a limit, then delete with "Remove from router" and revert | tik | 3 | 🟨 |
 
 ## Ports
 | Feature | Backing | Phase | Status |
 |---|---|---|---|
-| Port grid with link state, speed, duplex (link state verified on CHR; speed/duplex need a physical port (virtio reports none)) | ROS `/interface/ethernet` monitor | 2 | 🟨 |
-| Which client is on which port | ROS bridge host | 2 | 🟨 |
+| Port grid with link state, speed, duplex (link state verified on CHR; speed/duplex need a physical port (virtio reports none)) | ROS `/interface/ethernet` monitor 🔌 speed and duplex on physical ports | 2 | 🟨 |
+| Which client is on which port 🔌 physical switch ports with clients | ROS bridge host | 2 | 🟨 |
 | Per-port traffic / errors | ROS | 2 | ✅ |
 | PoE status / power cycle (status, auto/off/forced per port, 5 s power-cycle) 🔌 power-cycle a powered device too; a PoE-out board (hEX PoE, CRS…P): print/monitor field names, set-poe and its revert; a board without PoE only logs a `poe` error | ROS `/interface/ethernet/poe` (hw dependent) | 3 | 🟨 |
 | Port profile (VLAN access/trunk, native VLAN) | ROS bridge VLAN · CMR vlan | 3 | ✅ |
 | Port disable / enable | ROS | 2 | ✅ |
-| Port mirroring | ROS switch mirror | 4 | 🟨 |
+| Port mirroring | ROS switch mirror 🔌 a switch chip that supports mirroring | 4 | 🟨 |
 | Link aggregation | ROS bonding | 4 | ✅ |
 | STP / loop protection settings | ROS bridge protocol-mode | 4 | ✅ |
-| Storm control | ROS switch (hw dependent) | 4 | 🟨 |
+| Storm control 🔌 a CRS3xx switch with storm-rate | ROS switch (hw dependent) | 4 | 🟨 |
 | 802.1X port auth | ROS dot1x | 4 | ✅ |
-| LLDP-MED / voice VLAN | ROS lldp | 4 | 🟨 |
+| LLDP-MED / voice VLAN 🔌 an LLDP-MED phone gets the voice VLAN | ROS lldp | 4 | 🟨 |
 
 ## Radios / WiFi monitoring
 | Feature | Backing | Phase | Status |
 |---|---|---|---|
-| Radio list per AP: band, channel, width, tx power, clients (needs hardware (Wi-Fi AP)) | ROS wireless/wifi · CMR | 3 | 🟨 |
-| Channel utilisation (channel, width, DFS, tx power, noise, CCQ; busy time not reported by RouterOS; needs hardware (Wi-Fi AP)) | ROS monitor (driver dependent) | 3 | 🟨 |
-| Neighbouring networks / interference scan (one-shot, confirmed, admin + write access, max 10 s, disconnects the radio's clients; or copy the command; needs hardware (Wi-Fi AP)) | ROS `scan` | 3 |🟨 |
-| Signal strength distribution (needs hardware (Wi-Fi AP)) | tik from reg-table | 3 | 🟨 |
-| WiFi connectivity success (association / auth / DHCP / DNS) | tik from log + leases | 2 | 🟨 |
-| Radio link quality (CCQ buckets, channel, power, noise; needs hardware (Wi-Fi AP)) | ROS wireless monitor | 2 | 🟨 |
-| Roaming journeys (Connectivity view) | tik · CMR wifi-logs | 3 | 🟨 |
+| Radio list per AP: band, channel, width, tx power, clients (needs hardware (Wi-Fi AP)) 🔌 a real Wi-Fi AP | ROS wireless/wifi · CMR | 3 | 🟨 |
+| Channel utilisation (channel, width, DFS, tx power, noise, CCQ; busy time not reported by RouterOS; needs hardware (Wi-Fi AP)) 🔌 monitor values from a real AP | ROS monitor (driver dependent) | 3 | 🟨 |
+| Neighbouring networks / interference scan (one-shot, confirmed, admin + write access, max 10 s, disconnects the radio's clients; or copy the command; needs hardware (Wi-Fi AP)) 🔌 a confirmed scan on a real AP returns neighbours | ROS `scan` | 3 | 🟨 |
+| Signal strength distribution (needs hardware (Wi-Fi AP)) 🔌 real Wi-Fi clients | tik from reg-table | 3 | 🟨 |
+| WiFi connectivity success (association / auth / DHCP / DNS) 🔌 real associations and auth failures in the log | tik from log + leases | 2 | 🟨 |
+| Radio link quality (CCQ buckets, channel, power, noise; needs hardware (Wi-Fi AP)) 🔌 CCQ and noise from a real AP | ROS wireless monitor | 2 | 🟨 |
+| Roaming journeys (Connectivity view) 🔌 several APs, or CMR wifi-logs | tik · CMR wifi-logs | 3 | 🟨 |
 | Coverage map / floorplan (Design Center): saved plan, drag/arrow-key AP pins, server-validated (PNG/JPEG/WebP, 200 KB, 32 APs); checked end to end in a browser (`src/scripts/ui-e2e.mjs`) | tik (manual floorplan, no RF model) | 4 | ✅ |
 | WiFiman (client-side speed/coverage app) | ✗ | – | ➖ |
 
@@ -150,45 +150,45 @@ Clean-room: we copy the behaviour, never the assets.
 | Traffic by client over time | tik | 2 | 🟨 |
 | Top domains | ROS DNS cache + tik | 3 | ✅ |
 | Flow log (src, dst, port, bytes) | ROS traffic-flow (IPFIX) → tik collector | 3 | ✅ |
-| Traffic by country (opt-in `TIK_GEOIP` local CSV, nothing downloaded) | tik GeoIP on flows | 4 | 🟨 |
+| Traffic by country (opt-in `TIK_GEOIP` local CSV, nothing downloaded) 🔌 real traffic-flow export with a `TIK_GEOIP` CSV | tik GeoIP on flows | 4 | 🟨 |
 | Blocked threats view | ✗ (no IDS) | – | ➖ |
 
 ## Alarm Manager / Notifications
 | Feature | Backing | Phase | Status |
 |---|---|---|---|
-| Alert rules (device offline, WAN down, new client, CPU/RAM) | tik · CMR alerts | 2 |🟨 |
+| Alert rules (device offline, WAN down, new client, CPU/RAM) 🔌 real WAN down, router unreachable and CPU/RAM thresholds fire and clear | tik · CMR alerts | 2 | 🟨 |
 | Channels: email (SMTP, TLS/STARTTLS), push (ntfy), Telegram, webhook 🔌 send a test through each real service (an SMTP provider on 465 and 587, ntfy.sh, a Telegram bot, a Home Assistant webhook) | tik | 2 | 🟨 |
 | Alert history / acknowledge | tik | 2 | ✅ |
-| Quiet hours / per-rule severity | tik | 3 |🟨 |
+| Quiet hours / per-rule severity 🔌 a real channel holds alerts back in quiet hours | tik | 3 | 🟨 |
 
 ## System Log / Events
 | Feature | Backing | Phase | Status |
 |---|---|---|---|
 | Live event stream | ROS `/log follow` | 1 | ✅ |
 | Categories: clients, devices, admin activity, security, updates | tik (topic mapping) | 1 | ✅ |
-| Derived events (client joined/left, WAN flap) (shown from the server; joins need Wi-Fi clients, a WAN flap a real WAN) | tik | 2 | 🟨 |
+| Derived events (client joined/left, WAN flap) (shown from the server; joins need Wi-Fi clients, a WAN flap a real WAN) 🔌 real Wi-Fi joins and a real WAN flap | tik | 2 | 🟨 |
 | Search / filter / export CSV | tik | 2 | ✅ |
 | Remote syslog / SIEM forwarding | ROS logging action | 3 | ✅ |
 
 ## WiFi settings
 | Feature | Backing | Phase | Status |
 |---|---|---|---|
-| Create/edit SSID (name, password, security WPA2/WPA3) | ROS wireless/wifi · CMR wifi | 2 |🟨 |
-| Band selection (2.4 / 5 / 6 GHz) | ROS | 2 |🟨 |
-| Which APs broadcast it (label selection verified on CHR; broadcasting needs hardware AP) | CMR labels | 3 | 🟨 |
-| Network/VLAN per SSID | ROS bridge port PVID | 3 |🟨 |
+| Create/edit SSID (name, password, security WPA2/WPA3) 🔌 create and edit an SSID on both Wi-Fi packages; a phone joins with WPA2 and WPA3 | ROS wireless/wifi · CMR wifi | 2 | 🟨 |
+| Band selection (2.4 / 5 / 6 GHz) 🔌 a real multi-band AP | ROS | 2 | 🟨 |
+| Which APs broadcast it (label selection verified on CHR; broadcasting needs hardware AP) 🔌 real APs through CMR labels broadcast the SSID | CMR labels | 3 | 🟨 |
+| Network/VLAN per SSID 🔌 a Wi-Fi client gets an address from the SSID's VLAN | ROS bridge port PVID | 3 | 🟨 |
 | Guest network (isolation, portal, remove) 🔌 create and remove a guest SSID on both Wi-Fi packages; guests isolated | ROS + hotspot | 3 | 🟨 |
-| Client isolation | ROS default-forwarding / wifi datapath | 2 |🟨 |
-| Hide SSID | ROS | 2 |🟨 |
+| Client isolation 🔌 two clients on one SSID can't reach each other | ROS default-forwarding / wifi datapath | 2 | 🟨 |
+| Hide SSID 🔌 the SSID disappears from a phone's list; joining by name still works | ROS | 2 | 🟨 |
 | WiFi schedule (on/off by time, remove) 🔌 the radio turns off and on at the set times | ROS scheduler | 3 | 🟨 |
-| Per-SSID speed limit (per client, legacy `wireless` default-*-tx-limit) | ROS wireless | 3 |🟨 |
+| Per-SSID speed limit (per client, legacy `wireless` default-*-tx-limit) | ROS wireless 🔌 a legacy `wireless` AP limits each client | 3 | 🟨 |
 | MAC filter (allow/deny per MAC, remove) 🔌 add and remove a rule on a `wireless` board and a `wifi` board | ROS access-list | 3 | 🟨 |
-| Private PSK (per-client passwords, client drawer; needs hardware (Wi-Fi AP)) | ROS access-list `passphrase` (wifi) / `private-pre-shared-key` (wireless) | 4 |🟨 |
-| Band steering / fast roaming (802.11r/k/v; needs hardware (Wi-Fi AP on the new wifi package)) | ROS wifi `security.ft`, `steering.rrm/wnm` (new pkg) | 4 |🟨 |
-| MLO (WiFi 7; needs hardware (Wi-Fi 7 AP: wifi-qcom-be / wifi-mediatek)) | ROS `/interface/wifi/network mlo` | 4 |🟨 |
-| Hotspot 2.0 / Passpoint (needs hardware (Wi-Fi AP on the new wifi package) + WPA-Enterprise/RADIUS) | ROS wifi interworking | 4 |🟨 |
-| QR code to join WiFi (password typed in the browser, never stored) | tik (browser) | 2 |🟨 |
-| Channel / tx power per radio | ROS · CMR radio | 3 |🟨 |
+| Private PSK (per-client passwords, client drawer; needs hardware (Wi-Fi AP)) | ROS access-list `passphrase` (wifi) / `private-pre-shared-key` (wireless) 🔌 a client joins only with its own password | 4 | 🟨 |
+| Band steering / fast roaming (802.11r/k/v; needs hardware (Wi-Fi AP on the new wifi package)) 🔌 an AP on the new wifi package; a client roams fast | ROS wifi `security.ft`, `steering.rrm/wnm` (new pkg) | 4 | 🟨 |
+| MLO (WiFi 7; needs hardware (Wi-Fi 7 AP: wifi-qcom-be / wifi-mediatek)) 🔌 a Wi-Fi 7 AP and an MLO-capable client | ROS `/interface/wifi/network mlo` | 4 | 🟨 |
+| Hotspot 2.0 / Passpoint (needs hardware (Wi-Fi AP on the new wifi package) + WPA-Enterprise/RADIUS) 🔌 a wifi-package AP with RADIUS; a Passpoint phone connects | ROS wifi interworking | 4 | 🟨 |
+| QR code to join WiFi (password typed in the browser, never stored) 🔌 scan with a real phone and join | tik (browser) | 2 | 🟨 |
+| Channel / tx power per radio 🔌 set channel and power on a real AP radio | ROS · CMR radio | 3 | 🟨 |
 
 ## Networks
 | Feature | Backing | Phase | Status |
@@ -200,8 +200,8 @@ Clean-room: we copy the behaviour, never the assets.
 | IPv6 (prefix delegation, SLAAC, DHCPv6 server per network) 🔌 a real ISP prefix: check `address-pool` with a delegated pool on 7.18+, a client getting an address with the RA managed flag, and remove + revert | ROS ipv6 | 4 | 🟨 |
 | IGMP snooping / multicast | ROS bridge igmp-snooping | 4 | ✅ |
 | mDNS reflector across networks | ROS `/ip/dns mdns-repeat-ifaces` | 3 | ✅ |
-| Content filtering per network (DHCP DNS: family-safe resolver or router ad list; bypassable) | ROS DNS / adlist per network (limited) | 4 |🟨 |
-| Domain name / local DNS | ROS dhcp network domain + dns static | 3 |🟨 |
+| Content filtering per network (DHCP DNS: family-safe resolver or router ad list; bypassable) 🔌 a client on that network gets the filtered DNS | ROS DNS / adlist per network (limited) | 4 | 🟨 |
+| Domain name / local DNS 🔌 the DHCP domain reaches clients; names resolve | ROS dhcp network domain + dns static | 3 | 🟨 |
 
 ## Internet (WAN)
 | Feature | Backing | Phase | Status |
@@ -209,7 +209,7 @@ Clean-room: we copy the behaviour, never the assets.
 | WAN type: DHCP / static / PPPoE | ROS | 3 | ✅ |
 | VLAN tagged WAN | ROS | 3 | ✅ |
 | Multi-WAN failover | ROS routes + check-gateway / netwatch | 3 | ✅ |
-| Load balancing (ECMP second default route) | ROS PCC / ECMP | 4 |🟨 |
+| Load balancing (ECMP second default route) 🔌 two real WANs share traffic | ROS PCC / ECMP | 4 | 🟨 |
 | Smart Queues (bufferbloat / CAKE / fq_codel) | ROS queue types | 3 | ✅ |
 | DNS servers / DoH (encrypted DNS) | ROS `/ip/dns` use-doh-server | 2 | ✅ |
 | Dynamic DNS | ROS `/ip/cloud` ddns | 2 | ✅ |
@@ -253,7 +253,7 @@ Clean-room: we copy the behaviour, never the assets.
 | Policy-based routes | ROS routing rules | 3 | ✅ |
 | UPnP / NAT-PMP | ROS `/ip/upnp` | 2 | ✅ |
 | Local DNS records | ROS dns static | 2 | ✅ |
-| Dynamic routing (OSPF / BGP) | ROS (advanced: show only) | 4 | 🟨 |
+| Dynamic routing (OSPF / BGP) 🔌 a router with OSPF/BGP neighbours | ROS (advanced: show only) | 4 | 🟨 |
 
 ## Profiles
 | Feature | Backing | Phase | Status |
@@ -277,7 +277,7 @@ Clean-room: we copy the behaviour, never the assets.
 |---|---|---|---|
 | Admin users + roles | tik (own users) + ROS `/user` | 2 | ✅ |
 | SSO / cloud account | ✗ local auth only | – | ➖ |
-| Sign in with MikroTik account (role from router group, password only in session memory, changes run as that user) | tik + ROS login | 2 | 🟨 |
+| Sign in with MikroTik account (role from router group, password only in session memory, changes run as that user) 🔌 sign in with a router admin and a read-only user on a CHR | tik + ROS login | 2 | 🟨 |
 | Backups (scheduled, download, restore): list verified on CHR; tikontrol downloads its own `tik-*.rsc` exports (admin only, no secrets), full `.backup` files stay on the router 🔌 download a tik-*.rsc as the reader with `/file/read` (RouterOS 7.13+); check which policy the reader needs | ROS `/system/backup` + `/export` | 2 | 🟨 |
 | Firmware/app updates (channel, auto-update window: daily or weekly check, optional install) 🔌 let the window fire on a spare router: check `check-for-updates once`, the scheduler policy the writer may grant, and an install + restart | ROS / CMR | 2 | 🟨 |
 | Integrations / local API (+ API keys) | tik REST | 4 | ✅ |
@@ -300,9 +300,9 @@ Clean-room: we copy the behaviour, never the assets.
 | Mobile app | ✗ → responsive PWA instead | – | ➖ |
 | Responsive layout / PWA install | tik | 1 | ✅ |
 | Dark / light theme, or Auto following the OS setting | tik | 1 | ✅ |
-| Runs as RouterOS container (arm/v7, arm64) | tik build | 1 | 🟨 |
-| Runs on Docker (home server) | tik build | 0 | 🟨 |
-| One-paste RouterOS installer (`deploy/install.rsc`, checks, api-ssl, App, static lease, DNS) and uninstaller ([INSTALL.md](INSTALL.md)) | tik + ROS `/app` | 1 | 🟨 |
+| Runs as RouterOS container (arm/v7, arm64) 🔌 an arm/v7 and an arm64 router: the container reaches its own API on 8729 within its memory limit | tik build | 1 | 🟨 |
+| Runs on Docker (home server) 🔌 a Docker host reaches a real router through NAT | tik build | 0 | 🟨 |
+| One-paste RouterOS installer (`deploy/install.rsc`, checks, api-ssl, App, static lease, DNS) and uninstaller ([INSTALL.md](INSTALL.md)) 🔌 run `install.rsc` and `uninstall.rsc` on a real router | tik + ROS `/app` | 1 | 🟨 |
 | CHR dev/test router (`src/scripts/chr.sh`, QEMU) | – | 0 | ✅ |
 
 ## Themes
@@ -332,14 +332,14 @@ Not a UniFi feature: this is our own addition. The router enforces it, not tikon
 
 | Feature | Backing | Phase | Status |
 |---|---|---|---|
-| Choose read-only or read and write at setup, with read-only as the default | tik | 1 | 🟨 |
+| Choose read-only or read and write at setup, with read-only as the default 🔌 both choices end to end on a CHR | tik | 1 | 🟨 |
 | Router-enforced read-only: connect with a user that has no `write` policy | ROS user groups | 1 | ✅ |
-| Guided setup: show the commands to create the read-only group and user | tik + ROS | 1 | 🟨 |
+| Guided setup: show the commands to create the read-only group and user 🔌 paste the commands on a real router; tikontrol connects | tik + ROS | 1 | 🟨 |
 | One-step setup: sign in with a MikroTik admin, tikontrol creates its read-only group and user | tik + ROS | 1 | ✅ |
 | Detect the connected user's real policies and show them, instead of trusting a setting | ROS `/user` | 1 | ✅ |
 | Read-only badge, with edit controls disabled and the reason shown | tik | 1 | ✅ |
 | Store no write credential in read-only mode | tik | 1 | ✅ |
-| Switching to read and write needs a new credential and an explicit confirmation | tik | 2 | 🟨 |
+| Switching to read and write needs a new credential and an explicit confirmation 🔌 switch with a new writer credential on a CHR | tik | 2 | 🟨 |
 | MCP follows the same mode: no proposed changes in read-only mode | tik | 2 | ✅ |
 | Test on CHR that the router rejects writes from the read-only user | tik | 0 | ✅ |
 
@@ -352,5 +352,5 @@ Not a UniFi feature: this is our own addition. An MCP server lets an AI assistan
 | Read-only tools: clients, Wi-Fi, events, insights, topology | tik + ROS | 2 | ✅ |
 | Proposed changes, applied only after approval in Review & apply: the assistant sends a tikontrol intent, compiled read-only when proposed and applied through Safe apply (text-only proposals are never run) 🔌 propose a change from a real MCP client (e.g. Claude Desktop) against a CHR, then apply and revert it | tik + Safe apply | 3 | 🟨 |
 | Privacy mode: hide or swap names and addresses before data leaves tikontrol | tik | 2 | ✅ |
-| Treat device names and SSIDs as untrusted input (prompt injection) | tik | 2 | 🟨 |
+| Treat device names and SSIDs as untrusted input (prompt injection) 🔌 a real AI client against a crafted SSID that tries to inject instructions | tik | 2 | 🟨 |
 | Never expose router credentials through MCP | tik | 2 | ✅ |
