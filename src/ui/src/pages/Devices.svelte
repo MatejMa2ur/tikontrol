@@ -50,7 +50,9 @@
   $effect(() => { loadCmr() })
   // when the router itself is the CMR server, its own CMR entry is the first row already
   const fleet = $derived((cmr.data?.devices ?? []).filter((d) => !(d.controller && cmr.data?.source === 'router')))
-  const strangers = $derived(neighbors.filter((n) => !fleet.some((d) => d.identity === n.identity)))
+  // match on address: two MikroTiks can share a name (both "hAP")
+  const same = (d: any, n: any) => (d.address && n.address ? String(d.address).split('/')[0] === n.address : d.identity === n.identity)
+  const strangers = $derived(neighbors.filter((n) => !fleet.some((d) => same(d, n))))
   const pending = $derived(fleet.filter((d) => !d.paired))
   let adopt = $state<{ d: CmrDevice; user: string; pass: string } | null>(null)
   let labelEdit = $state<{ d: CmrDevice; text: string } | null>(null)

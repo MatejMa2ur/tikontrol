@@ -35,11 +35,13 @@
   const neighborNodes = grouped.devices.map(devNode)
   const topWired = withVms(grouped.direct.filter((c) => c.wired))
   const wireless = grouped.direct.filter((c) => !c.wired).sort((a, b) => (a.band ?? '').localeCompare(b.band ?? '')).map(clientNode)
+  // Wi-Fi is a different medium: its clients hang off one Wi-Fi node, set apart from the wired side
+  const wifiHub: N[] = wireless.length ? [{ id: 'wifi', label: 'Wi-Fi', sub: `${wireless.length} client${wireless.length === 1 ? '' : 's'}`, icon: 'wifi', kind: 'net', wireless: true, link: 'Wireless', children: wireless }] : []
 
   const tree: N = {
     id: 'internet', label: 'Internet', sub: internet.publicIp, icon: 'globe', kind: 'net', children: [{
       id: 'upstream', label: internet.doubleNat ? 'Upstream router' : 'Modem', sub: internet.gateway, icon: 'devices', kind: 'dev', link: `WAN · Port ${internet.wanPort}${speed(internet.wanIf) ? ` · ${speed(internet.wanIf)}` : ''}`, children: [{
-        id: 'gw', label: router.identity, sub: `${router.board} · ${internet.gatewayIp}`, icon: 'devices', kind: 'dev', href: '#/devices', link: speed(internet.wanIf), children: [...neighborNodes, ...topWired, ...wireless],
+        id: 'gw', label: router.identity, sub: `${router.board} · ${internet.gatewayIp}`, icon: 'devices', kind: 'dev', href: '#/devices', link: speed(internet.wanIf), children: [...neighborNodes, ...topWired, ...wifiHub],
       }],
     }],
   }
@@ -48,6 +50,7 @@
   const W = 132, H = 150
   let slot = 0
   function place(n: N, depth: number) {
+    if (n.id === 'wifi' && slot) slot += 0.75 // a gap between the wired side and Wi-Fi
     n.y = depth * H + 40
     if (!n.children.length) n.x = slot++ * W + W / 2
     else { n.children.forEach((c) => place(c, depth + 1)); n.x = (n.children[0].x! + n.children.at(-1)!.x!) / 2 }
