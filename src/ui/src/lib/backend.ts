@@ -55,7 +55,7 @@ export async function api<T = any>(path: string, opts: { method?: string; body?:
   }
 }
 
-async function call<T>(path: string, opts: { method?: string; body?: unknown }): Promise<T> {
+async function call<T>(path: string, opts: { method?: string; body?: unknown } = {}): Promise<T> {
   const method = opts.method ?? 'GET'
   const headers: Record<string, string> = {}
   if (opts.body !== undefined) headers['content-type'] = 'application/json'

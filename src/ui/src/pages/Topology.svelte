@@ -13,7 +13,7 @@
 
   const clientNode = (c: Client): N => ({
     id: c.mac, label: displayName(c), sub: c.ip, icon: c.kind, kind: 'client', href: `#/clients/${c.mac}`, wireless: !c.wired,
-    link: c.wired ? `Port ${c.port?.replace('ether', '') ?? '?'}${speed(c.port) ? ` · ${speed(c.port)}` : ''}` : `${c.band} · ${c.signal} dBm`,
+    link: c.wired ? c.port?.startsWith('veth') ? 'Container' : `Port ${c.port?.replace('ether', '') ?? '?'}${speed(c.port) ? ` · ${speed(c.port)}` : ''}` : `${c.band} · ${c.signal} dBm`,
     level: c.wired ? undefined : signalQuality(c.signal).level, children: [],
   })
   // A QEMU/KVM guest on the same port as a server is drawn under that server (VM on a host).
@@ -30,7 +30,8 @@
   const devNode = (d: Downstream<Client>): N => ({
     id: d.id, label: d.label, sub: [d.board, d.sub].filter(Boolean).join(' · '), icon: 'devices', kind: 'dev',
     link: `Port ${d.port.replace('ether', '')}${speed(d.port) ? ` · ${speed(d.port)}` : ''}`,
-    children: [...d.devices.map(devNode), ...withVms(d.clients)],
+    // the bridge only knows the router's port, which is the switch's uplink: no port label for clients behind it
+    children: [...d.devices.map(devNode), ...withVms(d.clients).map((n) => ({ ...n, link: undefined }))],
   })
   const neighborNodes = grouped.devices.map(devNode)
   const topWired = withVms(grouped.direct.filter((c) => c.wired))
@@ -105,9 +106,10 @@
         <div style="transform:scale({zoom});transform-origin:0 0;width:{width}px;height:{height}px;position:relative">
           <svg {width} {height}>
             {#each edges as { p, c }}
-              {@const midY = (p.y! + 34 + c.y!) / 2}
-              <path d="M{p.x} {p.y! + 34} V{midY} H{c.x} V{c.y! - 30}" class:wifi={c.wireless} class:dim={lit && !lit.has(c.id)} class:hot={lit?.has(c.id)} />
-              {#if c.link}<text x={c.x} y={c.y! - 38} class:dim={lit && !lit.has(c.id)}>{c.link}</text>{/if}
+              {@const top = p.y! + (p.kind === 'client' ? 84 : 70)}
+              {@const midY = (top + c.y! - 52) / 2}
+              <path d="M{p.x} {top} V{midY} H{c.x} V{c.y! - 30}" class:wifi={c.wireless} class:dim={lit && !lit.has(c.id)} class:hot={lit?.has(c.id)} />
+              {#if c.link}<text x={c.x! + 6} y={c.y! - 40} class:dim={lit && !lit.has(c.id)}>{c.link}</text>{/if}
             {/each}
           </svg>
           {#each all as n}
@@ -152,7 +154,7 @@
   path { fill: none; stroke: var(--muted); stroke-width: 1.5; opacity: .7; }
   path.wifi { stroke-dasharray: 4 4; stroke: var(--down); }
   path.hot { stroke: var(--accent); opacity: 1; stroke-width: 2; }
-  text { font: 10.5px var(--font); fill: var(--muted); text-anchor: middle; }
+  text { font: 10.5px var(--font); fill: var(--muted); text-anchor: start; }
   .dim { opacity: .18 !important; }
   .node { position: absolute; transform: translate(-50%, -30px); width: 122px; display: grid; justify-items: center; gap: 2px; text-align: center; color: var(--text); transition: opacity .15s; }
   .node b { font-size: 12px; max-width: 120px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
