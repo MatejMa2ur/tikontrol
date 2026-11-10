@@ -109,8 +109,8 @@
       <button class="avatar" popovertarget="me-menu" title="Signed in as {me?.user}" aria-label="Account menu for {me?.user}">{(me?.user ?? 'a').slice(0, 1).toUpperCase()}</button>
       <div id="me-menu" class="me-menu" popover>
         <b>{me?.user}</b>
-        <span class="muted small">{me?.role === 'admin' ? 'Admin' : 'Viewer'}{me?.mikrotik ? ' · MikroTik account' : ''}</span>
-        {#if me?.readOnly}<a class="small" href="#/settings/control">tikontrol is read-only{me?.role === 'admin' ? ' · allow changes' : ''}</a>{/if}
+        <span class="muted small">Your role: {me?.role === 'admin' ? 'Admin' : 'Viewer'}{me?.mikrotik ? ' (MikroTik account)' : ''}</span>
+        {#if me?.readOnly}<span class="muted small">Changes are off for everyone: tikontrol connects with a read-only router user.</span>{#if me?.role === 'admin'}<a class="small" href="#/settings/control">Allow changes</a>{/if}{/if}
         <button class="btn" onclick={logout}><Icon name="lock" size={14} />Sign out</button>
       </div>
     {:else}<span class="avatar" title="admin">A</span>{/if}
