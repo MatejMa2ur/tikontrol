@@ -180,6 +180,23 @@ fn rule_args(chain: &str, action: &str, m: &Match) -> Result<Vec<(&'static str, 
     Ok(a)
 }
 
+/// Like `rebuild` for filter rules tagged `c` in `chain`, but the re-created rules go back where they
+/// were (before the rule that followed them), not to the end of the chain. Order matters: an input
+/// `accept` re-added after "drop all not coming from LAN" would never match.
+fn rebuild_in_place(r: &mut dyn Router, chain: &str, fields: &[&'static str], c: &str) -> Result<Vec<Op>, String> {
+    let mut undo = rebuild(r, FILTER, fields, c)?;
+    let rows = print(r, FILTER, &[".id", "comment"], Some(("chain", chain)))?;
+    let ours = |x: &crate::ros::conn::Row| x.get("comment").is_some_and(|v| v == c);
+    let next = rows.iter().rposition(ours).and_then(|i| rows[i + 1..].iter().find(|x| !ours(x))).and_then(|x| x.get(".id")).cloned();
+    if let Some(id) = next {
+        for op in &mut undo {
+            let at = op.args.len().saturating_sub(1); // keep `comment` last, like `tagged`
+            op.args.insert(at, ("place-before", id.clone()));
+        }
+    }
+    Ok(undo)
+}
+
 fn tagged(mut a: Vec<(&'static str, String)>, c: &str, before: &Option<String>) -> Vec<(&'static str, String)> {
     if let Some(id) = before {
         a.push(("place-before", id.clone()));
@@ -247,7 +264,7 @@ fn build(i: &S, r: &mut dyn Router) -> Result<Plan, String> {
             let c = format!("tik:{}:{name}", if input { "input" } else { "fw" });
             let mut fields = RULE_FIELDS.to_vec();
             fields.push("reject-with");
-            let undo = rebuild(r, FILTER, &fields, &c)?;
+            let undo = rebuild_in_place(r, if input { "input" } else { "forward" }, &fields, &c)?;
             if undo.is_empty() {
                 return Err("only rules created by tikontrol can be removed here".into());
             }
@@ -287,7 +304,7 @@ fn build(i: &S, r: &mut dyn Router) -> Result<Plan, String> {
                 }
             }
             let c = format!("tik:zone:{a}:{b}");
-            let mut undo = rebuild(r, FILTER, RULE_FIELDS, &c)?;
+            let mut undo = rebuild_in_place(r, "forward", RULE_FIELDS, &c)?;
             let mut ops = vec![remove(FILTER, &c)];
             if policy != "default" {
                 let before = first_rule(r, FILTER, "forward")?;
@@ -361,7 +378,7 @@ fn build(i: &S, r: &mut dyn Router) -> Result<Plan, String> {
             if undo.is_empty() {
                 return Err("only domains blocked by tikontrol can be unblocked here".into());
             }
-            undo.extend(rebuild(r, FILTER, &["chain", "protocol", "dst-port", "tls-host", "action", "reject-with"], &c)?);
+            undo.extend(rebuild_in_place(r, "forward", &["chain", "protocol", "dst-port", "tls-host", "action", "reject-with"], &c)?);
             plan(format!("Unblock {d}"), Risk::Low, vec![remove(FILTER, &c), remove(STATIC, &c)], undo)
         }
         AddAdlist { url } => {
@@ -496,6 +513,33 @@ mod tests {
         assert_eq!(p.risk, Risk::High);
         assert!(p.warnings[0].contains("locks you"));
         assert!(p.cli()[0].starts_with("/ip/firewall/filter/add chain=input"));
+    }
+
+    #[test]
+    fn removed_rules_come_back_in_place() {
+        // the fake answers every filter print with these rows: ours, then defconf's drop
+        let mut f = Fake::default();
+        f.answers.insert(
+            "/ip/firewall/filter/print".into(),
+            Ok(vec![
+                row(&[(".id", "*7"), ("chain", "input"), ("action", "accept"), ("protocol", "tcp"), ("dst-port", "8291"), ("comment", "tik:input:winbox-wan")]),
+                row(&[(".id", "*8"), ("chain", "input"), ("action", "drop"), ("in-interface-list", "!LAN"), ("comment", "defconf: drop all not coming from LAN")]),
+            ]),
+        );
+        let p = go(json!({"kind":"remove-input-rule","name":"winbox-wan"}), &mut f).unwrap();
+        assert_eq!(p.risk, Risk::High);
+        assert_eq!(p.cli(), [r#"/ip/firewall/filter/remove [find comment="tik:input:winbox-wan"]"#]);
+        assert_eq!(p.undo_cli()[0], "/ip/firewall/filter/add chain=input action=accept protocol=tcp dst-port=8291 place-before=*8 comment=tik:input:winbox-wan");
+        assert!(crate::apply::revert_script("t3", &p).is_ok());
+
+        // last in the chain: nothing to place before, the rule goes back to the end
+        f.answers.insert("/ip/firewall/filter/print".into(), Ok(vec![row(&[(".id", "*9"), ("chain", "forward"), ("action", "drop"), ("comment", "tik:fw:no-nas")])]));
+        let p = go(json!({"kind":"remove-firewall-rule","name":"no-nas"}), &mut f).unwrap();
+        assert_eq!(p.undo_cli(), ["/ip/firewall/filter/add chain=forward action=drop comment=tik:fw:no-nas"]);
+
+        // only tikontrol's rules
+        let e = go(json!({"kind":"remove-firewall-rule","name":"defconf"}), &mut fake()).unwrap_err();
+        assert!(e.contains("only rules created by tikontrol"), "{e}");
     }
 
     #[test]
