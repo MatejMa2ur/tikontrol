@@ -56,12 +56,65 @@ pub enum SystemIntent {
     CheckUpdates {},
     InstallUpdate {},
     BackupSchedule { enabled: bool, #[serde(default = "week")] interval: String },
+    /// A maintenance window: check (and optionally install) RouterOS updates daily or weekly.
+    AutoUpdate {
+        enabled: bool,
+        #[serde(default = "daily")]
+        day: String,
+        #[serde(default = "three")]
+        hour: u8,
+        #[serde(default)]
+        install: bool,
+    },
     SaveBackup { name: String },
     RestoreBackup { name: String },
 }
 
 fn week() -> String {
     "7d".into()
+}
+fn daily() -> String {
+    "daily".into()
+}
+fn three() -> u8 {
+    3
+}
+
+pub const UPDATE_JOB: &str = "tik-auto-update";
+const DAYS: &[&str] = &["mon", "tue", "wed", "thu", "fri", "sat", "sun"];
+
+/// Weekday of a RouterOS date (both formats), 0 = Monday.
+fn weekday(date: &str) -> Option<i64> {
+    // `later` validates and normalises the date; 2000-01-03 was a Monday
+    let (iso, _) = crate::apply::later(date, "00:00:00", 0)?;
+    let to_days = |d: &str| -> Option<i64> {
+        let (y, m, dd) = if let Some((y, rest)) = d.split_once('-') {
+            let (m, dd) = rest.split_once('-')?;
+            (y.parse::<i64>().ok()?, m.parse::<i64>().ok()?, dd.parse::<i64>().ok()?)
+        } else {
+            const MON: [&str; 12] = ["jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec"];
+            let mut it = d.split('/');
+            let mon = it.next()?.to_ascii_lowercase();
+            let m = MON.iter().position(|x| *x == mon)? as i64 + 1;
+            let dd = it.next()?.parse().ok()?;
+            (it.next()?.parse().ok()?, m, dd)
+        };
+        let y = if m <= 2 { y - 1 } else { y };
+        let era = y.div_euclid(400);
+        let yoe = y - era * 400;
+        let doy = (153 * (m + if m > 2 { -3 } else { 9 }) + 2) / 5 + dd - 1;
+        Some(era * 146_097 + yoe * 365 + yoe / 4 - yoe / 100 + doy)
+    };
+    Some((to_days(&iso)? - to_days("2000-01-03")?).rem_euclid(7))
+}
+
+/// The first start (date, time) at `hour`:00 on `day` ("daily" or mon..sun) after the router's clock.
+pub fn next_window(date: &str, time: &str, day: &str, hour: u8) -> Option<(String, String)> {
+    let mut t = time.split(':').map(|x| x.parse::<i64>().ok());
+    let now = t.next()?? * 3600 + t.next()?? * 60 + t.next()??;
+    let today = weekday(date)?;
+    let want = if day == "daily" { None } else { Some(DAYS.iter().position(|d| *d == day)? as i64) };
+    (0..8).map(|k| (k, k * 86_400 + i64::from(hour) * 3600)).find(|(k, at)| *at > now && want.is_none_or(|w| (today + k) % 7 == w)).and_then(|(_, at)| crate::apply::later(date, "00:00:00", at as u64))
 }
 
 /// tikontrol's scheduled export: a readable script without secrets, overwritten each run.
@@ -94,6 +147,7 @@ pub const KINDS: &[&str] = &[
     "check-updates",
     "install-update",
     "backup-schedule",
+    "auto-update",
     "save-backup",
     "restore-backup",
 ];
@@ -389,6 +443,54 @@ fn build(i: &SystemIntent, r: &mut dyn Router) -> Result<Plan, String> {
                 (false, None) => return Err("scheduled backups are already off".into()),
             }
         }
+        AutoUpdate { enabled, day, hour, install } => {
+            if day != "daily" && !DAYS.contains(&day.as_str()) {
+                return Err(format!("day must be daily or one of {}", DAYS.join(", ")));
+            }
+            if *hour > 23 {
+                return Err("hour must be 0-23".into());
+            }
+            let path = "/system/scheduler";
+            let have = r.run(&Cmd::new("/system/scheduler/print").proplist(&["start-date", "start-time", "interval", "on-event", "policy"]).query("name", UPDATE_JOB))?;
+            let remove = Op::on(path, "remove", "name", UPDATE_JOB, vec![]);
+            let restore = |row: &Row| {
+                let g = |k: &str| row.get(k).cloned().unwrap_or_default();
+                Op::add(path, vec![("name", UPDATE_JOB.into()), ("start-date", g("start-date")), ("start-time", g("start-time")), ("interval", g("interval")), ("on-event", g("on-event")), ("policy", g("policy")), ("comment", "tik: update window".into())])
+            };
+            if !enabled {
+                return match have.first() {
+                    Some(row) => Ok(plan("Stop the update window".into(), Risk::Low, vec![remove], vec![restore(row)])),
+                    None => Err("the update window is already off".into()),
+                };
+            }
+            let clock = first(r, "/system/clock", &["date", "time"])?;
+            let (date, time) = next_window(clock.get("date").map_or("", |s| s), clock.get("time").map_or("", |s| s), day, *hour).ok_or("cannot read the router clock")?;
+            let check = "/system/package/update/check-for-updates once; :delay 20s";
+            let event = if *install {
+                format!("{check}; :if ([/system/package/update/get installed-version] != [/system/package/update/get latest-version]) do={{ :log warning \"tikontrol: installing a RouterOS update in the update window\"; /system/package/update/install }}")
+            } else {
+                format!("{check}; :log info \"tikontrol: checked for RouterOS updates\"")
+            };
+            let policy = if *install { "read,write,policy,test,reboot" } else { "read,write,test" };
+            let interval = if day == "daily" { "1d" } else { "7d" };
+            let job = Op::add(path, vec![("name", UPDATE_JOB.into()), ("start-date", date), ("start-time", time), ("interval", interval.into()), ("on-event", event), ("policy", policy.into()), ("comment", "tik: update window".into())]);
+            let when = if day == "daily" { format!("daily at {hour:02}:00") } else { format!("every {day} at {hour:02}:00") };
+            let undo = match have.first() {
+                Some(row) => vec![remove.clone(), restore(row)],
+                None => vec![remove.clone()],
+            };
+            let mut ops = if have.is_empty() { vec![] } else { vec![remove] };
+            ops.push(job);
+            let mut p = plan(if *install { format!("Install RouterOS updates {when}") } else { format!("Check for RouterOS updates {when}") }, if *install { Risk::High } else { Risk::Low }, ops, undo);
+            p.warnings.push("Router time is used: check the router's clock and time zone.".into());
+            if *install {
+                p.warnings.push("High risk: in the window the router installs a newer version on its channel by itself and restarts. Internet and Wi-Fi drop for a few minutes; there is no automatic way back.".into());
+                p.warnings.push("Keep the channel on stable or long-term, and keep a recent backup.".into());
+            } else {
+                p.warnings.push("Only checks: tikontrol's \"RouterOS update available\" alert tells you when there is something to install.".into());
+            }
+            p
+        }
         SaveBackup { name } => {
             let file = format!("tik-{}", file_stem(name)?);
             one_shot(
@@ -528,6 +630,36 @@ mod tests {
         let p = go(json!({"kind":"set-leds","all_leds_off":"immediate"}), &mut f).unwrap();
         assert_eq!(p.cli(), ["/system/leds/settings/set all-leds-off=immediate"]);
         assert_eq!(p.undo_cli(), ["/system/leds/settings/set all-leds-off=never"]);
+    }
+
+    #[test]
+    fn update_window_starts_at_the_next_matching_time() {
+        assert_eq!(weekday("2026-11-10"), Some(1)); // a Tuesday
+        assert_eq!(weekday("nov/10/2026"), Some(1));
+        assert_eq!(next_window("2026-11-10", "10:00:00", "daily", 3), Some(("2026-11-11".into(), "03:00:00".into())));
+        assert_eq!(next_window("2026-11-10", "02:00:00", "daily", 3), Some(("2026-11-10".into(), "03:00:00".into())));
+        assert_eq!(next_window("2026-11-10", "10:00:00", "sun", 4), Some(("2026-11-15".into(), "04:00:00".into())));
+        assert_eq!(next_window("2026-11-10", "10:00:00", "tue", 4), Some(("2026-11-17".into(), "04:00:00".into())));
+        assert_eq!(next_window("dec/31/2026", "23:30:00", "daily", 1), Some(("jan/01/2027".into(), "01:00:00".into())));
+        assert_eq!(next_window("garbage", "10:00:00", "daily", 1), None);
+    }
+
+    #[test]
+    fn update_window_intent() {
+        let c = |v: serde_json::Value, f: &mut Fake| compile_value(&v, f);
+        let mut f = Fake::default();
+        f.answers.insert("/system/clock/print".into(), Ok(vec![row(&[("date", "2026-11-10"), ("time", "10:00:00")])]));
+        let p = c(json!({"kind":"auto-update","enabled":true,"day":"sun","hour":4}), &mut f).unwrap();
+        let cli = p.cli().join("\n");
+        assert!(cli.contains("start-date=2026-11-15") && cli.contains("interval=7d") && !cli.contains("/install"), "{cli}");
+        assert_eq!(p.risk, Risk::Low);
+        assert_eq!(p.undo_cli(), [r#"/system/scheduler/remove [find name="tik-auto-update"]"#]);
+        let p = c(json!({"kind":"auto-update","enabled":true,"install":true}), &mut f).unwrap();
+        assert_eq!(p.risk, Risk::High);
+        assert!(p.cli().join(" ").contains("/system/package/update/install"));
+        assert!(c(json!({"kind":"auto-update","enabled":true,"day":"someday"}), &mut f).is_err());
+        assert!(c(json!({"kind":"auto-update","enabled":true,"hour":24}), &mut f).is_err());
+        assert!(c(json!({"kind":"auto-update","enabled":false}), &mut f).unwrap_err().contains("already off"));
     }
 
     #[test]

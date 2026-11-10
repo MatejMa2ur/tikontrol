@@ -10,6 +10,10 @@
 
   const users: any[] = raw.users ?? []
   // full backups plus tikontrol's own text exports (tik-*.rsc, listed by RouterOS as type "script")
+  // update window: tikontrol's own scheduler job (intents/system.rs auto-update)
+  const updJob: any = ((raw.scheduler ?? []) as any[]).find((j) => j.name === 'tik-auto-update')
+  let win = $state({ day: 'daily', hour: 3, install: false })
+  const dayNames: Record<string, string> = { daily: 'Every day', mon: 'Monday', tue: 'Tuesday', wed: 'Wednesday', thu: 'Thursday', fri: 'Friday', sat: 'Saturday', sun: 'Sunday' }
   const backups: any[] = [...(raw.backups ?? []), ...((raw.exports ?? []) as any[]).filter((f) => /(^|\/)tik-[\w-]+\.rsc$/.test(f.name ?? ''))]
   // exports carry no passwords or keys, so they may be downloaded; .backup files stay on the router
   const exportUrl = (name: string) => `/api/v1/tools/export?name=${encodeURIComponent(name)}${site ? `&site=${encodeURIComponent(site)}` : ''}`
@@ -276,6 +280,15 @@
   <div class="row"><button class="btn" onclick={() => review('Check for updates', ['/system/package/update/check-for-updates'], { kind: 'check-updates' })}>Check for updates</button>
     {#if router.latest && router.latest !== router.version}<button class="btn primary" onclick={() => review(`Install RouterOS ${router.latest}`, ['/system/package/update/install'], { kind: 'install-update' })}>Install {router.latest}</button>{/if}
     <a class="btn" href="#/devices/updates">Manage updates…</a></div>
+  <h4>Update window</h4>
+  <p class="muted small">{updJob ? `On: next run ${updJob['next-run'] ?? updJob['start-time'] ?? ''} (every ${updJob.interval}).` : 'Off: RouterOS is only updated when you click Install.'} Uses the router's clock.</p>
+  <div class="row wrap">
+    <select bind:value={win.day} aria-label="Update window day">{#each Object.entries(dayNames) as [v, l]}<option value={v}>{l}</option>{/each}</select>
+    <select bind:value={win.hour} aria-label="Update window hour">{#each Array.from({ length: 24 }, (_, h) => h) as h}<option value={h}>{String(h).padStart(2, '0')}:00</option>{/each}</select>
+    <label class="chk"><input type="checkbox" bind:checked={win.install} /> Install updates too (restarts the router)</label>
+    <button class="btn" onclick={() => review(win.install ? 'Install updates in a window' : 'Check for updates in a window', [`/system/scheduler/add name=tik-auto-update interval=${win.day === 'daily' ? '1d' : '7d'} on-event="/system/package/update/check-for-updates once…"`], { kind: 'auto-update', enabled: true, day: win.day, hour: win.hour, install: win.install })}>Review & apply</button>
+    {#if updJob}<button class="btn" onclick={() => review('Stop the update window', ['/system/scheduler/remove [find name="tik-auto-update"]'], { kind: 'auto-update', enabled: false })}>Turn off</button>{/if}
+  </div>
 </Section>
 
 <Section title="API keys" desc="For Home Assistant and scripts: read-only access to tikontrol's GET API with Authorization: Bearer <key>. Keys belong to tikontrol, not the router.">
