@@ -25,9 +25,10 @@ enum I {
     QosRule { name: String, protocol: String, ports: String, dscp: u8, priority: u8 },
     RemoveQosRule { name: String },
     RadiusServer { address: String, secret: String, services: Vec<String> },
+    RemoveRadius { address: String },
 }
 
-const KINDS: &[&str] = &["client-group", "group-limit", "remove-group-limit", "qos-rule", "remove-qos-rule", "radius-server"];
+const KINDS: &[&str] = &["client-group", "group-limit", "remove-group-limit", "qos-rule", "remove-qos-rule", "radius-server", "remove-radius"];
 
 pub fn compile(v: &Value, r: &mut dyn Router) -> Option<Result<Plan, String>> {
     parse::<I>(v, KINDS).map(|i| i.and_then(|i| build(i, r)))
@@ -164,6 +165,25 @@ fn build(i: I, r: &mut dyn Router) -> Result<Plan, String> {
                 "Wi-Fi or ports set to use RADIUS stop letting devices in if the server doesn't answer.",
             ])
         }
+        RemoveRadius { address } => {
+            let addr = address.trim().parse::<IpAddr>().map_err(|_| format!("invalid RADIUS server address {address:?}"))?;
+            let c = format!("tik:radius:{addr}");
+            if rows(r, "/radius", &[".id"], "comment", &c)?.is_empty() {
+                return Err("only RADIUS servers added by tikontrol can be removed here".into());
+            }
+            // the inverse would have to carry the shared secret, which tikontrol never keeps: not revertible
+            Plan {
+                title: format!("Remove RADIUS server {addr}"),
+                risk: Risk::Medium,
+                warnings: vec![
+                    "This can't be undone automatically: tikontrol never keeps the shared secret. To bring the server back, add it again with its secret.".into(),
+                    "Wi-Fi or ports that use RADIUS stop letting new devices in until another server is set.".into(),
+                ],
+                ops: vec![rm("/radius", "comment", &c)],
+                undo: vec![],
+                revertible: false,
+            }
+        }
     })
 }
 
@@ -227,5 +247,33 @@ mod tests {
         assert!(p.cli()[0].contains(r#"secret="********""#));
         assert!(!revert_script("x", &p).unwrap().contains("s3cr3t"));
         assert!(compile(&json!({"kind": "radius-server", "address": "10.0.0.50", "secret": "x", "services": ["login"]}), &mut Fake::default()).unwrap().is_err());
+    }
+
+    #[test]
+    fn remove_radius_only_touches_own_servers_and_is_one_shot() {
+        assert!(compile(&json!({"kind": "remove-radius", "address": "10.0.0.50"}), &mut Fake::default()).unwrap().is_err(), "not ours");
+        assert!(compile(&json!({"kind": "remove-radius", "address": "10.0.0.50\"]"}), &mut Fake::default()).unwrap().is_err());
+        let mut f = Fake::default();
+        f.answers.insert("/radius/print".into(), Ok(vec![row(&[(".id", "*3")])]));
+        let p = ok(json!({"kind": "remove-radius", "address": " 10.0.0.50 "}), &mut f);
+        assert_eq!(p.cli(), [r#"/radius/remove [find comment="tik:radius:10.0.0.50"]"#]);
+        assert!(!p.revertible && p.undo.is_empty() && !p.warnings.is_empty());
+        assert!(f.seen.iter().flatten().all(|w| !w.contains("secret")), "never reads the secret");
+    }
+
+    #[test]
+    fn remove_limit_and_qos_restore_what_they_remove() {
+        let mut f = Fake::default();
+        f.answers.insert("/queue/tree/print".into(), Ok(vec![row(&[("name", "tik-Kids-down"), ("parent", "global"), ("packet-mark", "tik-Kids-down"), ("queue", "tik-Kids-down")])]));
+        let p = ok(json!({"kind": "remove-group-limit", "group": "Kids"}), &mut f);
+        assert_eq!(p.cli()[0], r#"/queue/tree/remove [find comment="tik:profile:Kids"]"#);
+        assert!(p.undo_cli().last().unwrap().contains("comment=tik:profile:Kids"));
+        assert!(compile(&json!({"kind": "remove-group-limit", "group": "Kids"}), &mut Fake::default()).unwrap().is_err(), "not ours");
+        let mut f = Fake::default();
+        f.answers.insert("/ip/firewall/mangle/print".into(), Ok(vec![row(&[("chain", "postrouting"), ("protocol", "udp"), ("dst-port", "5060"), ("action", "change-dscp"), ("new-dscp", "46"), ("passthrough", "true")])]));
+        let p = ok(json!({"kind": "remove-qos-rule", "name": "voip"}), &mut f);
+        assert_eq!(p.cli(), [r#"/queue/tree/remove [find comment="tik:qos:voip"]"#, r#"/ip/firewall/mangle/remove [find comment="tik:qos:voip"]"#]);
+        assert!(p.undo_cli()[0].contains("passthrough=yes comment=tik:qos:voip"), "{:?}", p.undo_cli());
+        assert!(compile(&json!({"kind": "remove-qos-rule", "name": "voip"}), &mut Fake::default()).unwrap().is_err(), "not ours");
     }
 }
