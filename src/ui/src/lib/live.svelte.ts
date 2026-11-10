@@ -2,7 +2,7 @@
 // and history comes from its store; in the mockup they are a random walk around the snapshot values.
 import { clients, internet, router, isBackend } from './data'
 import { api, site } from './backend'
-import { applyTheme, designs, palettes, DEFAULT_DESIGN, DEFAULT_PALETTE } from './themes'
+import { applyTheme, cleanTweaks, designs, palettes, DEFAULT_DESIGN, DEFAULT_PALETTE, type Tweaks } from './themes'
 
 const N = 120 // seconds of history in the WAN chart
 const now = () => Math.floor(Date.now() / 1000)
@@ -65,6 +65,8 @@ export const prefs = $state({
   // Colour and design theme (lib/themes.ts). Unknown names from storage fall back to the defaults.
   palette: ((p: string) => (Object.hasOwn(palettes, p) ? p : DEFAULT_PALETTE))(q.get('palette') ?? load<string>('tik.palette', DEFAULT_PALETTE)),
   design: ((d: string) => (Object.hasOwn(designs, d) ? d : DEFAULT_DESIGN))(q.get('design') ?? load<string>('tik.design', DEFAULT_DESIGN)),
+  // per-browser fine-tuning on top of the design: corners, spacing, card edges, font, icon lines
+  tweaks: (q.has('design') ? {} : cleanTweaks(load<unknown>('tik.tweaks', {}))) as Tweaks,
   // follow the OS light/dark setting; on by default for browsers that never picked a mode
   auto: q.has('theme') ? false : load<boolean>('tik.themeAuto', localStorage.getItem('tik.theme') === null),
   showRos: load<boolean>('tik.showRos', false),
@@ -95,8 +97,9 @@ $effect.root(() => {
     localStorage.setItem('tik.themeAuto', JSON.stringify(prefs.auto))
     localStorage.setItem('tik.palette', JSON.stringify(prefs.palette))
     localStorage.setItem('tik.design', JSON.stringify(prefs.design))
+    localStorage.setItem('tik.tweaks', JSON.stringify(prefs.tweaks))
     localStorage.setItem('tik.showRos', JSON.stringify(prefs.showRos))
-    applyTheme(document.documentElement, prefs.theme, prefs.palette, prefs.design)
+    applyTheme(document.documentElement, prefs.theme, prefs.palette, prefs.design, { ...prefs.tweaks })
   })
   $effect(() => {
     const shared = JSON.stringify(Object.fromEntries(SHARED.map((k) => [k, prefs[k]])))

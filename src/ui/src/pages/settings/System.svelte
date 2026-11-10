@@ -8,7 +8,7 @@
   import Icon from '../../lib/Icon.svelte'
   import TrustCa from '../../lib/ui/TrustCa.svelte'
   import { prefs } from '../../lib/live.svelte'
-  import { designs, looks, palettes } from '../../lib/themes'
+  import { designs, looks, palettes, tweaks, type Tweaks } from '../../lib/themes'
 
   const clock: any = raw.clock ?? {}
   const ntp: any = raw.ntp ?? {}
@@ -144,7 +144,7 @@
 <Section title="Appearance" desc="Changes show right away and are saved in this browser, not on the router.">
   <Field label="Look" help="Sets mode, colours and design in one go; fine-tune them below"><div class="opts" role="radiogroup" aria-label="Look">
     {#each Object.entries(looks) as [id, l]}{@const c = palettes[l.palette][l.mode]}
-      <label class="opt" class:on={!prefs.auto && prefs.theme === l.mode && prefs.palette === l.palette && prefs.design === l.design} title={l.desc}><input type="radio" name="look" value={id} onchange={() => Object.assign(prefs, { auto: false, theme: l.mode, palette: l.palette, design: l.design })} />
+      <label class="opt" class:on={!prefs.auto && prefs.theme === l.mode && prefs.palette === l.palette && prefs.design === l.design} title={l.desc}><input type="radio" name="look" value={id} onchange={() => Object.assign(prefs, { auto: false, theme: l.mode, palette: l.palette, design: l.design, tweaks: {} })} />
         <span class="sw" style:background={c.bg} style:border-color={c.line} style:border-radius={designs[l.design].radiusSm} aria-hidden="true"><i style:background={c.panel}></i><i style:background={c.accentBg}></i><i style:background={c.text}></i></span>{l.label}</label>
     {/each}
   </div></Field>
@@ -164,6 +164,16 @@
         <span class="shape" style:border-radius={d.radiusSm} style:border-width={d.cardBorder} style:box-shadow={d.cardShadow} aria-hidden="true"></span>{d.label}</label>
     {/each}
   </div></Field>
+  <Field label="Fine-tune" help="Change one part of the design; Design default keeps the design's own choice"><div class="tweaks">
+    {#each Object.entries(tweaks) as [k, t]}
+      <label class="tw"><span class="small muted">{t.label}</span>
+        <select value={prefs.tweaks[k as keyof Tweaks] ?? ''} onchange={(e) => { const v = e.currentTarget.value; const n: Tweaks = { ...prefs.tweaks }; if (v) n[k as keyof Tweaks] = v; else delete n[k as keyof Tweaks]; prefs.tweaks = n }} aria-label={t.label}>
+          <option value="">Design default</option>
+          {#each Object.entries(t.options) as [id, o]}<option value={id}>{o.label}</option>{/each}
+        </select></label>
+    {/each}
+    {#if Object.keys(prefs.tweaks).length}<button class="btn small" type="button" onclick={() => (prefs.tweaks = {})}>Reset</button>{/if}
+  </div></Field>
   <div class="preview" role="group" aria-label="Preview">
     <div class="card"><div class="row between"><b>Preview</b><span class="pill ok"><span class="dot ok"></span>Online</span></div>
       <p class="muted small">Muted text, <a href="#/settings/system">a link</a> and status: <span class="pill warn">Warning</span> <span class="pill bad">Offline</span></p>
@@ -177,6 +187,8 @@
 </Section>
 
 <style>
+  .tweaks { display: flex; flex-wrap: wrap; gap: 10px; align-items: flex-end; }
+  .tw { display: flex; flex-direction: column; gap: 3px; }
   .svc { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 6px 14px; }
   .svc .row { gap: 8px; }
   .bad span:nth-child(2) { color: var(--bad); }

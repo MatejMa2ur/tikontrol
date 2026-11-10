@@ -68,6 +68,54 @@ export const looks: Record<string, { label: string; desc: string; mode: Mode; pa
   minimal: { label: 'Minimal', desc: 'Graphite, soft corners, no borders', mode: 'dark', palette: 'graphite', design: 'soft' },
 }
 
+/** Fine-tuning on top of a design: each choice overrides only its own variables ('' = keep the design's). */
+export type Tweaks = { corners?: string; density?: string; edges?: string; font?: string; icons?: string }
+export const tweaks: Record<keyof Tweaks, { label: string; options: Record<string, { label: string; vars: Partial<Design> }> }> = {
+  corners: { label: 'Corners', options: {
+    square: { label: 'Square', vars: { radius: '2px', radiusSm: '2px' } },
+    rounded: { label: 'Rounded', vars: { radius: '8px', radiusSm: '7px' } },
+    round: { label: 'Round', vars: { radius: '16px', radiusSm: '12px' } },
+  } },
+  density: { label: 'Spacing', options: {
+    compact: { label: 'Compact', vars: { pad: '10px', gap: '8px', cell: '4px' } },
+    normal: { label: 'Normal', vars: { pad: '16px', gap: '14px', cell: '9px' } },
+    roomy: { label: 'Roomy', vars: { pad: '22px', gap: '18px', cell: '12px' } },
+  } },
+  edges: { label: 'Cards', options: {
+    borders: { label: 'Borders', vars: { cardBorder: '1px', cardShadow: 'none' } },
+    shadows: { label: 'Shadows', vars: { cardBorder: '0px', cardShadow: 'var(--shadow-sm)' } },
+    both: { label: 'Both', vars: { cardBorder: '1px', cardShadow: 'var(--shadow-sm)' } },
+  } },
+  font: { label: 'Font', options: {
+    system: { label: 'System', vars: { font: SANS } },
+    rounded: { label: 'Rounded', vars: { font: "ui-rounded, system-ui, -apple-system, 'Segoe UI', sans-serif" } },
+    classic: { label: 'Classic', vars: { font: "Verdana, Tahoma, 'DejaVu Sans', sans-serif" } },
+    mono: { label: 'Monospace', vars: { font: "ui-monospace, 'SFMono-Regular', Menlo, Consolas, monospace" } },
+  } },
+  icons: { label: 'Icon lines', options: {
+    thin: { label: 'Thin', vars: { iconStroke: '1.4' } },
+    regular: { label: 'Regular', vars: { iconStroke: '1.8' } },
+    bold: { label: 'Bold', vars: { iconStroke: '2.4' } },
+  } },
+}
+
+/** Only known keys and options survive (values come from browser storage). */
+export function cleanTweaks(t: unknown): Tweaks {
+  const out: Tweaks = {}
+  if (t && typeof t === 'object') for (const k of Object.keys(tweaks) as (keyof Tweaks)[]) {
+    const v = (t as Record<string, unknown>)[k]
+    if (typeof v === 'string' && Object.hasOwn(tweaks[k].options, v)) out[k] = v
+  }
+  return out
+}
+
+/** A design's variables with the tweaks applied. */
+export function designVars(design: string, t: Tweaks = {}): Design {
+  const base = designs[Object.hasOwn(designs, design) ? design : DEFAULT_DESIGN]
+  const c = cleanTweaks(t)
+  return Object.assign({}, base, ...(Object.keys(c) as (keyof Tweaks)[]).map((k) => tweaks[k].options[c[k]!].vars))
+}
+
 export const DEFAULT_PALETTE = 'blue'
 export const DEFAULT_DESIGN = 'default'
 
@@ -75,10 +123,10 @@ export const DEFAULT_DESIGN = 'default'
 const cssVar = (k: string) => '--' + k.replace(/[A-Z]/g, (c) => '-' + c.toLowerCase())
 
 /** Set the theme's variables on an element (normally <html>). Unknown names fall back to the defaults. */
-export function applyTheme(el: HTMLElement, mode: Mode, palette: string, design: string) {
+export function applyTheme(el: HTMLElement, mode: Mode, palette: string, design: string, t: Tweaks = {}) {
   const m: Mode = mode === 'light' ? 'light' : 'dark'
   const pal = Object.hasOwn(palettes, palette) ? palette : DEFAULT_PALETTE
   const des = Object.hasOwn(designs, design) ? design : DEFAULT_DESIGN
-  for (const [k, v] of Object.entries({ ...palettes[pal][m], ...designs[des] })) if (k !== 'label') el.style.setProperty(cssVar(k), v)
+  for (const [k, v] of Object.entries({ ...palettes[pal][m], ...designVars(des, t) })) if (k !== 'label') el.style.setProperty(cssVar(k), v)
   Object.assign(el.dataset, { theme: m, palette: pal, design: des })
 }

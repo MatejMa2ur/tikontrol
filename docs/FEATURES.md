@@ -12,7 +12,7 @@ Clean-room: we copy the behaviour, never the assets.
 **Backing:** `ROS` = RouterOS API on the router · `CMR` = MikroTik CMR server · `tik` = our own logic/DB · `✗` = nothing can back it
 
 <!-- progress:start -->
-**Progress:** 114 ✅ · 111 🟨 · 0 🎨 · 1 ⬜ · 8 ➖ (234 items, 50% done) · 34 🔌 waiting for a hardware test ([list](HARDWARE_TESTS.md))
+**Progress:** 115 ✅ · 110 🟨 · 0 🎨 · 1 ⬜ · 8 ➖ (234 items, 51% done) · 34 🔌 waiting for a hardware test ([list](HARDWARE_TESTS.md))
 <!-- progress:end -->
 
 ---
@@ -310,7 +310,7 @@ Not a UniFi feature: this is our own addition. Light or dark, the colour theme a
 | Feature | Backing | Phase | Status |
 |---|---|---|---|
 | Colour themes: choose a palette, in both light and dark | tik | 2 | ✅ |
-| Design themes: corner rounding, spacing and density, borders and shadows, fonts, icon style | tik | 2 | 🟨 |
+| Design themes: corner rounding, spacing and density, borders and shadows, fonts, icon style (presets plus separate fine-tune choices, saved per browser) | tik | 2 | ✅ |
 | MikroTik-style colour theme: own palette based on MikroTik's current look, no logos or implied endorsement | tik | 2 | ✅ |
 | Theme picker with live preview, saved per user | tik | 2 | ✅ |
 | One-click looks: Controller (UniFi-like), Router admin (MikroTik-like), Minimal — mode, colours and design together | tik | 2 | ✅ |

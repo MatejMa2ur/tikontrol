@@ -2,7 +2,7 @@
 // WCAG 2.2 AA: 4.5:1 for text (1.4.3), 3:1 for UI components and graphics (1.4.11), for every palette in both modes.
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
-import { designs, palettes, type Colours } from '../src/ui/src/lib/themes.ts'
+import { cleanTweaks, designs, designVars, palettes, type Colours } from '../src/ui/src/lib/themes.ts'
 
 const rgb = (hex: string) => [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16))
 const lum = (hex: string) => {
@@ -59,4 +59,14 @@ test('designs define every shape variable with safe CSS values', () => {
     for (const k of ['radius', 'radiusSm', 'pad', 'gap', 'cell', 'cardBorder'] as const) assert.match(d[k], /^\d+px$/, `${name}.${k}`)
     assert.match(d.iconStroke, /^\d(\.\d)?$/, `${name}.iconStroke`)
   }
+})
+
+test('design tweaks override only their own variables and ignore junk from storage', () => {
+  assert.deepEqual(cleanTweaks({ corners: 'round', density: 'huge', font: 1, evil: 'x' }), { corners: 'round' })
+  assert.deepEqual(cleanTweaks('nonsense'), {})
+  const v = designVars('classic', { corners: 'round', icons: 'bold' })
+  assert.equal(v.radius, '16px')
+  assert.equal(v.iconStroke, '2.4')
+  assert.equal(v.pad, designs.classic.pad, 'untouched parts keep the design')
+  assert.deepEqual(designVars('no-such-design'), designs.default)
 })
