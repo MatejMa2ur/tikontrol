@@ -3,3 +3,4 @@ dist/
 src/ui/src/lib/snapshot.json
 .DS_Store
 .claude/
+__pycache__/
