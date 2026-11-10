@@ -198,8 +198,10 @@ pub fn public_pem(b: &[u8]) -> bool {
 }
 
 /// GET /api/v1/tools/export?name=tik-auto.rsc: downloads one of tikontrol's configuration exports, or
-/// the public certificate of its OpenVPN CA. Admin only, read over the reader connection. RouterOS
-/// leaves secrets out of `/export` unless `show-sensitive` is given, which tikontrol never does.
+/// the public certificate of its OpenVPN CA. Admin only. RouterOS leaves secrets out of `/export` unless
+/// `show-sensitive` is given, which tikontrol never does. `/file/read` needs the `ftp` policy, which also lets a
+/// user write and delete files (checked on CHR), so it is read over the writer, never the reader: read-only
+/// mode can't download.
 fn export(app: &Arc<App>, req: &Req, s: &Session) -> Resp {
     if req.method != "GET" {
         return Resp::error(405, "use GET");
@@ -218,8 +220,12 @@ fn export(app: &Arc<App>, req: &Req, s: &Session) -> Resp {
     if let Err(wait) = limit(&s.csrf, Instant::now()) {
         return Resp::error(429, "one download at a time: wait a moment").with("retry-after", wait.to_string());
     }
-    match app.open(As::Reader).and_then(|mut r| read_file(&mut *r, &name)) {
-        Ok(b) if b.is_empty() => Resp::error(404, "the file is empty or the reader may not read files"),
+    if crate::features::can_write(app, s).is_err() {
+        return Resp::error(403, "downloading a file needs the write user: RouterOS only lets users with the ftp policy read files, and the read-only user must not have it");
+    }
+    match crate::features::writer(app, s).and_then(|mut r| read_file(&mut *r, &name)) {
+        Ok(b) if b.is_empty() => Resp::error(404, "the file is empty"),
+        Err(e) if e.contains("not enough permissions") => Resp::error(502, "the write user may not read files: add the ftp policy to its group (/user/group set tikontrol-write policy=read,write,api,test,ftp)"),
         Ok(b) if name == OVPN_CA_FILE && !public_pem(&b) => Resp::error(502, "the file is not a plain PEM certificate, so it was not downloaded"),
         Ok(b) if name == OVPN_CA_FILE => Resp::new(200, "application/x-pem-file", b).with("content-disposition", format!("attachment; filename=\"{OVPN_CA_FILE}\"")).with("cache-control", "no-store".into()).with("x-content-type-options", "nosniff".into()),
         Ok(b) => {
@@ -379,6 +385,10 @@ mod tests {
         let (c, csrf) = admin_session(&app);
         assert_eq!(handle(&app, with_session(req("GET", "/api/v1/tools/export?name=tik-auto.backup", ""), &c, &csrf)).status, 400);
         assert_eq!(handle(&app, with_session(req("POST", "/api/v1/tools/export?name=tik-auto.rsc", ""), &c, &csrf)).status, 405);
+        // reading a file takes the ftp policy, which the reader must not have: read-only mode can't download
+        let r = handle(&app, with_session(req("GET", "/api/v1/tools/export?name=tik-auto.rsc", ""), &c, &csrf));
+        assert_eq!(r.status, 403);
+        assert!(matches!(&r.body, crate::http::Body::Bytes(b) if String::from_utf8_lossy(b).contains("ftp policy")));
     }
 
     #[test]

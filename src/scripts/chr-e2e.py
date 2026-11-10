@@ -451,7 +451,7 @@ def sites(c, d2, off2, data):
     ros(clean, d2)
     # least privilege as the setup commands describe: a read-only reader, and a writer without `policy`
     ros(f'/user/group/add name=tik-e2e-read policy=read,api,test; /user/add name=tik-e2e-read group=tik-e2e-read password="{rpw}"; '
-        f'/user/group/add name=tik-e2e-write policy=read,write,api,test; /user/add name=tik-e2e-write group=tik-e2e-write password="{wpw}"; '
+        f'/user/group/add name=tik-e2e-write policy=read,write,api,test,ftp; /user/add name=tik-e2e-write group=tik-e2e-write password="{wpw}"; '
         f'/user/add name=tik-ssh-test group=read disabled=yes password="{rpw}x"', d2)
     ident_a = (wait(c, "/api/v1/snapshot", lambda d: True) or {}).get("identity")
     ident_b = ros(":put [/system/identity/get name]", d2).strip()

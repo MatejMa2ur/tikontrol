@@ -8,10 +8,13 @@ use serde::Serialize;
 /// None of these may be on the reader user. `read` alone can't change config, but these can
 /// reboot, reveal secrets, change passwords or rewrite policies.
 pub const FORBIDDEN_READ_ONLY: &[&str] = &["write", "sensitive", "password", "policy", "reboot"];
-/// Off for both users: tikontrol never needs these, and each one widens what a leaked credential can do.
+/// Off for the reader (reported as unneeded): tikontrol never reads with these, and each one widens what a leaked
+/// credential can do. The writer is the one exception: it needs `ftp` to download tikontrol's own exports.
 pub const NEVER: &[&str] = &["ftp", "telnet", "ssh", "winbox", "web", "sniff", "romon", "local", "rest-api"];
 pub const READER: &[&str] = &["read", "api", "test"];
-pub const WRITER: &[&str] = &["read", "write", "api", "test"];
+/// `ftp` is what RouterOS asks for `/file/read` (downloads of exports and the OpenVPN CA). The writer is
+/// admin-equivalent already; it also lets it write and delete files.
+pub const WRITER: &[&str] = &["read", "write", "api", "test", "ftp"];
 /// One-step setup needs a full router admin: creating a group and user takes `write` and `policy`.
 pub const ADMIN: &[&str] = &["read", "write", "policy", "api", "test"];
 pub const READER_NAME: &str = "tikontrol-read";

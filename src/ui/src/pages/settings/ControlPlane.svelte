@@ -252,7 +252,7 @@
   <table><thead><tr><th>File</th><th>Date</th><th class="r">Size</th><th></th></tr></thead>
     <tbody>{#each backups as b}<tr class="nohover"><td class="mono small">{b.name}</td><td>{b['last-modified']}</td><td class="r">{(b.size / 1024).toFixed(1)} KB</td>
       <td class="r">{#if b.name.endsWith('.backup')}<button class="btn small" onclick={() => review(`Restore ${b.name}`, [`/system/backup/load name=${b.name}`], { kind: 'restore-backup', name: b.name })}>Restore</button>
-        {:else}{#if isBackend && isAdmin && /\.rsc$/.test(b.name)}<a class="btn small" href={exportUrl(b.name)} download>Download</a>{/if}
+        {:else}{#if isBackend && isAdmin && !session.me?.readOnly && /\.rsc$/.test(b.name)}<a class="btn small" href={exportUrl(b.name)} download>Download</a>{/if}
           <button class="btn small" title="A script export is restored by hand on a reset router: tikontrol won't import a whole configuration over a running one" onclick={() => review(`Restore ${b.name}`, [`# on a router reset without defaults:`, `/import file-name=${b.name}`])}>How to restore</button>{/if}
         {#if ownFile(b.name)}<button class="btn small" onclick={() => review(`Delete ${b.name}`, [`/file/remove [find name="${b.name}"]`], { kind: 'remove-backup-file', name: b.name })}>Delete</button>{/if}</td></tr>{/each}</tbody></table>
   <div class="row muted small sched">Automatic: <button class="btn small" onclick={() => review('Weekly backups', ['/system/scheduler/add name=tik-backup interval=7d on-event="/export file=tik-auto"'], { kind: 'backup-schedule', enabled: true, interval: '7d' })}>Weekly backups</button></div>
