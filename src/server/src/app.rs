@@ -200,16 +200,20 @@ impl App {
 
     /// Opens a connection as the reader or writer. The password is decrypted only for the login.
     pub fn open(&self, who: As) -> Result<Box<dyn Router + Send>, String> {
-        let st = lock(&self.store);
-        let cfg = self.cfg(&st.state).cloned().ok_or("no router configured")?;
-        let (cred, label) = match who {
-            As::Reader => (Some(cfg.reader.clone()), self.label("reader")),
-            As::Writer => (cfg.writer.clone(), self.label("writer")),
+        let cfg = self.router_cfg().ok_or("no router configured")?;
+        let prefix = self.label("");
+        self.open_cfg(&cfg, prefix.trim_end_matches(':'), who)
+    }
+
+    /// Same for any stored connection (the router, or the CMR controller with label "controller-password").
+    pub fn open_cfg(&self, cfg: &RouterCfg, label: &str, who: As) -> Result<Box<dyn Router + Send>, String> {
+        let (cred, role) = match who {
+            As::Reader => (Some(cfg.reader.clone()), "reader"),
+            As::Writer => (cfg.writer.clone(), "writer"),
         };
         let cred = cred.ok_or("read-only mode: no write credential is stored")?;
-        let pw = st.sealer.open_str(&label, &cred.password).ok_or("stored router password cannot be decrypted (wrong key file?)")?;
-        drop(st);
-        (self.connector)(&cfg, &cred.user, &pw)
+        let pw = lock(&self.store).sealer.open_str(&format!("{label}:{role}"), &cred.password).ok_or("stored router password cannot be decrypted (wrong key file?)")?;
+        (self.connector)(cfg, &cred.user, &pw)
     }
 
     /// Opens a connection with credentials the user just typed (MikroTik-account login, their own writes).

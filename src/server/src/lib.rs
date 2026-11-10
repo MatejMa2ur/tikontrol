@@ -6,6 +6,7 @@ pub mod apikeys;
 pub mod app;
 pub mod apply;
 pub mod auth;
+pub mod cmr;
 pub mod discovery;
 pub mod drift;
 pub mod features;

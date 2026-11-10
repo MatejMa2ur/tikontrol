@@ -14,6 +14,7 @@ pub fn extra(app: &Arc<App>, req: &Req, s: &Session) -> Option<Resp> {
         return Some(r);
     }
     if let Some(r) = crate::alerts::route(app, req, s) { return Some(r) }
+    if let Some(r) = crate::cmr::route(app, req, s) { return Some(r) }
     if let Some(r) = crate::tools::route(app, req, s) { return Some(r) }
     if let Some(r) = crate::speedtest::route(app, req, s) { return Some(r) }
     if let Some(r) = crate::discovery::route(app, req, s) { return Some(r) }

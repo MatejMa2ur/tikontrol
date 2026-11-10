@@ -460,6 +460,7 @@ pub const AREAS: &[Area] = &[
     crate::intents::vpn::compile,
     crate::intents::routing::compile,
     crate::intents::users::compile,
+    crate::intents::cmr::compile,
 ];
 
 /// Entry point for the API: a batch, the areas, then the core intents. Unknown kinds are rejected.

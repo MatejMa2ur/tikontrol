@@ -586,11 +586,15 @@ fn router_info(app: &App) -> Resp {
     }
 }
 
-fn valid_pin(p: &str) -> bool {
+pub fn valid_pin(p: &str) -> bool {
     p.len() == 64 && p.bytes().all(|c| c.is_ascii_hexdigit())
 }
 
-fn valid_host(h: &str) -> bool {
+pub fn valid_cred(c: &CredIn) -> bool {
+    !(c.user.is_empty() || c.user.len() > 64 || c.password.is_empty() || c.password.len() > 256 || c.user.chars().any(char::is_control))
+}
+
+pub fn valid_host(h: &str) -> bool {
     !h.is_empty() && h.len() <= 253 && h.bytes().all(|b| b.is_ascii_alphanumeric() || b".-:".contains(&b))
 }
 
@@ -624,9 +628,9 @@ fn probe(req: &Req) -> Resp {
 
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
-struct CredIn {
-    user: String,
-    password: String,
+pub struct CredIn {
+    pub user: String,
+    pub password: String,
 }
 
 #[derive(Deserialize)]
@@ -656,10 +660,8 @@ fn set_router(app: &Arc<App>, req: &Req) -> Resp {
     if !valid_pin(&b.pin) {
         return Resp::error(400, "pin must be the 64-character certificate fingerprint");
     }
-    for c in std::iter::once(&b.reader).chain(b.writer.as_ref()) {
-        if c.user.is_empty() || c.user.len() > 64 || c.password.is_empty() || c.password.len() > 256 || c.user.chars().any(char::is_control) {
-            return Resp::error(400, "invalid router user or password");
-        }
+    if !std::iter::once(&b.reader).chain(b.writer.as_ref()).all(valid_cred) {
+        return Resp::error(400, "invalid router user or password");
     }
     let write = b.mode == Mode::ReadWrite;
     // read-write without a stored writer is fine: changes run as the admin logged in with their MikroTik account

@@ -29,6 +29,8 @@ struct Change {
     state: State,
     /// the router it was previewed for (App::site): it can only be applied, kept or reverted there
     site: String,
+    /// runs on the CMR server (cmr.rs), which may be a separate controller
+    cmr: bool,
 }
 
 fn changes() -> &'static Mutex<BTreeMap<String, Change>> {
@@ -54,6 +56,14 @@ fn state_json(c: &Change) -> serde_json::Value {
 
 /// The logged-in MikroTik account if there is one, otherwise the stored writer.
 pub(crate) fn writer(app: &App, s: &Session) -> Result<Box<dyn crate::ros::conn::Router + Send>, String> {
+    writer_for(app, s, false)
+}
+
+/// Same, and CMR changes with a separate controller use the controller's stored writer.
+fn writer_for(app: &App, s: &Session, cmr: bool) -> Result<Box<dyn crate::ros::conn::Router + Send>, String> {
+    if let Some(c) = crate::cmr::controller(app).filter(|_| cmr) {
+        return app.open_cfg(&c, crate::cmr::LABEL, As::Writer);
+    }
     match app.ros(s) {
         Some(pw) => app.open_as(&s.user, &pw.0),
         None => app.open(As::Writer),
@@ -61,11 +71,18 @@ pub(crate) fn writer(app: &App, s: &Session) -> Result<Box<dyn crate::ros::conn:
 }
 
 pub(crate) fn can_write(app: &App, s: &Session) -> Result<(), &'static str> {
+    can_write_for(app, s, false)
+}
+
+fn can_write_for(app: &App, s: &Session, cmr: bool) -> Result<(), &'static str> {
     if s.role != Role::Admin {
         return Err("only admins can change the router");
     }
     if app.demo.is_some() {
         return Err("demo mode: nothing can be changed");
+    }
+    if let Some(c) = crate::cmr::controller(app).filter(|_| cmr) {
+        return c.writer.map(|_| ()).ok_or("read-only: the CMR controller has no write credential stored in tikontrol");
     }
     match app.router_cfg() {
         Some(r) if r.mode == Mode::ReadWrite && (r.writer.is_some() || app.ros(s).is_some()) => Ok(()),
@@ -106,8 +123,13 @@ pub fn route(app: &Arc<App>, req: &Req, s: &Session) -> Option<Resp> {
                 Ok(b) => b,
                 Err(r) => return Some(r),
             };
+            let cmr = match crate::cmr::is_cmr(&b.intent) {
+                Ok(c) => c,
+                Err(e) => return Some(Resp::error(400, &e)),
+            };
             // the inverse of some intents needs current values: read them with the reader
-            let plan = match app.with_reader(|r| apply::compile_value(&b.intent, r)) {
+            let compiled = if cmr { crate::cmr::open(app, As::Reader).and_then(|mut r| apply::compile_value(&b.intent, r.as_mut())) } else { app.with_reader(|r| apply::compile_value(&b.intent, r)) };
+            let plan = match compiled {
                 Ok(p) => p,
                 Err(e) => return Some(Resp::error(400, &e)),
             };
@@ -115,33 +137,37 @@ pub fn route(app: &Arc<App>, req: &Req, s: &Session) -> Option<Resp> {
             let resp = json!({
                 "id": id, "title": plan.title, "risk": plan.risk, "warnings": plan.warnings,
                 "commands": plan.cli(), "undo": plan.undo_cli(), "revertible": plan.revertible,
-                "window": WINDOW_SECS, "canApply": can_write(app, s).is_ok(), "reason": can_write(app, s).err(),
+                "window": WINDOW_SECS, "canApply": can_write_for(app, s, cmr).is_ok(), "reason": can_write_for(app, s, cmr).err(),
             });
             let mut c = lock(changes());
             c.retain(|_, x| now() - x.created < 3600 || matches!(x.state, State::Armed { .. }));
             if c.len() > 200 {
                 return Some(Resp::error(429, "too many pending changes"));
             }
-            c.insert(id, Change { plan, user: s.user.clone(), created: now(), state: State::Previewed, site: app.site.clone() });
+            c.insert(id, Change { plan, user: s.user.clone(), created: now(), state: State::Previewed, site: app.site.clone(), cmr });
             Resp::json(200, &resp)
         }
         ("POST", "/api/v1/apply/start") => {
-            if let Err(e) = can_write(app, s) {
+            // refused at once when neither the router nor the controller can be written
+            if let Err(e) = can_write(app, s).or_else(|_| can_write_for(app, s, true)) {
                 return Some(Resp::error(403, e));
             }
             let b: Id = match body(req) {
                 Ok(b) => b,
                 Err(r) => return Some(r),
             };
-            let plan = {
+            let (plan, cmr) = {
                 let c = lock(changes());
                 match c.get(&b.id).filter(|x| x.site == app.site) {
-                    Some(x) if x.state == State::Previewed && x.user == s.user => x.plan.clone(),
+                    Some(x) if x.state == State::Previewed && x.user == s.user => (x.plan.clone(), x.cmr),
                     Some(_) => return Some(Resp::error(409, "this change was already applied or belongs to someone else")),
                     None => return Some(Resp::error(404, "no such change: preview it again")),
                 }
             };
-            let mut w = match writer(app, s) {
+            if let Err(e) = can_write_for(app, s, cmr) {
+                return Some(Resp::error(403, e));
+            }
+            let mut w = match writer_for(app, s, cmr) {
                 Ok(w) => w,
                 Err(e) => return Some(Resp::error(502, &format!("writer: {e}"))),
             };
@@ -166,7 +192,8 @@ pub fn route(app: &Arc<App>, req: &Req, s: &Session) -> Option<Resp> {
             }
         }
         ("POST", "/api/v1/apply/keep") | ("POST", "/api/v1/apply/revert") => {
-            if let Err(e) = can_write(app, s) {
+            // refused at once when neither the router nor the controller can be written
+            if let Err(e) = can_write(app, s).or_else(|_| can_write_for(app, s, true)) {
                 return Some(Resp::error(403, e));
             }
             let keep = req.path.ends_with("/keep");
@@ -174,16 +201,19 @@ pub fn route(app: &Arc<App>, req: &Req, s: &Session) -> Option<Resp> {
                 Ok(b) => b,
                 Err(r) => return Some(r),
             };
-            let plan = {
+            let (plan, cmr) = {
                 let c = lock(changes());
-                match c.get(&b.id).filter(|x| x.site == app.site).map(|x| (x.state.clone(), x.plan.clone())) {
-                    Some((State::Armed { deadline }, p)) if now() + MARGIN < deadline => p,
-                    Some((State::Armed { .. }, _)) => return Some(Resp::error(409, "too late: the router is reverting this change by itself")),
+                match c.get(&b.id).filter(|x| x.site == app.site).map(|x| (x.state.clone(), x.plan.clone(), x.cmr)) {
+                    Some((State::Armed { deadline }, p, cmr)) if now() + MARGIN < deadline => (p, cmr),
+                    Some((State::Armed { .. }, _, _)) => return Some(Resp::error(409, "too late: the router is reverting this change by itself")),
                     Some(_) => return Some(Resp::error(409, "this change is not waiting for confirmation")),
                     None => return Some(Resp::error(404, "no such change")),
                 }
             };
-            let mut w = match writer(app, s) {
+            if let Err(e) = can_write_for(app, s, cmr) {
+                return Some(Resp::error(403, e));
+            }
+            let mut w = match writer_for(app, s, cmr) {
                 Ok(w) => w,
                 Err(e) => return Some(Resp::error(502, &format!("writer: {e} (the router will still revert by itself)"))),
             };
@@ -349,6 +379,27 @@ mod tests {
         let r = handle(&app, with_session(req("POST", "/api/v1/apply/keep", &format!(r#"{{"id":"{id}"}}"#)), &c, &csrf));
         assert_eq!(r.status, 409);
         assert!(lock(&app.live.history).events.iter().any(|e| e.text.contains("kept")));
+    }
+
+    #[test]
+    fn cmr_changes_use_the_controller_and_its_own_writer() {
+        // the router is read-only; the CMR controller has a stored writer
+        let app = Arc::new(app_with_router("read,api,test", Mode::ReadOnly));
+        {
+            let mut st = lock(&app.store);
+            let (r, w) = (st.sealer.seal("controller-password:reader", "router-pass"), st.sealer.seal("controller-password:writer", "router-pass"));
+            st.state.controller = Some(crate::store::RouterCfg { host: "192.0.2.9".into(), port: 8729, pin: "00".into(), mode: Mode::ReadWrite, reader: Cred { user: "cmr-read".into(), password: r }, writer: Some(Cred { user: "cmr-write".into(), password: w }) });
+        }
+        let (c, csrf) = admin_session(&app);
+        let r = handle(&app, with_session(req("POST", "/api/v1/apply/preview", r#"{"intent":{"kind":"cmr-alert","name":"cpu busy","metric":"cpu","threshold":90}}"#), &c, &csrf));
+        let v = id_of(&r);
+        assert_eq!((r.status, v["canApply"].as_bool()), (200, Some(true)), "{v}");
+        let r = handle(&app, with_session(req("POST", "/api/v1/apply/start", &format!(r#"{{"id":"{}"}}"#, v["id"].as_str().unwrap())), &c, &csrf));
+        assert_eq!((r.status, id_of(&r)["state"].as_str()), (200, Some("armed")));
+        let r = handle(&app, with_session(req("POST", "/api/v1/apply/preview", DNS), &c, &csrf));
+        assert_eq!(id_of(&r)["canApply"], false, "router changes still need the router writer");
+        let mixed = r#"{"intent":{"kind":"batch","title":"x","intents":[{"kind":"cmr-alert","name":"a","metric":"cpu","threshold":9},{"kind":"dns-record","name":"a.lan","address":"10.0.0.1"}]}}"#;
+        assert_eq!(handle(&app, with_session(req("POST", "/api/v1/apply/preview", mixed), &c, &csrf)).status, 400);
     }
 
     #[test]

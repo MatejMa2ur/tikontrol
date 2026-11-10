@@ -251,6 +251,30 @@ paths:
       summary: RouterOS commands that create least-privilege tikontrol users (no secrets)
       parameters: [{ name: ip, in: query, schema: { type: string } }, { name: write, in: query, schema: { enum: ['0', '1'] } }]
       responses: { '200': { description: '{ commands[] }' } }
+  /api/v1/cmr:
+    get:
+      summary: MikroTik CMR fleet data from the CMR server (the router itself, or the controller below)
+      description: 'cmr-* intents (cmr-pair, cmr-device-labels, cmr-upgrade-rule, cmr-remove-upgrade-rule, cmr-alert, cmr-remove-alert, cmr-alert-enabled, cmr-upgrade-device) go through /apply like any other and run on the CMR server; a batch cannot mix them with router changes. Wi-Fi passphrases are never read.'
+      responses: { '200': { description: '{ source: router|controller, controller: { host, port, reader, writer, mode } | null, enabled, apptrafficDevices, devices[{ identity, ids, board, version, address, labels[], auto-labels[], online, paired, controller, state, upgrade-available, upgrade-rule, channel, uptime }], alerts[{ name, severity, category[], disabled, devices, devices-on, fired, comment, active[identity] }], upgrades[{ name, labels, channel, schedule-time, strategy, fail-policy, dynamic, comment }], jobs[{ labels, channel, strategy, schedule-time, starts-in, state, success }], wifi[{ ssid, labels[], disabled, aps[identity] }], apps[{ name, category, minute, hour, day, week: [down, up] bytes }], appsError } or { available: false, error } when there is no CMR server' } }
+  /api/v1/controller:
+    post:
+      security: [{ session: [], csrf: [] }]
+      summary: Connect a separate CMR controller (admin). Pinned API-SSL like the router; the reader must not write, the writer (optional, needs confirm_write) needs write and reboot (RouterOS refuses CMR pairing without reboot)
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [host, pin, reader]
+              properties:
+                host: { type: string }
+                port: { type: integer, default: 8729, not: { const: 8728 } }
+                pin: { type: string, pattern: '^[0-9a-f]{64}$' }
+                reader: { $ref: '#/components/schemas/Cred' }
+                writer: { oneOf: [{ $ref: '#/components/schemas/Cred' }, { type: 'null' }] }
+                confirm_write: { type: boolean }
+      responses: { '200': { description: saved }, '400': { description: invalid or wrong policies }, '409': { description: writer without confirm_write }, '502': { description: unreachable, login refused or no CMR server } }
+    delete: { security: [{ session: [], csrf: [] }], summary: Forget the controller (admin); CMR is read from the router again, responses: { '200': { description: ok } } }
   /api/v1/apply:
     get: { summary: Recent applied changes and their state, responses: { '200': { description: ok } } }
   /api/v1/apply/preview:

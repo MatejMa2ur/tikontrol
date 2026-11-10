@@ -164,6 +164,9 @@ pub struct State {
     pub claimed: bool,
     pub admins: Vec<Admin>,
     pub router: Option<RouterCfg>,
+    /// optional MikroTik CMR server (cmr.rs) when it isn't the router itself; passwords sealed with
+    /// label "controller-password:<role>"
+    pub controller: Option<RouterCfg>,
     pub prefs: Prefs,
     pub mcp: McpCfg,
     #[serde(deserialize_with = "crate::alerts::lenient")]

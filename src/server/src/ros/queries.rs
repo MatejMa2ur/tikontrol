@@ -172,7 +172,7 @@ fn row_json(r: &Row, arrays: &[&str]) -> Value {
     Value::Object(r.iter().map(|(k, v)| (k.clone(), typed(k, v, arrays))).collect())
 }
 
-fn rows_json(rows: &[Row], arrays: &[&str]) -> Value {
+pub fn rows_json(rows: &[Row], arrays: &[&str]) -> Value {
     Value::Array(rows.iter().map(|r| row_json(r, arrays)).collect())
 }
 
