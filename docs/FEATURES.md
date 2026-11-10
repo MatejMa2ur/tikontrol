@@ -12,7 +12,7 @@ Clean-room: we copy the behaviour, never the assets.
 **Backing:** `ROS` = RouterOS API on the router · `CMR` = MikroTik CMR server · `tik` = our own logic/DB · `✗` = nothing can back it
 
 <!-- progress:start -->
-**Progress:** 114 ✅ · 108 🟨 · 3 🎨 · 1 ⬜ · 8 ➖ (234 items, 50% done) · 13 🔌 waiting for a hardware test ([list](HARDWARE_TESTS.md))
+**Progress:** 114 ✅ · 108 🟨 · 3 🎨 · 1 ⬜ · 8 ➖ (234 items, 50% done) · 19 🔌 waiting for a hardware test ([list](HARDWARE_TESTS.md))
 <!-- progress:end -->
 
 ---
@@ -64,7 +64,7 @@ Clean-room: we copy the behaviour, never the assets.
 | WiFi Technology card (clients by standard + band, activity, experience) | ROS reg-table | 1 | 🟨 |
 | Most active clients / access points strips | ROS + tik | 1 | 🟨 |
 | Internet Activity chart: client count cells + down/up, 1H/1D/1W | tik history | 2 | ✅ |
-| Gateway column (WAN/gateway IP, uptime, latency to 3 resolvers, channel widths) | ROS | 1 | 🟨 |
+| Gateway column (WAN/gateway IP, uptime from stored history, latency to 3 resolvers, channel widths) 🔌 real WAN latency and Wi-Fi channel widths | ROS | 1 | 🟨 |
 | WiFi experience / satisfaction score | tik (signal + rate heuristic) | 2 | 🟨 |
 | Recent critical events | ROS log + tik | 1 | 🟨 |
 | Firmware update available banner | ROS / CMR | 2 | 🟨 |
@@ -120,7 +120,7 @@ Clean-room: we copy the behaviour, never the assets.
 | Port grid with link state, speed, duplex (link state verified on CHR; speed/duplex need a physical port (virtio reports none)) | ROS `/interface/ethernet` monitor | 2 | 🟨 |
 | Which client is on which port | ROS bridge host | 2 | 🟨 |
 | Per-port traffic / errors | ROS | 2 | ✅ |
-| PoE status / power cycle | ROS `/interface/ethernet/poe` (hw dependent) | 3 | 🟨 |
+| PoE status / power cycle (status and auto/off/forced per port; power-cycle not yet) 🔌 a PoE-out board (hEX PoE, CRS…P): print/monitor field names, set-poe and its revert; a board without PoE only logs a `poe` error | ROS `/interface/ethernet/poe` (hw dependent) | 3 | 🟨 |
 | Port profile (VLAN access/trunk, native VLAN) | ROS bridge VLAN · CMR vlan | 3 | ✅ |
 | Port disable / enable | ROS | 2 | ✅ |
 | Port mirroring | ROS switch mirror | 4 | 🟨 |
@@ -177,12 +177,12 @@ Clean-room: we copy the behaviour, never the assets.
 | Band selection (2.4 / 5 / 6 GHz) | ROS | 2 |🟨 |
 | Which APs broadcast it (label selection verified on CHR; broadcasting needs hardware AP) | CMR labels | 3 | 🟨 |
 | Network/VLAN per SSID | ROS bridge port PVID | 3 |🟨 |
-| Guest network (isolation, portal) | ROS + hotspot | 3 |🟨 |
+| Guest network (isolation, portal, remove) 🔌 create and remove a guest SSID on both Wi-Fi packages; guests isolated | ROS + hotspot | 3 | 🟨 |
 | Client isolation | ROS default-forwarding / wifi datapath | 2 |🟨 |
 | Hide SSID | ROS | 2 |🟨 |
-| WiFi schedule (on/off by time) | ROS scheduler | 3 |🟨 |
+| WiFi schedule (on/off by time, remove) 🔌 the radio turns off and on at the set times | ROS scheduler | 3 | 🟨 |
 | Per-SSID speed limit (per client, legacy `wireless` default-*-tx-limit) | ROS wireless | 3 |🟨 |
-| MAC filter | ROS access-list | 3 |🟨 |
+| MAC filter (allow/deny per MAC, remove) 🔌 add and remove a rule on a `wireless` board and a `wifi` board | ROS access-list | 3 | 🟨 |
 | Private PSK (per-client passwords, client drawer; needs hardware (Wi-Fi AP)) | ROS access-list `passphrase` (wifi) / `private-pre-shared-key` (wireless) | 4 |🟨 |
 | Band steering / fast roaming (802.11r/k/v; needs hardware (Wi-Fi AP on the new wifi package)) | ROS wifi `security.ft`, `steering.rrm/wnm` (new pkg) | 4 |🟨 |
 | MLO (WiFi 7; needs hardware (Wi-Fi 7 AP: wifi-qcom-be / wifi-mediatek)) | ROS `/interface/wifi/network mlo` | 4 |🟨 |
@@ -214,7 +214,7 @@ Clean-room: we copy the behaviour, never the assets.
 | DNS servers / DoH (encrypted DNS) | ROS `/ip/dns` use-doh-server | 2 | ✅ |
 | Dynamic DNS | ROS `/ip/cloud` ddns | 2 | ✅ |
 | IPv6 WAN | ROS | 4 | ✅ |
-| ISP status / outage history | tik | 2 | 🟨 |
+| ISP status / outage history (uptime % and outages from 7 days of minute samples; "down" = WAN link not running) 🔌 pull the WAN cable for 2+ minutes: an outage with the right length appears and uptime drops | tik | 2 | 🟨 |
 
 ## VPN
 | Feature | Backing | Phase | Status |

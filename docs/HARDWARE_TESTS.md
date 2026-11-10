@@ -13,6 +13,7 @@ Read-only checks first; test anything that writes on a spare router or CHR, neve
 
 - [ ] **Client count (wired / wireless / guest; guests from hotspot users, guest Wi-Fi interfaces and guest subnets)** 🟨: a real guest SSID and hotspot: guests counted, main-LAN clients not
 - [ ] **Top clients by traffic (Wi-Fi from the registration table, wired from kid-control's device table)** 🟨: check that `/ip/kid-control/device` counts wired clients on a real router (it may need a kid-control profile)
+- [ ] **Gateway column (WAN/gateway IP, uptime from stored history, latency to 3 resolvers, channel widths)** 🟨: real WAN latency and Wi-Fi channel widths
 
 ## UniFi Devices / Topology
 
@@ -25,9 +26,23 @@ Read-only checks first; test anything that writes on a spare router or CHR, neve
 - [ ] **Per-client traffic history (hourly bytes, wired and Wi-Fi)** 🟨: a day of history on a real router with wired and Wi-Fi clients
 - [ ] **Client groups (deleting one offers to remove its address list, mangle and queue objects in one batch; leftovers listed)** 🟨: apply members and a limit, then delete with "Remove from router" and revert
 
+## Ports
+
+- [ ] **PoE status / power cycle (status and auto/off/forced per port; power-cycle not yet)** 🟨: a PoE-out board (hEX PoE, CRS…P): print/monitor field names, set-poe and its revert; a board without PoE only logs a `poe` error
+
 ## Alarm Manager / Notifications
 
 - [ ] **Channels: email (SMTP, TLS/STARTTLS), push (ntfy), Telegram, webhook** 🟨: send a test through each real service (an SMTP provider on 465 and 587, ntfy.sh, a Telegram bot, a Home Assistant webhook)
+
+## WiFi settings
+
+- [ ] **Guest network (isolation, portal, remove)** 🟨: create and remove a guest SSID on both Wi-Fi packages; guests isolated
+- [ ] **WiFi schedule (on/off by time, remove)** 🟨: the radio turns off and on at the set times
+- [ ] **MAC filter (allow/deny per MAC, remove)** 🟨: add and remove a rule on a `wireless` board and a `wifi` board
+
+## Internet (WAN)
+
+- [ ] **ISP status / outage history (uptime % and outages from 7 days of minute samples; "down" = WAN link not running)** 🟨: pull the WAN cable for 2+ minutes: an outage with the right length appears and uptime drops
 
 ## Control plane / System
 
