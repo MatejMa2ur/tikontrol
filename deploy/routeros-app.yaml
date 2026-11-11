@@ -10,7 +10,7 @@
 # the LAN bridge, so the router's api-ssl `available-from` LAN range already covers it.
 # The image is published by .github/workflows/image.yml for arm/v7, arm64 and amd64.
 name: tikontrol
-descr: 'Read-only-by-default web UI for this router'
+descr: 'Unofficial personal project, not by MikroTik: read-only-by-default web UI for this router'
 page: 'https://github.com/MatejMa2ur/tikontrol'
 category: networking
 'default-credentials': 'setup token: see the container log'

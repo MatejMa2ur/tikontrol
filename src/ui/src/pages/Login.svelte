@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { NOTICE } from '../lib/legal'
   import { api } from '../lib/backend'
   import TrustCa from '../lib/ui/TrustCa.svelte'
   let name = $state('')
@@ -37,6 +38,7 @@
       <summary>Certificate warning? Trust this tikontrol</summary>
       <TrustCa />
     </details>
+    <p class="muted small notice">{NOTICE}</p>
   </form>
 </main>
 
@@ -51,4 +53,5 @@
   button { justify-content: center; }
   .keep { display: flex; gap: 8px; align-items: baseline; font-weight: 500; }
   summary { cursor: pointer; margin-bottom: 8px; }
+  .notice { margin: 4px 0 0; font-size: 11px; line-height: 1.4; }
 </style>

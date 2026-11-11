@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { NOTICE } from '../../lib/legal'
   import { raw, router, isBackend } from '../../lib/data'
   import { review } from '../../lib/apply.svelte'
   import { api, session } from '../../lib/backend'
@@ -186,6 +187,10 @@
   <Field label="Revert after" help="5 minutes for now"><select bind:value={safe.minutes} disabled={isBackend}><option value={2}>2 minutes</option><option value={5}>5 minutes</option><option value={10}>10 minutes</option></select></Field>
 </Section>
 
+<Section title="About" desc="What tikontrol is, and what it is not.">
+  <p class="muted small about">{NOTICE}</p>
+</Section>
+
 <style>
   .tweaks { display: flex; flex-wrap: wrap; gap: 10px; align-items: flex-end; }
   .tw { display: flex; flex-direction: column; gap: 3px; }
@@ -208,4 +213,5 @@
   .err { color: var(--bad); margin-top: 8px; }
   .cmd { margin: 10px 0 4px; }
   .scroll { overflow-x: auto; }
+  .about { margin: 0; max-width: 70ch; line-height: 1.5; }
 </style>

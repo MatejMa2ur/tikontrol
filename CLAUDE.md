@@ -41,3 +41,13 @@ tikontrol holds credentials that can change a whole router. A write credential e
 - **RouterOS:** feature-detect instead of assuming a version, and support a stated minimum version (7.18 for the API, 7.25 for REST).
 - **Releases:** Semantic Versioning and a changelog. Commit messages follow the existing `type(scope): subject` style.
 - **Legal:** original icons, colours and layout. No Ubiquiti or MikroTik logos, code or product images, and keep the non-affiliation notice.
+- **Personal, non-commercial project.** The owner likes both MikroTik and UniFi and built tikontrol for their own use,
+  not to earn money or build a brand. Don't add pricing, paid tiers, a logo or brand identity, marketing copy, or
+  wording that presents tikontrol as an alternative, replica or substitute for UniFi or MikroTik software. Mention
+  UniFi only to say what a feature is compared with, never in a name, logo or tagline. Keep these in sync: the README
+  sections "Why it exists", "No warranty" and "Trademarks"; `NOTICE` in `src/ui/src/lib/legal.ts` (sign-in screen and
+  Settings → System → About); the RouterOS App `descr` ("Unofficial personal project, not by MikroTik"). MikroTik's
+  trademarks belong to Mikrotīkls SIA.
+- **Third-party licenses:** after changing Rust or UI dependencies, regenerate `THIRD_PARTY_LICENSES.txt` with
+  `python3 src/scripts/third_party.py > THIRD_PARTY_LICENSES.txt` (CI fails when it is stale); it ships in the image.
+  Only add dependencies under permissive licenses (MIT, Apache-2.0, BSD, ISC and similar) unless the owner agrees.

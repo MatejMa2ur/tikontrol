@@ -64,7 +64,7 @@
   $effect(() => { if (band) sessionStorage.setItem('tik:band', band) })
   const radio = $derived(radios.find((r) => r.name === band))
   const bandClients = $derived(wifiClients.filter((c) => c.port === band))
-  // link-quality buckets (CCQ %), shown like UniFi's TX-retries strip: worse → better
+  // link-quality buckets (CCQ %) as a strip: worse → better
   const buckets = [[0, 50, '<50%'], [50, 60, '50%'], [60, 70, '60%'], [70, 80, '70%'], [80, 90, '80%'], [90, 101, '90%+']] as const
   const sigPos = (dbm: number) => Math.min(100, Math.max(0, ((dbm + 90) / 60) * 100)) // -90…-30 dBm → 0…100%
 

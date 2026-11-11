@@ -7,7 +7,7 @@
 
   <h3 align="center">tikontrol</h3>
 
-  <p align="center">An independent, UniFi-inspired management UI for MikroTik RouterOS</p>
+  <p align="center">A personal, non-commercial web UI for MikroTik RouterOS routers</p>
 
 [![CI][ci-shield]][ci-url] [![Image][image-shield]][image-url] [![Last commit][commit-shield]][commit-url]<br>
 [![Rust][Rust]][Rust-url] [![Svelte][Svelte]][Svelte-url] [![TypeScript][TypeScript]][TypeScript-url] [![Vite][Vite]][Vite-url]
@@ -81,7 +81,9 @@
 <!-- ABOUT THE PROJECT -->
 ## About The Project
 
-tikontrol is a clean, opinionated web UI for MikroTik routers, inspired by how UniFi Network organises a home network: dashboard, client list, networks, Wi-Fi, firewall and port forwarding, VPN, topology and alerts.
+tikontrol is a clean, opinionated web UI for MikroTik routers: dashboard, client list, networks, Wi-Fi, firewall and port forwarding, VPN, topology and alerts.
+
+**Why it exists.** I like both MikroTik and UniFi. MikroTik for what RouterOS can do, UniFi for how easy its controller makes a home network to run. tikontrol is my attempt to get some of that ease on my own MikroTik router. It is a personal hobby project that I build for my own use and share as is. It is not a product, not a brand and not a business: nothing is sold, there are no paid features, and I don't earn money from it.
 
 - Runs on the router itself as a RouterOS App, or on any home server. No cloud, no account, no outbound calls.
 - Talks to RouterOS over the encrypted API (API-SSL) with its own least-privilege user. RouterOS stays the source of truth, and WinBox/WebFig keep working next to it.
@@ -201,7 +203,7 @@ Any router that can run containers works: see the list in [INSTALL.md](docs/INST
 <!-- ROADMAP -->
 ## Roadmap
 
-**Progress is tracked in [FEATURES.md](docs/FEATURES.md)**: every UniFi page and feature, what backs it on MikroTik, and its status. See [PLAN.md](docs/PLAN.md) for the plan and [RESEARCH.md](docs/RESEARCH.md) for prior art and platform limits. [FEASIBILITY.md](docs/FEASIBILITY.md) is the latest study of what is possible, with its source notes in [docs/research](docs/research).
+**Progress is tracked in [FEATURES.md](docs/FEATURES.md)**: a checklist of the pages and features a home network controller usually has (UniFi Network's feature list is used as the reference for comparison), what backs each one on RouterOS, and its status. See [PLAN.md](docs/PLAN.md) for the plan and [RESEARCH.md](docs/RESEARCH.md) for prior art and platform limits. [FEASIBILITY.md](docs/FEASIBILITY.md) is the latest study of what is possible, with its source notes in [docs/research](docs/research).
 
 - [x] Phase 0: Dev environment, connect to the router
 - [x] Phase 1: Read-only dashboard and clients (built; final test pass pending)
@@ -223,14 +225,29 @@ Bug reports and ideas are welcome through [issues](https://github.com/MatejMa2ur
 
 No license has been chosen yet, so all rights are reserved for now. Ask before reusing the code.
 
+Third-party code inside the tikontrol binary and web UI is used under its own licenses (MIT, Apache-2.0, ISC, BSD and
+CDLA-Permissive); their texts are in [THIRD_PARTY_LICENSES.txt](THIRD_PARTY_LICENSES.txt), which is also copied into the
+container image.
+
+### No warranty
+
+tikontrol is provided **as is, without warranty of any kind**, express or implied. It changes the configuration of a
+real router: you use it at your own risk, and the author is not liable for any damage, outage, data loss or lockout
+that results. Keep a backup of your router configuration, and read every change before you confirm it.
+
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
 
 <!-- TRADEMARKS -->
 ## Trademarks
 
-tikontrol is an independent project. It is not affiliated with, endorsed by or sponsored by Ubiquiti Inc. or MikroTik.
+Not affiliated with or endorsed by MikroTik. MikroTik, RouterOS and WinBox are trademarks of Mikrotīkls SIA.
 
-UniFi is a trademark of Ubiquiti Inc. MikroTik, RouterOS and WinBox are trademarks of their respective owner. These names are used only to describe what tikontrol works with and what inspired it. tikontrol is built from public documentation and does not include Ubiquiti or MikroTik code, logos or product images.
+tikontrol is also not affiliated with, endorsed by or sponsored by Ubiquiti Inc. UniFi is a trademark of Ubiquiti Inc.
+
+These names are used only to say which routers tikontrol works with and, in the docs, which features it is compared
+with. tikontrol is not offered as an alternative product, a replica or a substitute for either company's software. It is
+written from public documentation and its own testing, and it contains no MikroTik or Ubiquiti code, logos, icons,
+artwork, product images or text. The router drawings in the UI are its own simplified shapes.
 
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
 

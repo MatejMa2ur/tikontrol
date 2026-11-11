@@ -207,7 +207,7 @@
 :local yaml ""
 # BEGIN app yaml
 :set yaml ($yaml . "name: tikontrol\n")
-:set yaml ($yaml . "descr: 'Read-only-by-default web UI for this router'\n")
+:set yaml ($yaml . "descr: 'Unofficial personal project, not by MikroTik: read-only-by-default web UI for this router'\n")
 :set yaml ($yaml . "page: 'https://github.com/MatejMa2ur/tikontrol'\n")
 :set yaml ($yaml . "category: networking\n")
 :set yaml ($yaml . "'default-credentials': 'setup token: see the container log'\n")

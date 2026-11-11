@@ -63,7 +63,7 @@ export const designs: Record<string, Design> = {
 
 /** One-click looks: a mode, palette and design together. Our own styles, no vendor branding. */
 export const looks: Record<string, { label: string; desc: string; mode: Mode; palette: string; design: string }> = {
-  controller: { label: 'Controller', desc: 'Dark, roomy cards: the cloud-controller style (UniFi-like)', mode: 'dark', palette: 'blue', design: 'default' },
+  controller: { label: 'Controller', desc: 'Dark, roomy cards in a cloud-controller style', mode: 'dark', palette: 'blue', design: 'default' },
   router: { label: 'Router admin', desc: 'Light, dense, navy chrome: the router web-admin style (MikroTik-like)', mode: 'light', palette: 'router', design: 'classic' },
   minimal: { label: 'Minimal', desc: 'Graphite, soft corners, no borders', mode: 'dark', palette: 'graphite', design: 'soft' },
 }

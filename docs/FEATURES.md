@@ -316,7 +316,7 @@ Not a UniFi feature: this is our own addition. Light or dark, the colour theme a
 | Design themes: corner rounding, spacing and density, borders and shadows, fonts, icon style (presets plus separate fine-tune choices, saved per browser) | tik | 2 | ✅ |
 | MikroTik-style colour theme: own palette based on MikroTik's current look, no logos or implied endorsement | tik | 2 | ✅ |
 | Theme picker with live preview, saved per user | tik | 2 | ✅ |
-| One-click looks: Controller (UniFi-like), Router admin (MikroTik-like), Minimal — mode, colours and design together | tik | 2 | ✅ |
+| One-click looks: Controller (dark, roomy cards), Router admin (dense tables), Minimal — mode, colours and design together | tik | 2 | ✅ |
 | Every theme meets WCAG 2.2 AA contrast | tik | 2 | ✅ |
 
 ## Opening tikontrol from RouterOS

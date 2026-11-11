@@ -4,7 +4,7 @@
 # The entry is deploy/routeros-app.yaml; tests/install.test.ts keeps them identical.
 # Storage, api-ssl, use-https=no and the memory limit still need deploy/install.rsc or docs/INSTALL.md.
 - name: tikontrol
-  descr: 'Read-only-by-default web UI for this router'
+  descr: 'Unofficial personal project, not by MikroTik: read-only-by-default web UI for this router'
   page: 'https://github.com/MatejMa2ur/tikontrol'
   category: networking
   'default-credentials': 'setup token: see the container log'

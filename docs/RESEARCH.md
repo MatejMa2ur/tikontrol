@@ -1,4 +1,4 @@
-# Research: a UniFi-like UI hosted on MikroTik (state as of 2026-11-02)
+# Research: a home-controller-style UI hosted on MikroTik (state as of 2026-11-02)
 
 ## 1. Prior art
 

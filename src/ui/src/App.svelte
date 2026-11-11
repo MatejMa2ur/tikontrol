@@ -78,7 +78,7 @@
   const modeTitle = $derived(me?.policies ? `Router user ${me.policies.user} (group ${me.policies.group}): ${me.policies.policy.join(', ')}` : '')
 </script>
 
-<!-- Layout follows UniFi Network: top app bar, icon-only rail, full-bleed content -->
+<!-- Layout: top app bar, icon-only rail, full-bleed content -->
 <header class="appbar">
   <a class="logo" href="#/dashboard" aria-label="tikontrol home">tik</a>
   <nav class="apps">
