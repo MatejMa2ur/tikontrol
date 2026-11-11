@@ -223,7 +223,8 @@ Bug reports and ideas are welcome through [issues](https://github.com/MatejMa2ur
 <!-- LICENSE -->
 ## License
 
-No license has been chosen yet, so all rights are reserved for now. Ask before reusing the code.
+tikontrol is released under the [Zero-Clause BSD license](LICENSE) (0BSD): use, copy, change and share it for any
+purpose, with or without a fee, without having to credit anyone.
 
 Third-party code inside the tikontrol binary and web UI is used under its own licenses (MIT, Apache-2.0, ISC, BSD and
 CDLA-Permissive); their texts are in [THIRD_PARTY_LICENSES.txt](THIRD_PARTY_LICENSES.txt), which is also copied into the

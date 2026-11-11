@@ -3,7 +3,7 @@ name = "tikontrol"
 version = "0.1.0"
 edition = "2021"
 description = "Small, read-only-by-default web UI and MCP server for MikroTik RouterOS"
-license = "UNLICENSED"
+license = "0BSD"
 publish = false
 
 [dependencies]
