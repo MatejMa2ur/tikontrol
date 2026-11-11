@@ -74,6 +74,11 @@ jobs:
         run: cargo test --locked
       - name: Clippy
         run: cargo clippy --locked --all-targets -- -D warnings
+      - name: Third-party licenses up to date
+        run: |
+          (cd ../ui && npm ci --ignore-scripts)
+          python3 ../scripts/third_party.py | diff -q - ../../THIRD_PARTY_LICENSES.txt \
+            || { echo "::error::THIRD_PARTY_LICENSES.txt is stale: run python3 src/scripts/third_party.py > THIRD_PARTY_LICENSES.txt"; exit 1; }
       - name: Audit (RustSec)
         run: |
           cargo install --locked cargo-audit

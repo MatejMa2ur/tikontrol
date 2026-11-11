@@ -38,6 +38,8 @@ RUN case "$TARGETPLATFORM" in \
 
 FROM scratch
 COPY --from=server /tikontrol /tikontrol
+# the license texts of the third-party code inside the binary travel with it
+COPY THIRD_PARTY_LICENSES.txt /THIRD_PARTY_LICENSES.txt
 COPY --from=server --chown=65532:65532 /data /data
 USER 65532:65532
 ENV TIK_DATA=/data TIK_LISTEN=0.0.0.0:8443
