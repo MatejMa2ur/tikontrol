@@ -1,6 +1,6 @@
 <script lang="ts">
   import { keep, kept } from '../lib/keep'
-  import { untrack } from 'svelte'
+  import { untrack, onMount } from 'svelte'
   import { subtitle, signalQuality, bps, bytes, dur, events, isBackend, whyBand, raw, type Client } from '../lib/data'
   import type { Intent } from '../lib/apply.svelte'
   import { api } from '../lib/backend'
@@ -13,7 +13,14 @@
   import Field from '../lib/ui/Field.svelte'
   import Toggle from '../lib/ui/Toggle.svelte'
 
-  let { client: c }: { client: Client } = $props()
+  let { client: c, onclose: close }: { client: Client; onclose: () => void } = $props()
+  // focus moves into the panel and back to whatever opened it (WCAG 2.4.3)
+  let panel: HTMLElement
+  onMount(() => {
+    const back = document.activeElement as HTMLElement | null
+    panel.focus()
+    return () => { if (back?.isConnected) back.focus() }
+  })
   let tab = $state<'overview' | 'insights' | 'settings'>(kept('client.tab', 'overview'))
   let editing = $state(false)
   let draft = $state('')
@@ -25,7 +32,6 @@
   const me = $derived(identity(c))
   const said = $derived(saidBy(c))
   const history = $derived(events.filter((e) => e.text.includes(displayName(c)) || e.text.includes(c.name)).slice(0, 12))
-  const close = () => (location.hash = '#/clients')
   const save = () => { prefs.aliases[c.mac] = draft.trim(); if (!draft.trim()) delete prefs.aliases[c.mac]; editing = false }
 
   // settings form (seeded from the client)
@@ -104,9 +110,10 @@
   $effect(() => { keep('client.tab', tab) })
 </script>
 
-<svelte:window onkeydown={(e) => e.key === 'Escape' && close()} />
+<!-- a dialog opened from the panel closes first; one Esc closes one layer -->
+<svelte:window onkeydown={(e) => e.key === 'Escape' && !document.querySelector('[role="dialog"]') && close()} />
 <button class="scrim" aria-label="Close" onclick={close}></button>
-<aside class="drawer" aria-label="Client details">
+<aside class="drawer" aria-label="Client details" tabindex="-1" bind:this={panel}>
   <header class="row between">
     <div class="row">
       <div class="icon-box lg"><Icon name={iconOf(me)} size={22} /></div>

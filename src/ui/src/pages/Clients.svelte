@@ -9,7 +9,6 @@
   import Ros from '../lib/Ros.svelte'
   import { api, session } from '../lib/backend'
   import { disc, identity, loadDiscovery } from '../lib/discovery.svelte'
-  import ClientDrawer from './ClientDrawer.svelte'
 
   let { selected }: { selected?: string } = $props()
   const tab = $derived(selected === 'offline' || selected === 'groups' ? selected : 'online')
@@ -36,7 +35,6 @@
   )
   const sortBy = (key: string) => (sort = { key, dir: sort.key === key ? (-sort.dir as 1 | -1) : 1 })
   const arrow = (key: string) => (sort.key === key ? (sort.dir === 1 ? '↑' : '↓') : '')
-  const current = $derived(clients.find((c) => c.mac === selected))
   const nameOf = (mac: string) => { const c = clients.find((x) => x.mac === mac); return c ? displayName(c) : mac }
   // with the server, devices it has seen before (first/last seen) join the router's own offline list
   type Seen = { mac: string; first: number; last: number; interface?: string }
@@ -231,9 +229,6 @@
   {/if}
 </div>
 
-{#if current}
-  {#key current.mac}<ClientDrawer client={current} />{/key}
-{/if}
 
 <style>
   .flush { padding: 4px 6px; overflow-x: auto; }
