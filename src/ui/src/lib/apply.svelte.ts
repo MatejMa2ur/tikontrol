@@ -14,6 +14,16 @@ export const apply = $state({
 })
 
 export function review(title: string, cmds: string | string[], intent?: Intent) {
+  // one change at a time: the router holds one revert job, and a second change would be undone with it
+  if (apply.armed) {
+    apply.title = title
+    apply.cmds = Array.isArray(cmds) ? cmds : [cmds]
+    apply.intent = intent ?? null
+    apply.preview = null
+    apply.error = 'A change is still waiting for Keep or Undo (the bar at the top). Finish that first, then review this one.'
+    apply.open = true
+    return
+  }
   apply.title = title
   apply.cmds = Array.isArray(cmds) ? cmds : [cmds] // one entry per command; RouterOS scripts may contain ';' themselves
   apply.intent = intent ?? null

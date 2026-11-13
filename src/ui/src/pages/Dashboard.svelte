@@ -162,10 +162,10 @@
       <div class="widths"><span class="tiny muted">{r.band}</span>{#each r.widths as w}<span class:on={w === r.width} class:off={w > r.maxWidth}>{w}</span>{/each}</div>
     {/each}
     <hr />
-    <a class="row between card-link" href="#/settings"><b>Ad Blocking</b><span class="small good">Active ›</span></a>
+    <a class="row between card-link" href="#/settings/security"><b>Ad Blocking</b><span class="small good">Active ›</span></a>
     <div class="kv tiny"><span>Blocked domains</span><span>{adblock.names.toLocaleString()}</span><span>Blocked requests</span><span>{adblock.hits.toLocaleString()}</span></div>
     <hr />
-    <a class="row between card-link" href="#/settings"><b class="row"><Icon name="shield" size={14} /> Security Checks</b><span>›</span></a>
+    <a class="row between card-link" href="#/settings/security"><b class="row"><Icon name="shield" size={14} /> Security Checks</b><span>›</span></a>
     {#each problems as p}
       {#if p.href}<a class="row tiny check" href={p.href} title={p.detail}><span class="dot {p.level}"></span>{p.title} ›</a>
       {:else}<div class="row tiny check" title={p.detail}><span class="dot {p.level}"></span>{p.title}</div>{/if}
@@ -206,7 +206,7 @@
 
 {#snippet trafficCard()}
     <section class="card">
-      <header class="row between"><h3>Traffic Identification</h3><span class="row small"><span class="down">↓ {bytes(trafficDown)}</span><span class="up">↑ {bytes(trafficUp)}</span><span class="muted">›</span></span></header>
+      <header class="row between"><h3>Traffic Identification</h3><span class="row small"><span class="down">↓ {bytes(trafficDown)}</span><span class="up">↑ {bytes(trafficUp)}</span><a class="muted" href="#/insights/apps" aria-label="All apps in Insights">›</a></span></header>
       <div class="split">
         <Donut parts={traffic.map((c, i) => ({ v: c.bytesDown + c.bytesUp, color: COLORS[i] }))} value={bytes(identified)} label="Identified Traffic" />
         <table class="mini">
@@ -234,7 +234,7 @@
 
 {#snippet techCard()}
     <section class="card">
-      <header class="row between"><h3>WiFi Technology</h3><span class="muted">›</span></header>
+      <header class="row between"><h3>WiFi Technology</h3><a class="muted" href="#/devices/radios" aria-label="Radios">›</a></header>
       <div class="split">
         <Donut parts={wifiTech.map((g, i) => ({ v: g.clients.length, color: COLORS[i] }))} value={String(wifiClients.length)} label="Total Clients" />
         <table class="mini">
@@ -257,7 +257,7 @@
 
 {#snippet activeCard()}
     <section class="card">
-      <header class="row between"><h3>Most Active Clients</h3><a href="#/clients" class="muted">›</a></header>
+      <header class="row between"><h3>Most Active Clients</h3><a href="#/clients" class="muted" aria-label="All clients">›</a></header>
       <div class="tiles">
         {#each mostActive as c, i}
           <a class="tile" class:first={i === 0} href="#/clients/{c.mac}" title="{displayName(c)} · {bps(live.rate[c.mac]?.rx ?? 0)}">
@@ -271,7 +271,7 @@
 
 {#snippet apsCard()}
     <section class="card">
-      <header class="row between"><h3>Most Active Access Points</h3><a href="#/devices" class="muted">›</a></header>
+      <header class="row between"><h3>Most Active Access Points</h3><a href="#/devices/radios" class="muted" aria-label="Radios">›</a></header>
       <div class="tiles">
         {#each radios as r}
           <a class="tile" href="#/ports" title="{r.name} · {r.clients} clients"><span class="ti ap"><Icon name="wifi" size={20} /></span><span class="ell">{router.identity} {r.band}</span></a>
@@ -328,7 +328,7 @@
 
 {#snippet connCard()}
     <section class="card">
-      <header class="row between"><h3>WiFi Connectivity <span class="good small">Success {Math.min(...connectivity.map((c) => c.pct))}%</span></h3><span class="muted">›</span></header>
+      <header class="row between"><h3>WiFi Connectivity <span class="good small">Success {Math.min(...connectivity.map((c) => c.pct))}%</span></h3><a class="muted" href="#/events" aria-label="Wi-Fi events">›</a></header>
       <div class="conn">
         {#each connectivity as c}
           <div><span class="tiny muted">{c.name}</span><div class="cbar"><i style="width:{c.pct}%"></i></div><span class="tiny good">{c.pct}%</span></div>

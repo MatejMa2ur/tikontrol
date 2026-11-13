@@ -1,6 +1,7 @@
 <script lang="ts">
   import { keep, kept } from '../lib/keep'
   import { events, clients, insights, isBackend, raw, type Event } from '../lib/data'
+  import { fold, macOf } from '../lib/events'
   import { review, apply } from '../lib/apply.svelte'
   import { api } from '../lib/backend'
   import Ros from '../lib/Ros.svelte'
@@ -19,13 +20,21 @@
   // with the server: the events it derived and stored (client joined/left/roamed, Internet down/back);
   // without it: clients that came online in the last hour, from the snapshot
   let stored = $state<Event[]>([])
-  if (isBackend) api<{ t: number; cat: Event['cat']; level: Event['level']; text: string }[]>('/events').then((l) => (stored = (l ?? []).map((e) => ({ time: local(e.t * 1000), cat: e.cat, level: e.level, text: e.text })))).catch(() => {})
-  const ownEvents: Event[] = isBackend ? [] : clients.filter((c) => c.online && c.uptimeS != null && c.uptimeS < 3600).map((c) => ({ time: local(Date.now() - c.uptimeS! * 1000), cat: 'Clients', level: 'info', text: `${c.name} came online (${c.wired ? 'wired' : c.band})` }))
+  if (isBackend) api<{ t: number; cat: Event['cat']; level: Event['level']; text: string; mac?: string }[]>('/events').then((l) => (stored = (l ?? []).map((e) => ({ time: local(e.t * 1000), cat: e.cat, level: e.level, text: e.text, mac: e.mac })))).catch(() => {})
+  const ownEvents: Event[] = isBackend ? [] : clients.filter((c) => c.online && c.uptimeS != null && c.uptimeS < 3600).map((c) => ({ time: local(Date.now() - c.uptimeS! * 1000), cat: 'Clients', level: 'info', text: `${c.name} came online (${c.wired ? 'wired' : c.band})`, mac: c.mac }))
   const all = $derived([...apply.done.map((d) => ({ time: local(Date.now()).slice(0, 11) + d.at, cat: 'Admin' as const, level: 'info' as const, text: `Configuration changed: ${d.title}` })), ...ownEvents, ...stored, ...events].sort((a, b) => b.time.localeCompare(a.time)))
   const cats = ['All', 'Clients', 'WiFi', 'System', 'Security', 'Admin'] as const
   let cat = $state<(typeof cats)[number]>(kept('events.cat', 'All'))
   let q = $state(kept('events.q', ''))
-  const rows = $derived(all.filter((e) => (cat === 'All' || e.cat === cat) && (!q || e.text.toLowerCase().includes(q.toLowerCase()))))
+  // severity: errors only, warnings and up, or everything
+  const sevs = [['all', 'Any level'], ['warning', 'Warnings'], ['error', 'Errors']] as const
+  let sev = $state<(typeof sevs)[number][0]>(kept('events.sev', 'all'))
+  const sevOk = (e: Event) => sev === 'all' || e.level === 'error' || (sev === 'warning' && e.level === 'warning')
+  const inCat = $derived(all.filter((e) => (cat === 'All' || e.cat === cat) && (!q || e.text.toLowerCase().includes(q.toLowerCase()))))
+  const rows = $derived(inCat.filter(sevOk))
+  // repeats (one phone hopping bands all day) fold into one row with ×N; each row links to its client if it has one
+  const shown = $derived(fold(rows).map((e) => ({ ...e, who: macOf(e, clients) })))
+  const sevCount = (s: string) => inCat.filter((e) => s === 'all' || e.level === 'error' || (s === 'warning' && e.level === 'warning')).length
   const count = (c: string) => (c === 'All' ? all.length : all.filter((e) => e.cat === c).length)
   const lvl = (e: Event) => (e.level === 'error' ? 'bad' : e.level === 'warning' ? 'warn' : '')
   function exportCsv() {
@@ -60,7 +69,7 @@
   let unacked = $state(0) // from the server when isBackend; AlarmManager keeps it current once opened
   if (isBackend) api<{ unacked: number }>('/alerts').then((v) => (unacked = v.unacked)).catch(() => {})
   let history = $state(insights.filter((i) => i.level !== 'ok').map((i, n) => ({ id: n, title: i.title, sev: i.level === 'bad' ? 'critical' : 'warning', at: 'Today', ack: false })))
-  $effect(() => { keep('events.cat', cat); keep('events.q', q) })
+  $effect(() => { keep('events.cat', cat); keep('events.q', q); keep('events.sev', sev) })
 </script>
 
 <div class="grid">
@@ -70,13 +79,15 @@
   {#if tab === 'events'}
     <div class="row between wrap">
       <div class="seg">{#each cats as c}<button class:on={cat === c} onclick={() => (cat = c)}>{c} {count(c)}</button>{/each}</div>
-      <div class="row"><input type="search" placeholder="Search events…" bind:value={q} /><button class="btn" onclick={exportCsv}><Icon name="download" size={14} /> CSV</button></div>
+      <div class="row"><div class="seg" aria-label="Severity">{#each sevs as [id, label]}<button class:on={sev === id} aria-pressed={sev === id} onclick={() => (sev = id)}>{label} {sevCount(id)}</button>{/each}</div>
+        <input type="search" placeholder="Search events…" aria-label="Search events" bind:value={q} /><button class="btn" onclick={exportCsv}><Icon name="download" size={14} /> CSV</button></div>
     </div>
     <section class="card flush">
       <table>
         <thead><tr><th>Time</th><th>Category</th><th>Event</th></tr></thead>
         <tbody>
-          {#each rows as e}<tr><td class="mono muted">{e.time.slice(5)}</td><td><span class="pill {lvl(e)}">{e.cat}</span></td><td class="wrap">{e.text}</td></tr>
+          {#each shown as e}<tr><td class="mono muted">{e.time.slice(5)}{#if e.n > 1}<div class="tiny">since {e.first.slice(5)}</div>{/if}</td><td><span class="pill {lvl(e)}">{e.cat}</span></td>
+            <td class="wrap">{#if e.who}<a href="#/clients/{e.who}">{e.text}</a>{:else}{e.text}{/if}{#if e.n > 1} <span class="pill" title="{e.n} times in a row">×{e.n}</span>{/if}</td></tr>
           {:else}<tr><td colspan="3" class="muted">No events match.</td></tr>{/each}
         </tbody>
       </table>
@@ -138,6 +149,7 @@
 {/snippet}
 
 <style>
+  .tiny { font-size: 11px; }
   .flush { padding: 4px 6px; overflow-x: auto; }
   .wrap { white-space: normal; }
   tbody tr { cursor: default; }

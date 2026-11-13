@@ -45,7 +45,7 @@ export type Client = {
   standard?: string // 'WiFi 4' | 'WiFi 5' (heuristic)
 }
 export type Port = { name: string; up: boolean; wan: boolean; clients: string[] }
-export type Event = { time: string; cat: 'Clients' | 'WiFi' | 'System' | 'Security' | 'Admin'; level: 'info' | 'warning' | 'error'; text: string }
+export type Event = { time: string; cat: 'Clients' | 'WiFi' | 'System' | 'Security' | 'Admin'; level: 'info' | 'warning' | 'error'; text: string; mac?: string }
 
 // ---------- helpers ----------
 export function parseUptime(v: unknown): number | undefined {

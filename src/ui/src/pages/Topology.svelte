@@ -43,7 +43,7 @@
   const wifiHub: N[] = wireless.length ? [{ id: 'wifi', label: 'Wi-Fi', sub: `${wireless.length} client${wireless.length === 1 ? '' : 's'}`, icon: 'wifi', kind: 'net', wireless: true, link: 'Wireless', children: wireless }] : []
 
   const self: N = {
-    id: 'gw', label: router.identity, sub: [router.board, internet.gatewayIp].filter(Boolean).join(' · '), icon: 'devices', kind: 'dev', href: '#/devices', children: [...neighborNodes, ...topWired, ...wifiHub],
+    id: 'gw', label: router.identity, sub: [router.board, internet.gatewayIp].filter(Boolean).join(' · '), icon: 'devices', kind: 'dev', href: '#/device/router', children: [...neighborNodes, ...topWired, ...wifiHub],
   }
   const tree: N = internet.behind ? {
     id: 'internet', label: 'Internet', icon: 'globe', kind: 'net', children: [{
@@ -53,7 +53,7 @@
   } : {
     id: 'internet', label: 'Internet', sub: internet.publicIp, icon: 'globe', kind: 'net', children: [{
       id: 'upstream', label: internet.doubleNat ? 'Upstream router' : 'Modem', sub: internet.gateway, icon: 'devices', kind: 'dev', link: `WAN · Port ${internet.wanPort}${speed(internet.wanIf) ? ` · ${speed(internet.wanIf)}` : ''}`, children: [{
-        id: 'gw', label: router.identity, sub: `${router.board} · ${internet.gatewayIp}`, icon: 'devices', kind: 'dev', href: '#/devices', link: speed(internet.wanIf), children: [...neighborNodes, ...topWired, ...wifiHub],
+        id: 'gw', label: router.identity, sub: `${router.board} · ${internet.gatewayIp}`, icon: 'devices', kind: 'dev', href: '#/device/router', link: speed(internet.wanIf), children: [...neighborNodes, ...topWired, ...wifiHub],
       }],
     }],
   }

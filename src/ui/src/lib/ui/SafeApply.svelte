@@ -11,6 +11,9 @@
   const manual = $derived(isBackend && !apply.intent)
 </script>
 
+<!-- closing the tab while a change waits for Keep: the router undoes it at the deadline, so warn first -->
+<svelte:window onbeforeunload={(e) => { if (apply.armed) e.preventDefault() }} />
+
 {#if apply.open}
   <Modal title="Review changes · {apply.title}" onclose={() => (apply.open = false)} wide>
     {#if manual}
@@ -30,7 +33,7 @@
       {#if manual}
         <button class="btn" onclick={() => navigator.clipboard?.writeText(apply.cmds.join('\n'))}><Icon name="code" size={14} /> Copy commands</button>
       {:else}
-        <button class="btn primary" onclick={confirm} disabled={apply.busy || (isBackend && (!p || !p.canApply))} title={p && !p.canApply ? (p.reason ?? '') : ''}><Icon name="check" size={14} /> {p && !p.revertible ? 'Apply' : 'Apply with auto-revert'}</button>
+        <button class="btn primary" onclick={confirm} disabled={apply.busy || apply.armed || (isBackend && (!p || !p.canApply))} title={p && !p.canApply ? (p.reason ?? '') : ''}><Icon name="check" size={14} /> {p && !p.revertible ? 'Apply' : 'Apply with auto-revert'}</button>
       {/if}
     {/snippet}
   </Modal>

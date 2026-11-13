@@ -1,6 +1,5 @@
 <script lang="ts">
-  import { keep, kept } from '../lib/keep'
-  import { router, internet, clients, radios, raw, bytes, dur, hw, isBackend, neighbors } from '../lib/data'
+  import { router, internet, clients, radios, raw, dur, isBackend, neighbors } from '../lib/data'
   import { api, switchSite, type Site } from '../lib/backend'
   import { live } from '../lib/live.svelte'
   import { review } from '../lib/apply.svelte'
@@ -8,41 +7,15 @@
   import { cmpVersion } from '../lib/security'
   import { privateIp, setupSteps, tooOld } from '../lib/guide'
   import Icon from '../lib/Icon.svelte'
-  import DeviceFace from '../lib/DeviceFace.svelte'
   import Tabs from '../lib/ui/Tabs.svelte'
   import Section from '../lib/ui/Section.svelte'
   import Field from '../lib/ui/Field.svelte'
-  import Toggle from '../lib/ui/Toggle.svelte'
   import Modal from '../lib/ui/Modal.svelte'
   import Ports from './Ports.svelte'
   import Radios from './Radios.svelte'
 
   let { tab = 'list' }: { tab?: string } = $props()
   const memPct = $derived(live.mem ?? Math.round((1 - router.memFree / router.memTotal) * 100))
-  // /system/health is feature-detected: missing menu or no sensor = no temperature (same rule as the server's live.rs)
-  const health: { name: string; value: unknown }[] = Array.isArray(raw.health) ? raw.health : []
-  const sensor = (want: (n: string) => boolean) => health.find((h) => want(String(h.name)))?.value
-  const snapTemp = Number(sensor((n) => n === 'cpu-temperature') ?? sensor((n) => n === 'temperature') ?? sensor((n) => n.includes('temperature')) ?? NaN)
-  const temp = $derived(live.temp ?? (Number.isFinite(snapTemp) ? snapTemp : null))
-
-  // 24 h CPU / memory / temperature from the server's history (15-minute averages)
-  type Hist = { t: number[]; cpu?: (number | null)[]; mem?: (number | null)[]; temp?: (number | null)[] }
-  let hist = $state<Hist | null>(null)
-  $effect(() => { if (drawer && isBackend && !hist) api<Hist>('/history?range=1D').then((h) => (hist = h)).catch(() => {}) })
-  function spark(v: (number | null)[] | undefined, max = 100) {
-    if (!v?.some((x) => x != null)) return ''
-    const hi = Math.max(max, ...v.map((x) => x ?? 0))
-    return v.map((x, i) => (x == null ? null : `${((i / Math.max(v.length - 1, 1)) * 200).toFixed(1)},${(30 - (x / hi) * 28).toFixed(1)}`)).filter(Boolean).join(' ')
-  }
-  const last = (v?: (number | null)[]) => v?.filter((x) => x != null).at(-1)
-
-  let drawer = $state(false)
-  let dtab = $state<'overview' | 'ports' | 'settings'>(kept('devices.tab', 'overview'))
-  let identity = $state(router.identity)
-  let led = $state(true)
-  let ssh = $state(true)
-  const firstPort: string = (raw.ethernet ?? [])[0]?.name ?? 'ether1'
-  let blinkPort = $state(firstPort)
   const q = (v: string) => `"${v.replace(/["\\$]/g, (c) => '\\' + c)}"`
   let adoptOpen = $state(false)
 
@@ -74,22 +47,7 @@
   }
   const steps = $derived(guide ? setupSteps(guide.n, guide.ssl, guide.self) : [])
   const copy = (cmds: string[]) => navigator.clipboard?.writeText(cmds.filter((c) => !c.startsWith('#')).join('\n'))
-  $effect(() => { keep('devices.tab', dtab) })
 
-  // switch mode (server: intents/switchmode.rs): management stays on an address the bridge already has
-  const bridges: string[] = (raw.bridges ?? []).map((b: any) => b.name)
-  const inSwitchMode = (raw.filter ?? []).some((r: any) => r.comment === 'tik:switch')
-  let sw = $state<{ bridge: string; address: string; gateway: string; dns: string; wifiOff: boolean } | null>(null)
-  const bridgeAddrs = (b: string): string[] => (raw.addresses ?? []).filter((a: any) => a.interface === b && !a.dynamic).map((a: any) => a.address)
-  function openSwitch() {
-    const bridge = bridges[0] ?? 'bridge'
-    sw = { bridge, address: bridgeAddrs(bridge)[0] ?? '', gateway: '', dns: '', wifiOff: true }
-  }
-  function reviewSwitch() {
-    const s = sw!
-    sw = null
-    review('Use as a switch', [`# all ports into ${s.bridge}, managed at ${s.address}, default route via ${s.gateway}`], { kind: 'switch-mode', bridge: s.bridge, address: s.address, gateway: s.gateway, dns: s.dns || s.gateway, wifi: s.wifiOff ? 'off' : 'on' })
-  }
 </script>
 
 <div class="grid">
@@ -103,8 +61,8 @@
       <table>
         <thead><tr><th>Name</th><th>Model</th><th>IP address</th><th>Version</th><th>Uptime</th><th>CPU</th><th>Memory</th><th>Clients</th><th>Status</th></tr></thead>
         <tbody>
-          <tr onclick={() => { drawer = true; dtab = 'overview' }}>
-            <td><span class="row"><span class="icon-box"><Icon name="devices" /></span><span><button class="plain" onclick={(e) => { e.stopPropagation(); drawer = true; dtab = 'overview' }}><b>{identity}</b></button><div class="muted small">{internet.behind ? 'Switch' : 'Gateway'}{(raw.wifi ?? []).some((w: any) => String(w.disabled) !== 'true') ? ' · AP' : ''}</div></span></span></td>
+          <tr onclick={() => (location.hash = '#/device/router')}>
+            <td><span class="row"><span class="icon-box"><Icon name="devices" /></span><span><a class="plain" href="#/device/router" onclick={(e) => e.stopPropagation()}><b>{router.identity}</b></a><div class="muted small">{internet.behind ? 'Switch' : 'Gateway'}{(raw.wifi ?? []).some((w: any) => String(w.disabled) !== 'true') ? ' · AP' : ''}</div></span></span></td>
             <td>{router.board}<div class="muted small mono">{router.model}</div></td>
             <td class="mono">{internet.gatewayIp}</td>
             <td>{router.version}{#if router.firmware !== router.firmwareUpgrade}<div><span class="pill warn">firmware upgrade</span></div>{/if}</td>
@@ -152,7 +110,7 @@
       <table>
         <thead><tr><th>Device</th><th>RouterOS</th><th>Channel</th><th>RouterBOOT</th><th></th></tr></thead>
         <tbody><tr>
-          <td><b>{identity}</b></td><td>{router.version}</td><td>{router.channel}</td>
+          <td><b>{router.identity}</b></td><td>{router.version}</td><td>{router.channel}</td>
           <td>{router.firmware}{#if router.firmware !== router.firmwareUpgrade} → <b>{router.firmwareUpgrade}</b>{/if}</td>
           <td class="r"><button class="btn small" onclick={() => review('Check for updates', '/system/package/update/check-for-updates', { kind: 'check-updates' })}>Check</button>
             {#if router.firmware !== router.firmwareUpgrade}<button class="btn primary small" onclick={() => review('Upgrade RouterBOOT', ['/system/routerboard/upgrade'], { kind: 'routerboot-upgrade' })}>Upgrade firmware</button>{/if}</td>
@@ -194,7 +152,7 @@
     </Section>
   {:else if tab === 'supervisor'}
     <Section title="Device Supervisor" desc="Health anomalies across devices: offline, high CPU/memory, failed upgrades. Needs the CMR server; for this router, CPU and memory alerts are in Logs & Alarms." ros="/system/resource/print; /cmr/alert/print">
-      <div class="row sup"><span class="dot ok"></span> {identity}: online, CPU {live.cpu}%, memory <span class={memPct > 75 ? 'warnc' : ''}>{memPct}%</span>{#if memPct > 75}<span class="pill warn">memory high</span>{/if}</div>
+      <div class="row sup"><span class="dot ok"></span> {router.identity}: online, CPU {live.cpu}%, memory <span class={memPct > 75 ? 'warnc' : ''}>{memPct}%</span>{#if memPct > 75}<span class="pill warn">memory high</span>{/if}</div>
       {#if cmrOk()}
         {#each cmr.data!.devices.filter((d) => d.paired && !d.online) as d}<div class="row sup"><span class="dot bad"></span> {d.identity}: offline</div>{/each}
         {#each cmr.data!.alerts.filter((a) => a.active?.length) as a}<div class="row sup"><span class="pill {a.severity === 'critical' || a.severity === 'high' ? 'bad' : 'warn'}">{a.severity}</span> <b>{a.name}</b>: {a.active!.join(', ')}</div>{/each}
@@ -220,69 +178,6 @@
     </Section>
   {/if}
 </div>
-
-{#if drawer}
-  <button class="scrim" aria-label="Close" onclick={() => (drawer = false)}></button>
-  <aside class="drawer" aria-label="Device details">
-    <header class="row between">
-      <div class="row"><span class="icon-box lg"><Icon name="devices" size={22} /></span><div><b class="title">{identity}</b><div class="muted small">{router.board} · RouterOS {router.version}</div></div></div>
-      <button class="btn ghost" onclick={() => (drawer = false)} aria-label="Close"><Icon name="close" /></button>
-    </header>
-    <div class="seg dt">
-      <button class:on={dtab === 'overview'} onclick={() => (dtab = 'overview')}>Overview</button>
-      <button class:on={dtab === 'ports'} onclick={() => (dtab = 'ports')}>Ports</button>
-      <button class:on={dtab === 'settings'} onclick={() => (dtab = 'settings')}>Settings</button>
-    </div>
-    {#if dtab === 'overview'}
-      <div class="face"><DeviceFace /></div>
-      <dl>
-        <dt>Model</dt><dd>{router.board} <span class="muted mono">{router.model}</span></dd>
-        <dt>Hardware</dt><dd>{hw.specs}</dd>
-        <dt>IP address</dt><dd class="mono">{internet.gatewayIp}</dd>
-        <dt>Uptime</dt><dd>{dur(router.uptimeS)}</dd>
-        <dt>CPU</dt><dd>{router.cpuCount} {router.cpuCount === 1 ? 'core' : 'cores'} · {live.cpu}%</dd>
-        <dt>Memory</dt><dd>{bytes(router.memFree)} free of {bytes(router.memTotal)}</dd>
-        <dt>Storage</dt><dd>{bytes(router.hddFree)} free of {bytes(router.hddTotal)}</dd>
-        <dt>Temperature</dt>{#if temp != null}<dd>{temp} °C</dd>{:else}<dd class="muted">No sensor on this model</dd>{/if}
-        <dt>Firmware</dt><dd>{router.firmware || 'No RouterBOOT (virtual router)'}{router.firmware && router.firmware !== router.firmwareUpgrade ? ` → ${router.firmwareUpgrade} pending` : ''}</dd>
-      </dl>
-      <h3 class="small">Last 24 hours</h3>
-      {#if !isBackend}
-        <p class="muted small">History is recorded by the tikontrol server.</p>
-      {:else if !hist}
-        <p class="muted small">Loading…</p>
-      {:else}
-        {#each [{ k: 'CPU', v: hist.cpu, unit: '%', max: 100 }, { k: 'Memory', v: hist.mem, unit: '%', max: 100 }, { k: 'Temperature', v: hist.temp, unit: ' °C', max: 60 }] as s}
-          {@const pts = spark(s.v, s.max)}
-          <div class="hrow"><span class="muted small">{s.k}</span>
-            {#if pts}<svg viewBox="0 0 200 30" preserveAspectRatio="none" role="img" aria-label="{s.k} over the last 24 hours"><polyline points={pts} /></svg><span class="small mono">{last(s.v)}{s.unit}</span>
-            {:else}<span class="muted small">{s.k === 'Temperature' ? 'No sensor' : 'No samples yet'}</span><span></span>{/if}
-          </div>
-        {/each}
-      {/if}
-      <div class="actions">
-        <select bind:value={blinkPort} aria-label="Port to blink">{#each (raw.ethernet ?? [{ name: firstPort }]) as e}<option>{e.name}</option>{/each}</select>
-        <button class="btn" onclick={() => review('Locate device', [`/interface/ethernet/blink [find name=${q(blinkPort)}]`], { kind: 'locate', interface: blinkPort })}>Locate (blink)</button>
-        <button class="btn" onclick={() => review('Restart device', ['/system/reboot'], { kind: 'reboot' })}>Restart</button>
-      </div>
-    {:else if dtab === 'ports'}
-      <Ports compact />
-    {:else}
-      <Field label="Name"><input type="text" bind:value={identity} aria-label="Device name" /><button class="btn small" onclick={() => review('Device name', [`/system/identity/set name=${q(identity)}`], { kind: 'site-settings', identity })}>Save</button></Field>
-      <Field label="LEDs"><Toggle bind:checked={led} label="LEDs" /><button class="btn small" onclick={() => review(led ? 'Turn the LEDs on' : 'Turn the LEDs off', [`/system/leds/settings/set all-leds-off=${led ? 'never' : 'immediate'}`], { kind: 'set-leds', all_leds_off: led ? 'never' : 'immediate' })}>Save</button></Field>
-      <Field label="Device SSH" help="Key-based SSH for admins"><Toggle bind:checked={ssh} label="SSH" /></Field>
-      <div class="r"><button class="btn" onclick={() => review('Device SSH', [`/ip/service/set ssh disabled=${ssh ? 'no' : 'yes'}`], { kind: 'set-service', name: 'ssh', enabled: ssh })}>Review & apply</button></div>
-      <h3 class="small">Switch mode</h3>
-      {#if inSwitchMode}
-        <p class="muted small">This router works as a switch. Leaving switch mode turns its DHCP, NAT, addresses and WAN port back on.</p>
-        <div class="r"><button class="btn" onclick={() => review('Leave switch mode', ['# turn back on what switch mode turned off'], { kind: 'leave-switch-mode' })}>Leave switch mode</button></div>
-      {:else}
-        <p class="muted small">Turn this router into a managed switch behind another router: every port on one bridge, no DHCP, NAT or routing.</p>
-        <div class="r"><button class="btn" onclick={openSwitch}>Use as a switch</button></div>
-      {/if}
-    {/if}
-  </aside>
-{/if}
 
 {#if adoptOpen}
   <Modal title="Find and adopt devices" onclose={() => (adoptOpen = false)}>
@@ -331,19 +226,6 @@
   </Modal>
 {/if}
 
-{#if sw}
-  <Modal title="Use {identity} as a switch" onclose={() => (sw = null)}>
-    <p class="small">Every ethernet port joins the bridge. DHCP servers and clients, NAT, the other addresses and the WAN port are turned off, not deleted. The preview lists each change; it reverts by itself unless you keep it.</p>
-    <Field label="Bridge"><select aria-label="Bridge" bind:value={sw.bridge} onchange={() => (sw!.address = bridgeAddrs(sw!.bridge)[0] ?? '')}>{#each bridges as b}<option>{b}</option>{/each}</select></Field>
-    <Field label="Management address" help="One the bridge already has: the one you reach this router on">
-      <select aria-label="Management address" bind:value={sw.address}>{#each bridgeAddrs(sw.bridge) as a}<option>{a}</option>{:else}<option value="">No address on this bridge</option>{/each}</select></Field>
-    <Field label="Gateway" help="The router that serves this network"><input type="text" aria-label="Gateway" bind:value={sw.gateway} placeholder="192.168.88.1" /></Field>
-    <Field label="DNS server" help="Empty: the gateway"><input type="text" aria-label="DNS server" bind:value={sw.dns} placeholder={sw.gateway || '192.168.88.1'} /></Field>
-    <Field label="Turn Wi-Fi off"><Toggle bind:checked={sw.wifiOff} label="Turn Wi-Fi off" /></Field>
-    <div class="r"><button class="btn primary" disabled={!sw.address || !sw.gateway} onclick={reviewSwitch}>Review</button></div>
-  </Modal>
-{/if}
-
 {#if labelEdit}
   <Modal title="Labels of {labelEdit.d.identity}" onclose={() => (labelEdit = null)}>
     <p class="small">CMR pushes Wi-Fi networks, VLANs and upgrade rules to devices by label. Automatic labels: <span class="mono">{(labelEdit.d['auto-labels'] ?? []).join(', ')}</span></p>
@@ -360,20 +242,7 @@
   .btn.small { padding: 4px 9px; }
   .warnc { color: var(--warn); }
   .sup { gap: 8px; }
-  .scrim { position: fixed; inset: 0; background: #0006; border: 0; z-index: 20; }
-  .drawer { position: fixed; top: 0; right: 0; bottom: 0; width: min(460px, 100vw); background: var(--panel); border-left: 1px solid var(--line); z-index: 21; padding: 18px; overflow-y: auto; box-shadow: var(--shadow); }
-  .lg { width: 44px; height: 44px; }
-  .title { font-size: 17px; }
-  .dt { margin: 16px 0; }
-  .face { margin: 0 0 16px; }
-  dl { display: grid; grid-template-columns: 110px 1fr; gap: 8px 12px; }
-  dt { color: var(--muted); } dd { margin: 0; }
   h3 { margin: 18px 0 6px; }
-  .hrow { display: grid; grid-template-columns: 90px 1fr 60px; gap: 10px; align-items: center; padding: 3px 0; }
-  .hrow svg { width: 100%; height: 30px; }
-  .hrow polyline { fill: none; stroke: var(--accent); stroke-width: 1.5; vector-effect: non-scaling-stroke; }
-  .hrow .mono { text-align: right; }
-  .actions { display: flex; gap: 8px; margin-top: 16px; }
   .steps { line-height: 1.8; padding-left: 18px; }
   .steps li + li { margin-top: 10px; }
   .cmd { display: flex; gap: 8px; align-items: flex-start; margin: 4px 0; }

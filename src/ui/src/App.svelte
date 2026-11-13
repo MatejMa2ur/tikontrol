@@ -9,6 +9,7 @@
   import Dashboard from './pages/Dashboard.svelte'
   import Clients from './pages/Clients.svelte'
   import ClientDrawer from './pages/ClientDrawer.svelte'
+  import DeviceDrawer from './pages/DeviceDrawer.svelte'
   import Topology from './pages/Topology.svelte'
   import Devices from './pages/Devices.svelte'
   import SafeApply from './lib/ui/SafeApply.svelte'
@@ -32,31 +33,36 @@
   // old/short links: #/ports and #/radios live under Devices
   const alias: Record<string, string[]> = { ports: ['devices', 'ports'], radios: ['devices', 'radios'] }
   const parse = (h: string) => { const x = h.replace(/^#\/?/, '').split('?')[0].split('/'); return alias[x[0]] ?? x } // ?query is for the page itself
-  const isClient = (x: string[]) => x[0] === 'clients' && !!x[1] && x[1] !== 'offline' && x[1] !== 'groups'
+  // side panels: #/clients/<mac> and #/device/<id> (only 'router' so far)
+  const isPanel = (x: string[]) => (x[0] === 'clients' && !!x[1] && x[1] !== 'offline' && x[1] !== 'groups') || (x[0] === 'device' && !!x[1])
 
-  // #/clients/<mac> opens a side panel over the page you came from instead of switching to Clients.
+  // A panel route opens a side panel over the page you came from instead of switching pages.
   // `under` = that page's hash, `depth` = panel entries pushed since, so ✕ goes back exactly that far.
   // Both live in history.state, so Back, Forward and reload keep the page underneath.
-  type Panel = { under: string; depth: number }
+  type Panel = { under: string; page: string; depth: number } // page: the real page below, when under is a panel
   let hash = $state(location.hash)
   let panel = $state<Panel | null>(history.state?.depth ? history.state : null)
   $effect(() => {
     const on = () => {
       const was = hash
       hash = location.hash
-      if (!isClient(parse(hash))) { panel = null; return }
+      if (!isPanel(parse(hash))) { panel = null; return }
       const s = history.state as Panel | null
       if (s?.depth) { panel = s; return }
-      panel = isClient(parse(was)) && panel ? { under: panel.under, depth: panel.depth + 1 } : { under: was, depth: 1 }
+      // another panel of the same kind replaces it (✕ still returns to the page); a client opened from the device
+      // panel stacks on it, so ✕ returns to the device
+      panel = panel && isPanel(parse(was)) && parse(was)[0] === parse(hash)[0] ? { ...panel, depth: panel.depth + 1 } : { under: was, page: panel && isPanel(parse(was)) ? panel.page : was, depth: 1 }
       history.replaceState($state.snapshot(panel), '')
     }
     addEventListener('hashchange', on)
     return () => removeEventListener('hashchange', on)
   })
-  const closePanel = () => (panel ? history.go(-panel.depth) : (location.hash = '#/clients'))
   const route = $derived(parse(hash))
-  const mac = $derived(isClient(route) ? route[1] : '')
-  const r = $derived(mac ? parse(panel?.under ?? '#/clients') : route) // the page shown (under the panel)
+  const home = $derived(route[0] === 'device' ? '#/devices' : '#/clients') // under a panel opened from a link or reload
+  const closePanel = () => (panel ? history.go(-panel.depth) : (location.hash = home))
+  const mac = $derived(route[0] === 'clients' && isPanel(route) ? route[1] : '')
+  const device = $derived(route[0] === 'device' ? route[1] : '')
+  const r = $derived(isPanel(route) ? parse(panel?.page ?? home) : route) // the page shown (under the panel)
   const page = $derived(pages.find((p) => p.id === r[0]) ?? pages[0])
 
   // With the server: fetch a fresh snapshot every 30 s and re-mount the page with it, unless the user is
@@ -76,8 +82,8 @@
         const json = JSON.stringify(s).replace(/\d+/g, '0')
         const due = Date.now() - rebuilt > 300_000
         stale = ''
-        // don't rebuild the page under someone typing, reviewing a change or using a dialog
-        const busy = apply.open || apply.armed || !!document.querySelector('[role="dialog"], details[open]') || document.activeElement?.matches('input, textarea, select')
+        // don't rebuild the page under someone typing, reviewing a change, or using a dialog or side panel
+        const busy = apply.open || apply.armed || !!document.querySelector('[role="dialog"], details[open], .side-panel') || document.activeElement?.matches('input, textarea, select')
         if ((json !== last || due) && last && !busy) {
           const y = scrollY
           load(s); version++; rebuilt = Date.now()
@@ -155,6 +161,7 @@
     {:else if page.id === 'hotspot'}<Hotspot tab={r[1] || 'portal'} />
     {:else if page.id === 'settings'}<Settings section={r[1] || 'wifi'} />{/if}
     {#each clients.filter((c) => c.mac === mac) as c (c.mac)}<ClientDrawer client={c} onclose={closePanel} />{/each}
+    {#if device === 'router'}<DeviceDrawer onclose={closePanel} />{/if}
     {/key}
   </main>
 </div>

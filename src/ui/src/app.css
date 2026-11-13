@@ -78,3 +78,12 @@ input:focus { border-color: var(--accent); }
 select { background: var(--panel2); color: var(--text); border: 1px solid var(--line); border-radius: var(--radius-sm); padding: 6px 8px; font: inherit; }
 input[type='number'], input[type='password'], input[type='time'] { background: var(--panel2); border: 1px solid var(--line); color: var(--text); border-radius: var(--radius-sm); padding: 6px 10px; font: inherit; }
 tbody tr.nohover { cursor: default; } tbody tr.nohover:hover { background: none; }
+
+/* Side panels (ClientDrawer, DeviceDrawer): open over the page you are on. On wide screens the page stays usable,
+   so there is no dimming; on narrow ones the panel covers it and the scrim closes it. */
+.side-scrim { position: fixed; inset: 0; background: #0006; border: 0; z-index: 20; cursor: default; }
+.side-panel { position: fixed; top: 0; right: 0; bottom: 0; width: min(460px, 100vw); background: var(--panel); border-left: 1px solid var(--line); box-shadow: var(--shadow); z-index: 21; padding: 18px; overflow-y: auto; overscroll-behavior: contain; animation: side-in .16s ease-out; }
+.side-panel:focus { outline: none; }
+@keyframes side-in { from { transform: translateX(24px); opacity: 0; } }
+@media (min-width: 1100px) { .side-scrim { display: none; } }
+@media (prefers-reduced-motion: reduce) { .side-panel { animation: none; } }

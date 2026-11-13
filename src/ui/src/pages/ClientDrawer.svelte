@@ -112,8 +112,8 @@
 
 <!-- a dialog opened from the panel closes first; one Esc closes one layer -->
 <svelte:window onkeydown={(e) => e.key === 'Escape' && !document.querySelector('[role="dialog"]') && close()} />
-<button class="scrim" aria-label="Close" onclick={close}></button>
-<aside class="drawer" aria-label="Client details" tabindex="-1" bind:this={panel}>
+<button class="side-scrim" aria-label="Close" onclick={close}></button>
+<aside class="side-panel" aria-label="Client details" tabindex="-1" bind:this={panel}>
   <header class="row between">
     <div class="row">
       <div class="icon-box lg"><Icon name={iconOf(me)} size={22} /></div>
@@ -250,9 +250,6 @@
 </aside>
 
 <style>
-  .scrim { position: fixed; inset: 0; background: #0006; border: 0; z-index: 20; cursor: default; }
-  .drawer { position: fixed; top: 0; right: 0; bottom: 0; width: min(460px, 100vw); background: var(--panel); border-left: 1px solid var(--line); box-shadow: var(--shadow); z-index: 21; padding: 18px; overflow-y: auto; animation: slide .18s ease-out; }
-  @keyframes slide { from { transform: translateX(30px); opacity: 0; } }
   .lg { width: 44px; height: 44px; border-radius: 12px; }
   .title { background: none; border: 0; padding: 0; font-size: 17px; font-weight: 650; cursor: text; display: inline-flex; gap: 6px; align-items: center; }
   .title :global(svg) { color: var(--muted); }
