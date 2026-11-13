@@ -43,6 +43,7 @@ Cross-cutting questions (dotted proplists, Safe apply under device mode or after
 - [ ] **Firmware update per device** 🟨: CMR upgrade of a real managed device
 - [ ] **Topology map (auto layout, wired + wireless links; MNDP/LLDP neighbours as intermediate switch/AP nodes with their port's clients)** 🟨: check with a real switch and AP behind the router, including a daisy chain
 - [ ] **Neighbour device panel (read-only `#/device/<MAC>` from Topology, Devices and search: name, model, IP, MAC, version, port, uptime, clients behind it, https WebFig link; no actions)** 🟨: check with a real switch behind the router
+- [ ] **Switch/AP site: role detected read-only (default route into its own subnet, no DHCP server, no NAT), its upstream router drawn above it, bridge hosts off the uplink as its clients; never an invented Modem or "undefined"** 🟨: check with a real switch behind the router
 - [ ] **Topology Spotlight (highlight/filter)** 🟨: check on a real multi-device topology
 - [ ] **Device LED control / Etherlighting** 🟨: `set-leds` turns the LEDs off on a real board
 - [ ] **Switch mode: turn a MikroTik router into a managed switch (every ethernet port on one bridge; DHCP, NAT, other addresses, WAN and optionally Wi-Fi turned off, not deleted; default route + DNS via the upstream router; LAN-only input firewall; management address kept; Leave switch mode restores)** 🟨: check on a real small router (hAP lite: legacy `wireless`)

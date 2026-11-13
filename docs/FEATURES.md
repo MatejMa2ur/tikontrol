@@ -12,7 +12,7 @@ Clean-room: we copy the behaviour, never the assets.
 **Backing:** `ROS` = RouterOS API on the router · `CMR` = MikroTik CMR server · `tik` = our own logic/DB · `✗` = nothing can back it
 
 <!-- progress:start -->
-**Progress:** 125 ✅ · 110 🟨 · 0 🎨 · 1 ⬜ · 9 ➖ (245 items, 53% done) · 111 🔌 waiting for a hardware test ([list](HARDWARE_TESTS.md))
+**Progress:** 125 ✅ · 111 🟨 · 0 🎨 · 2 ⬜ · 9 ➖ (247 items, 53% done) · 112 🔌 waiting for a hardware test ([list](HARDWARE_TESTS.md))
 <!-- progress:end -->
 
 ---
@@ -86,6 +86,8 @@ Clean-room: we copy the behaviour, never the assets.
 | Scheduled / rolling fleet updates (needs CMR server) | CMR upgrade rules | 3 | ✅ |
 | Topology map (auto layout, wired + wireless links; MNDP/LLDP neighbours as intermediate switch/AP nodes with their port's clients) 🔌 check with a real switch and AP behind the router, including a daisy chain | CMR layout · ROS neighbor + bridge host | 2 | 🟨 |
 | Neighbour device panel (read-only `#/device/<MAC>` from Topology, Devices and search: name, model, IP, MAC, version, port, uptime, clients behind it, https WebFig link; no actions) 🔌 check with a real switch behind the router | ROS `/ip/neighbor` + bridge host | 3 | 🟨 |
+| Switch/AP site: role detected read-only (default route into its own subnet, no DHCP server, no NAT), its upstream router drawn above it, bridge hosts off the uplink as its clients; never an invented Modem or "undefined" 🔌 check with a real switch behind the router | tik · ROS route, dhcp-server, nat, bridge host | 2 | 🟨 |
+| Adopted devices: switches/APs/caps inside one site, one merged topology and client list, clients named from the gateway (plan: docs/research/multi_device.md) | tik (sites with a parent) | 3 | ⬜ |
 | Topology Spotlight (highlight/filter) 🔌 check on a real multi-device topology | tik | 3 | 🟨 |
 | Device Supervisor (health anomalies; needs CMR server) | CMR state alerts | 4 | ✅ |
 | Blueprints / config drift inspector (diff of the reader's structured prints, not `/export`: over the API with only `read` it returns an empty `!done`, and exports risk secrets) | tik (snapshot diff) | 4 | ✅ |
