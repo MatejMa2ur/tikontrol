@@ -50,3 +50,28 @@ test('neighbour panel ids and WebFig links accept only well-formed values', asyn
   assert.equal(webfigUrl('evil.example/x'), undefined)
   assert.equal(webfigUrl(undefined), undefined)
 })
+
+test('uplinkOf: a switch keeping a DHCP client on a bridge port is behind its gateway, a router is not', async () => {
+  const { uplinkOf } = await import('../src/ui/src/lib/topology.ts')
+  // hAP-lite-as-switch: defconf DHCP client still on ether1 (now a bridge port), no DHCP server, no NAT
+  const sw = {
+    wan: [{ interface: 'ether1', address: '192.0.2.7/24', gateway: '192.0.2.1', status: 'bound' }],
+    addresses: [{ address: '192.0.2.7/24', interface: 'ether1' }],
+    routes: [{ 'dst-address': '0.0.0.0/0', gateway: '192.0.2.1', active: true, dynamic: true }],
+    bridges: [{ name: 'bridge' }], dhcpServers: [], nat: [{ chain: 'srcnat', action: 'masquerade', disabled: 'true' }],
+    arp: [{ address: '192.0.2.1', 'mac-address': '02:00:00:00:00:a1', interface: 'ether1' }],
+    bridgeHosts: [{ 'mac-address': '02:00:00:00:00:A1', 'on-interface': 'ether1' }, { 'mac-address': '02:00:00:00:00:b2', 'on-interface': 'ether3' }],
+  }
+  assert.deepEqual(uplinkOf(sw), { behind: '192.0.2.1', selfIp: '192.0.2.7', upPort: 'ether1' })
+  // the MNDP neighbour at the gateway wins over the ARP lookup
+  assert.equal(uplinkOf({ ...sw, neighbors: [{ address: '192.0.2.1', interface: 'ether2,bridge' }] }).upPort, 'ether2')
+  // static default route through a gateway in its bridge subnet
+  assert.equal(uplinkOf({ addresses: [{ address: '192.0.2.7/24', interface: 'bridge' }], routes: [{ 'dst-address': '0.0.0.0/0', gateway: '192.0.2.1%bridge' }] }).behind, '192.0.2.1')
+  // a gateway router: same shape of WAN, but it hands out leases and masquerades
+  const gw = { ...sw, addresses: [{ address: '10.12.0.1/24', interface: 'bridge' }, ...sw.addresses], dhcpServers: [{ name: 'defconf', disabled: false }] }
+  assert.deepEqual(uplinkOf(gw), { selfIp: '10.12.0.1' })
+  assert.equal(uplinkOf({ ...sw, nat: [{ chain: 'srcnat', action: 'masquerade' }] }).behind, undefined)
+  // no address, no route, junk: no role guessed, nothing undefined-as-text
+  assert.deepEqual(uplinkOf({}), { selfIp: undefined })
+  assert.deepEqual(uplinkOf({ addresses: 'x', routes: [{ 'dst-address': '0.0.0.0/0', gateway: 'pppoe-out1' }] }), { selfIp: undefined })
+})

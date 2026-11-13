@@ -74,3 +74,32 @@ export function inSubnet(ip: string, cidr: string): boolean {
   const size = 2 ** (32 - Math.min(32, +bits || 32))
   return Math.floor(n(ip) / size) === Math.floor(n(net) / size)
 }
+
+const on = (r: any) => String(r?.disabled) !== 'true'
+const ipOnly = (g?: string) => /^\d+\.\d+\.\d+\.\d+/.exec(g ?? '')?.[0] // v7 may write "192.0.2.1%bridge"
+
+/**
+ * Is this router a switch/AP behind another router? Read-only facts, no settings: it has a default route into
+ * one of its own subnets (static, or from a DHCP client: a switch often keeps one) and runs no DHCP server and
+ * no masquerade/src-nat. Then `behind` is that gateway, `selfIp` the address in its subnet and `upPort` the
+ * port the gateway is reached through (MNDP neighbour first, else ARP MAC → bridge host table).
+ */
+// ponytail: a gateway router with neither a DHCP server nor NAT (routed public subnet) reads as a switch;
+// add an explicit role override in Settings if that case ever shows up.
+export function uplinkOf(raw: any): { behind?: string; selfIp?: string; upPort?: string } {
+  const arr = (k: string): any[] => (Array.isArray(raw?.[k]) ? raw[k] : [])
+  const addrs = arr('addresses').filter((a) => on(a) && typeof a.address === 'string' && a.address.includes('/'))
+  const route = arr('routes').find((r) => r['dst-address'] === '0.0.0.0/0' && on(r) && String(r.active) !== 'false' && ipOnly(r.gateway))
+  const gw = ipOnly(route?.gateway) ?? ipOnly(arr('wan').find((w) => w.status === 'bound')?.gateway)
+  const own = gw ? addrs.find((a) => inSubnet(gw, a.address)) : undefined
+  const bridges = new Set<string>(arr('bridges').map((b) => b.name).concat('bridge'))
+  const gateway = arr('dhcpServers').some(on) || arr('nat').some((n) => on(n) && n.chain === 'srcnat' && /^(masquerade|src-nat)$/.test(n.action ?? ''))
+  const lan = addrs.find((a) => bridges.has(a.interface))
+  // a gateway is managed on its LAN (bridge) address, a switch on the address facing its gateway
+  const selfIp = ((gateway ? lan ?? own : own ?? lan) ?? addrs[0])?.address.split('/')[0]
+  if (!gw || !own || gateway) return { selfIp }
+  const nb = arr('neighbors').find((n) => n.address === gw)
+  const gwMac = norm(arr('arp').find((a) => a.address === gw)?.['mac-address'])
+  const upPort = portOf(nb?.interface) || arr('bridgeHosts').find((h) => gwMac && norm(h['mac-address']) === gwMac)?.['on-interface'] || undefined
+  return { behind: gw, selfIp, upPort }
+}
