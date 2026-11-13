@@ -58,6 +58,11 @@ Brand and model come from the other sources.
 Missing: option 55 fingerprints, learning from the user's corrections, mapping model identifiers to kinds, and
 passive (listen-only) discovery.
 
+**Update (2026-11):** steps 1–3 below are built behind Settings → System → Device identification (guesses on by
+default; LAN queries and the DHCP listener opt-in). Learning is derived from `prefs.icons` and the current client
+list (`discovery.svelte.ts`), the model table and the fingerprint key live in `identify.ts`, and the listener is in
+`discovery.rs`. The port-67 bind inside the RouterOS container is still untested (see `DEPLOY.md`).
+
 ## 3. What RouterOS 7 exposes
 
 | Source | Available? | Notes |
