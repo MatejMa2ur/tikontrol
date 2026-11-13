@@ -8,6 +8,13 @@
 //! - Every value is untrusted device text: control characters stripped, `MAX_KEYS` keys per device and
 //!   `MAX_VAL` chars per value. It is shown as text only and never used to build RouterOS commands.
 //! - Results live in `discovery.json` next to `history.json`, keyed by IP, with the MAC from ARP/leases.
+//!
+//! Device identification (Settings · System) is the master switch, on by default: off, the schedule and
+//! "run now" are refused and the DHCP listener stops. The UI then shows no type/OS guesses either.
+//! The optional DHCP listener (off by default) binds UDP 67 receive-only and keeps option 55/60/12/81 of
+//! broadcast DISCOVER/REQUEST packets per MAC. It never sends. Port 67 is privileged: as UID 65532 the bind
+//! only works where the network namespace allows it (Docker's own networks set
+//! `net.ipv4.ip_unprivileged_port_start=0`); otherwise the error is shown in Settings and nothing else changes.
 
 use crate::api::body;
 use crate::app::{lock, now, App};
@@ -53,11 +60,38 @@ pub struct Dev {
     pub kv: Vec<Kv>,
 }
 
-#[derive(Serialize, Deserialize, Default)]
+/// What one DHCP client asked for (from its broadcast DISCOVER/REQUEST). Untrusted device text, capped.
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Default)]
+#[serde(default)]
+pub struct Fp {
+    pub mac: String,
+    pub t: u64,
+    /// option 55, the parameter request list in the client's order, e.g. "1,3,6,15"
+    pub prl: String,
+    /// option 60, vendor class
+    pub class: String,
+    /// option 12, host name
+    pub host: String,
+    /// option 81, client FQDN
+    pub fqdn: String,
+}
+
+#[derive(Serialize, Deserialize)]
 #[serde(default)]
 struct Saved {
     auto: bool,
+    /// device identification (guesses in the UI, discovery, the DHCP listener); on by default
+    ident: bool,
+    /// passive DHCP listener on UDP 67; off by default
+    dhcp: bool,
     devices: Vec<Dev>,
+    fps: Vec<Fp>,
+}
+
+impl Default for Saved {
+    fn default() -> Self {
+        Saved { auto: false, ident: true, dhcp: false, devices: vec![], fps: vec![] }
+    }
 }
 
 #[derive(Default)]
@@ -65,6 +99,9 @@ struct St {
     saved: Option<Saved>,
     running: bool,
     last: u64,
+    /// the DHCP listener is bound, or why it could not bind
+    listening: bool,
+    dhcp_err: Option<String>,
 }
 
 fn st() -> &'static Mutex<St> {
@@ -89,15 +126,18 @@ pub fn route(app: &Arc<App>, req: &Req, s: &Session) -> Option<Resp> {
         ("GET", "/api/v1/discovery") => {
             let mut g = lock(st());
             let (running, last) = (g.running, g.last);
+            let (listening, err) = (g.listening, g.dhcp_err.clone());
             let sv = saved(app, &mut g);
-            Resp::json(200, &json!({ "auto": sv.auto, "running": running, "last": last, "wait": (last + MIN_GAP).saturating_sub(now()), "minGap": MIN_GAP, "devices": sv.devices }))
+            Resp::json(200, &json!({ "auto": sv.auto, "ident": sv.ident, "dhcp": sv.dhcp, "listening": listening, "dhcpError": err, "running": running, "last": last, "wait": (last + MIN_GAP).saturating_sub(now()), "minGap": MIN_GAP, "devices": sv.devices, "fingerprints": sv.fps }))
         }
         ("PUT" | "POST", _) if !admin => Resp::error(403, "admin role required"),
         ("PUT", "/api/v1/discovery") => {
             #[derive(Deserialize)]
             #[serde(deny_unknown_fields)]
             struct Cfg {
-                auto: bool,
+                auto: Option<bool>,
+                ident: Option<bool>,
+                dhcp: Option<bool>,
             }
             let b: Cfg = match body(req) {
                 Ok(b) => b,
@@ -105,9 +145,15 @@ pub fn route(app: &Arc<App>, req: &Req, s: &Session) -> Option<Resp> {
             };
             let mut g = lock(st());
             let sv = saved(app, &mut g);
-            sv.auto = b.auto;
+            sv.auto = b.auto.unwrap_or(sv.auto);
+            sv.ident = b.ident.unwrap_or(sv.ident);
+            sv.dhcp = b.dhcp.unwrap_or(sv.dhcp);
+            if b.dhcp == Some(false) || b.ident == Some(false) {
+                sv.fps.clear(); // turning it off forgets what was heard
+            }
             crate::api::saved(write_private(&path(app), &serde_json::to_vec(sv).unwrap_or_default()))
         }
+        ("POST", "/api/v1/discovery/run") if !saved(app, &mut lock(st())).ident => Resp::error(409, "device identification is off (Settings · System)"),
         ("POST", "/api/v1/discovery/run") => match run(app) {
             Ok(n) => Resp::json(200, &json!({ "found": n })),
             Err(wait) => Resp::error(429, "discovery ran recently or is running; try again later").with("retry-after", wait.to_string()),
@@ -163,14 +209,17 @@ fn macs(app: &App) -> HashMap<String, String> {
     m
 }
 
-/// The optional schedule: every `EVERY` seconds while the setting is on.
+/// The optional schedule (every `EVERY` seconds while the setting is on) and the DHCP listener.
 pub fn spawn(app: Arc<App>) {
+    let a = app.clone();
+    std::thread::spawn(move || listen(&a));
     std::thread::spawn(move || loop {
         std::thread::sleep(Duration::from_secs(60));
         let due = {
             let mut g = lock(st());
             let last = g.last;
-            saved(&app, &mut g).auto && now() >= last + EVERY
+            let sv = saved(&app, &mut g);
+            sv.ident && sv.auto && now() >= last + EVERY
         };
         if due {
             let _ = run(&app);
@@ -450,6 +499,125 @@ pub fn upnp(xml: &str) -> Vec<(&'static str, String)> {
         .collect()
 }
 
+// ---------- passive DHCP listener ----------
+
+const MAX_FPS: usize = 512;
+
+fn wanted(app: &App) -> bool {
+    let mut g = lock(st());
+    let sv = saved(app, &mut g);
+    sv.ident && sv.dhcp
+}
+
+/// Binds UDP 67 while the setting is on and records what clients ask for. Receive-only: never sends.
+fn listen(app: &App) {
+    loop {
+        if !wanted(app) {
+            let mut g = lock(st());
+            (g.listening, g.dhcp_err) = (false, None);
+            drop(g);
+            std::thread::sleep(Duration::from_secs(5));
+            continue;
+        }
+        let sock = match UdpSocket::bind("0.0.0.0:67") {
+            Ok(s) => s,
+            Err(e) => {
+                let mut g = lock(st());
+                (g.listening, g.dhcp_err) = (false, Some(format!("cannot listen on UDP port 67: {e}")));
+                drop(g);
+                std::thread::sleep(Duration::from_secs(60));
+                continue;
+            }
+        };
+        let _ = sock.set_read_timeout(Some(Duration::from_secs(2)));
+        {
+            let mut g = lock(st());
+            (g.listening, g.dhcp_err) = (true, None);
+        }
+        let mut buf = [0u8; 1500];
+        while wanted(app) {
+            let Ok((len, std::net::SocketAddr::V4(from))) = sock.recv_from(&mut buf) else { continue };
+            // clients send from port 68, from 0.0.0.0 before they have an address
+            if from.port() != 68 || !(from.ip().is_unspecified() || lan(*from.ip())) {
+                continue;
+            }
+            if let Some(fp) = dhcp(&buf[..len]) {
+                remember(app, fp);
+            }
+        }
+    }
+}
+
+fn remember(app: &App, mut fp: Fp) {
+    let mut g = lock(st());
+    let sv = saved(app, &mut g);
+    let same = sv.fps.iter().find(|f| f.mac == fp.mac);
+    // a REQUEST often drops fields its DISCOVER had: keep the earlier ones
+    if let Some(old) = same {
+        for (new, was) in [(&mut fp.prl, &old.prl), (&mut fp.class, &old.class), (&mut fp.host, &old.host), (&mut fp.fqdn, &old.fqdn)] {
+            if new.is_empty() {
+                new.clone_from(was);
+            }
+        }
+    }
+    let changed = same.is_none_or(|o| Fp { t: fp.t, ..o.clone() } != fp);
+    sv.fps.retain(|f| f.mac != fp.mac);
+    sv.fps.insert(0, fp);
+    sv.fps.truncate(MAX_FPS);
+    if changed {
+        let _ = write_private(&path(app), &serde_json::to_vec(sv).unwrap_or_default());
+    }
+}
+
+/// Device text from a DHCP option: control characters stripped, at most 64 chars.
+fn text(b: &[u8]) -> String {
+    String::from_utf8_lossy(b).chars().filter(|c| !c.is_control()).take(64).collect::<String>().trim().to_string()
+}
+
+/// A client's BOOTREQUEST (DISCOVER, REQUEST or INFORM): its MAC and options 55/60/12/81. None for
+/// anything else or anything malformed. Every read is bounds-checked; the option walk is bounded by the packet.
+pub fn dhcp(p: &[u8]) -> Option<Fp> {
+    // op=1 (request), htype=1 (Ethernet), hlen=6, magic cookie at 236
+    if p.len() < 240 || p[0] != 1 || p[1] != 1 || p[2] != 6 || p[236..240] != [99, 130, 83, 99] {
+        return None;
+    }
+    let mac = p[28..34].iter().map(|b| format!("{b:02X}")).collect::<Vec<_>>().join(":");
+    let mut fp = Fp { mac, t: now(), ..Default::default() };
+    let (mut i, mut kind) = (240, 0);
+    while let Some(&code) = p.get(i) {
+        match code {
+            0 => i += 1,
+            255 => break,
+            _ => {
+                let len = *p.get(i + 1)? as usize;
+                let v = p.get(i + 2..i + 2 + len)?;
+                match code {
+                    53 if len == 1 => kind = v[0],
+                    55 => fp.prl = v.iter().take(64).map(u8::to_string).collect::<Vec<_>>().join(","),
+                    60 => fp.class = text(v),
+                    12 => fp.host = text(v),
+                    // flags, 2 deprecated rcodes, then the name: DNS wire format if the E bit is set
+                    81 if len > 3 => {
+                        fp.fqdn = if v[0] & 4 != 0 {
+                            let (mut out, mut k) = (Vec::new(), 3);
+                            while let Some(&l) = v.get(k).filter(|&&l| l != 0 && l < 64) {
+                                out.push(text(v.get(k + 1..k + 1 + l as usize)?));
+                                k += 1 + l as usize;
+                            }
+                            text(out.join(".").as_bytes())
+                        } else {
+                            text(&v[3..])
+                        }
+                    }
+                    _ => {}
+                }
+                i += 2 + len;
+            }
+        }
+    }
+    matches!(kind, 1 | 3 | 8).then_some(fp)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -510,5 +678,89 @@ mod tests {
         f.add(Ipv4Addr::new(1, 1, 1, 1), "ssdp", "x", "y");
         assert_eq!(f.0[&src][0].2, "a".repeat(MAX_VAL)); // control chars stripped, then capped
         assert!(!f.0.contains_key(&Ipv4Addr::new(1, 1, 1, 1)));
+    }
+
+    /// A made-up DISCOVER: BOOTP header, cookie, then `opts`.
+    fn packet(opts: &[u8]) -> Vec<u8> {
+        let mut p = vec![0u8; 240];
+        (p[0], p[1], p[2]) = (1, 1, 6);
+        p[28..34].copy_from_slice(&[0x02, 0x00, 0x5E, 0x10, 0x20, 0x30]);
+        p[236..240].copy_from_slice(&[99, 130, 83, 99]);
+        p.extend(opts);
+        p
+    }
+
+    #[test]
+    fn dhcp_parser_reads_request_options_and_rejects_junk() {
+        let mut o = vec![53, 1, 1, 0, 55, 4, 1, 3, 6, 15, 60, 8];
+        o.extend(b"acme-os1");
+        o.extend([12, 7]);
+        o.extend(b"tv\x07-one");
+        o.extend([81, 12, 4, 0, 0, 3]);
+        o.extend(b"box");
+        o.extend([3]);
+        o.extend(b"lan");
+        o.extend([0, 255, 1, 2, 3]);
+        let f = dhcp(&packet(&o)).unwrap();
+        assert_eq!(f.mac, "02:00:5E:10:20:30");
+        assert_eq!((f.prl.as_str(), f.class.as_str(), f.host.as_str(), f.fqdn.as_str()), ("1,3,6,15", "acme-os1", "tv-one", "box.lan"));
+        // FQDN in ASCII (E bit clear)
+        let mut o2 = vec![53, 1, 3, 81, 7, 0, 0, 0];
+        o2.extend(b"pc.x");
+        assert_eq!(dhcp(&packet(&o2)).unwrap().fqdn, "pc.x");
+        // not a request type we keep (OFFER from a server is op=2 anyway; DECLINE=4 here), no type at all
+        assert_eq!(dhcp(&packet(&[53, 1, 4, 255])), None);
+        assert_eq!(dhcp(&packet(&[55, 2, 1, 3, 255])), None);
+        // an option running past the end, a short packet, a wrong cookie, a reply
+        assert_eq!(dhcp(&packet(&[53, 1, 1, 55, 200, 1])), None);
+        assert_eq!(dhcp(&[1u8; 100]), None);
+        let mut bad = packet(&[53, 1, 1, 255]);
+        bad[236] = 0;
+        assert_eq!(dhcp(&bad), None);
+        let mut reply = packet(&[53, 1, 1, 255]);
+        reply[0] = 2;
+        assert_eq!(dhcp(&reply), None);
+        // long values are capped; a FQDN label pointing past the option ends the parse
+        let mut long = vec![53, 1, 1, 12, 200];
+        long.extend([b'a'; 200]);
+        assert_eq!(dhcp(&packet(&long)).unwrap().host.len(), 64);
+        assert_eq!(dhcp(&packet(&[53, 1, 1, 81, 5, 4, 0, 0, 9, b'a'])), None);
+        // every truncation and every single-byte value of a real packet: never panics
+        let p = packet(&o);
+        for n in 0..p.len() {
+            let _ = dhcp(&p[..n]);
+        }
+        for i in 240..p.len() {
+            for b in 0..=255u8 {
+                let mut q = p.clone();
+                q[i] = b;
+                let _ = dhcp(&q);
+            }
+        }
+    }
+
+    #[test]
+    fn identification_settings_validate_and_switch_everything_off() {
+        use crate::api::handle;
+        use crate::api::tests::{admin_session, new_app, req, with_session};
+        let app = new_app();
+        let (c, csrf) = admin_session(&app);
+        let call = |m: &str, p: &str, b: &str| handle(&app, with_session(req(m, p, b), &c, &csrf));
+        let get = || match call("GET", "/api/v1/discovery", "").body {
+            crate::http::Body::Bytes(b) => serde_json::from_slice::<serde_json::Value>(&b).unwrap(),
+            _ => panic!("no body"),
+        };
+        assert_eq!((get()["ident"].as_bool(), get()["dhcp"].as_bool()), (Some(true), Some(false)), "guesses on, listening off by default");
+        assert_eq!(call("PUT", "/api/v1/discovery", r#"{"dhcp":"yes"}"#).status, 400);
+        assert_eq!(call("PUT", "/api/v1/discovery", r#"{"sniff":true}"#).status, 400);
+        assert_eq!(call("PUT", "/api/v1/discovery", r#"{"dhcp":true}"#).status, 200);
+        remember(&app, Fp { mac: "02:00:5E:00:00:01".into(), prl: "1,3".into(), ..Default::default() });
+        assert_eq!(get()["fingerprints"][0]["prl"], "1,3");
+        assert_eq!(call("PUT", "/api/v1/discovery", r#"{"ident":false}"#).status, 200);
+        let off = get();
+        assert_eq!((off["ident"].as_bool(), off["dhcp"].as_bool(), off["fingerprints"].as_array().map(Vec::len)), (Some(false), Some(true), Some(0)), "off forgets what was heard");
+        assert!(!wanted(&app), "the listener stops");
+        assert_eq!(call("POST", "/api/v1/discovery/run", "").status, 409);
+        assert_eq!(call("PUT", "/api/v1/discovery", r#"{"ident":true,"dhcp":false}"#).status, 200);
     }
 }

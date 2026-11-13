@@ -127,6 +127,7 @@ Upload the tarball to the router's USB disk (Files, drag and drop, or `scp`), th
 
 - Always cap memory. The property name has changed between RouterOS versions (`memory-high`, `memory-max`), so check `/container/add` on yours; this is unverified.
 - The container runs as UID 65532, unprivileged, from a `scratch` image (no shell).
+- *Listen for DHCP requests* (Settings → System → Device identification, off by default) binds UDP port 67, receive-only. Port 67 is below 1024, so as UID 65532 the bind only works where the container's network namespace allows it: Docker's own networks (bridge, macvlan) set `net.ipv4.ip_unprivileged_port_start=0`; `--network host` keeps the host's limit (1024). It only hears broadcasts on tikontrol's own segment, so a Docker bridge network hears nothing; use a macvlan network on the LAN. Whether the RouterOS container allows the bind is not tested yet. If the bind fails, Settings shows the reason and nothing else changes.
 - Point tikontrol at the router through the veth gateway (`172.17.0.1`) and allow API-SSL only from `172.17.0.2/32`, as the setup commands do with tikontrol's IP.
 - Reach the UI from the LAN with a dst-nat to `172.17.0.2:8443`, limited to the LAN interface list.
 - The default gateway is the router, so the first page is the one-step admin sign-in. The setup token still appears in the container log (which RouterOS writes to its own log) as a fallback; it is useless once setup is done.
