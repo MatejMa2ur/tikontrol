@@ -34,7 +34,7 @@
   const alias: Record<string, string[]> = { ports: ['devices', 'ports'], radios: ['devices', 'radios'] }
   const parse = (h: string) => { const x = h.replace(/^#\/?/, '').split('?')[0].split('/'); return alias[x[0]] ?? x } // ?query is for the page itself
   // side panels: #/clients/<mac> and #/device/<id> (only 'router' so far)
-  const isPanel = (x: string[]) => (x[0] === 'clients' && !!x[1] && x[1] !== 'offline' && x[1] !== 'groups') || (x[0] === 'device' && !!x[1])
+  const isPanel = (x: string[]) => (x[0] === 'clients' && !!x[1] && !['offline', 'leases', 'groups'].includes(x[1])) || (x[0] === 'device' && !!x[1])
 
   // A panel route opens a side panel over the page you came from instead of switching pages.
   // `under` = that page's hash, `depth` = panel entries pushed since, so ✕ goes back exactly that far.

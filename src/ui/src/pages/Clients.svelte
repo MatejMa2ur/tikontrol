@@ -4,6 +4,7 @@
   import { live, prefs, displayName, iconOf } from '../lib/live.svelte'
   import { review, type Intent } from '../lib/apply.svelte'
   import Tabs from '../lib/ui/Tabs.svelte'
+  import { poolUsage, ip4, span } from '../lib/pool'
   import Section from '../lib/ui/Section.svelte'
   import Icon from '../lib/Icon.svelte'
   import Ros from '../lib/Ros.svelte'
@@ -11,7 +12,31 @@
   import { disc, identity, loadDiscovery } from '../lib/discovery.svelte'
 
   let { selected }: { selected?: string } = $props()
-  const tab = $derived(selected === 'offline' || selected === 'groups' ? selected : 'online')
+  const tab = $derived(selected === 'offline' || selected === 'leases' || selected === 'groups' ? selected : 'online')
+
+  // Leases: every DHCP lease with its pool's fill level; dynamic ones can be made fixed (Safe apply)
+  const allLeases: any[] = raw.leases ?? []
+  const poolInfo = ((raw.dhcpServers ?? []) as any[]).map((d) => {
+    const ranges: string[] = (raw.pools ?? []).find((p: any) => p.name === d['address-pool'])?.ranges ?? []
+    return { server: String(d.name), ranges, ...poolUsage(ranges, allLeases) }
+  })
+  let leaseNet = $state(kept('clients.leaseNet', ''))
+  let leaseQ = $state('')
+  const inPool = (l: any, ranges: string[]) => { const x = ip4(String(l.address ?? '')); return x !== undefined && ranges.some((r) => { const sp = span(r); return !!sp && x >= sp[0] && x <= sp[1] }) }
+  const leaseRows = $derived(allLeases
+    .filter((l) => !leaseNet || l.server === leaseNet || inPool(l, poolInfo.find((p) => p.server === leaseNet)?.ranges ?? []))
+    .filter((l) => !leaseQ || `${l.address} ${l['mac-address']} ${l['host-name'] ?? ''} ${l.comment ?? ''}`.toLowerCase().includes(leaseQ.toLowerCase()))
+    .sort((a, b) => (ip4(String(a.address)) ?? 0) - (ip4(String(b.address)) ?? 0)))
+  $effect(() => { keep('clients.leaseNet', leaseNet) })
+  function leaseCsv() {
+    const cell = (v: unknown) => `"${String(v ?? '').replace(/^[=+\-@\t\r]/, "'$&").replace(/"/g, '""')}"`
+    const csv = ['address,mac,host,type,status,expires', ...leaseRows.map((l) => [l.address, l['mac-address'], l['host-name'], l.dynamic ? 'dynamic' : 'fixed', l.status, l['expires-after']].map(cell).join(','))].join('\n')
+    const a = document.createElement('a')
+    a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv' }))
+    a.download = `tikontrol-leases-${new Date().toISOString().slice(0, 10)}.csv`
+    a.click()
+    URL.revokeObjectURL(a.href)
+  }
   let newGroup = $state('')
   let filter = $state<'all' | 'wifi' | 'wired' | 'guest'>(kept('clients.filter', 'all'))
   let q = $state(kept('clients.q', ''))
@@ -108,7 +133,7 @@
 </script>
 
 <div class="grid">
-  <Tabs base="clients" active={tab} tabs={[{ id: 'online', label: 'Online', count: online.length }, { id: 'offline', label: 'Offline', count: offlineRows.length }, { id: 'groups', label: 'Groups', count: prefs.groups.length }]} />
+  <Tabs base="clients" active={tab} tabs={[{ id: 'online', label: 'Online', count: online.length }, { id: 'offline', label: 'Offline', count: offlineRows.length }, { id: 'leases', label: 'Leases', count: allLeases.length }, { id: 'groups', label: 'Groups', count: prefs.groups.length }]} />
   {#if tab === 'online'}
   <div class="row between wrap">
     <h1>Clients <span class="muted">{rows.length}</span></h1>
@@ -175,6 +200,31 @@
     {#if discErr}<p class="small bad" role="alert">{discErr}</p>{/if}
   {/if}
   <Ros cmd="/ip/dhcp-server/lease/print; /interface/wireless/registration-table/print; /interface/bridge/host/print; /ip/arp/print" />
+  {:else if tab === 'leases'}
+    <div class="row between wrap lease-bar">
+      <div class="row">{#each poolInfo as p}<span class="pill" class:warn={p.pct >= 80} title="{p.ranges.join(', ')}">{p.server}: {p.used}/{p.size} leased{p.pct >= 80 ? ', nearly full' : ''}</span>{/each}</div>
+      <div class="row">
+        {#if poolInfo.length > 1}<select bind:value={leaseNet} aria-label="DHCP server"><option value="">All networks</option>{#each poolInfo as p}<option value={p.server}>{p.server}</option>{/each}</select>{/if}
+        <input type="search" placeholder="Search leases…" aria-label="Search leases" bind:value={leaseQ} />
+        <button class="btn" onclick={leaseCsv}><Icon name="download" size={14} /> CSV</button>
+      </div>
+    </div>
+    <Section title="DHCP leases" desc="Every address the router handed out. Fixed ones keep their address; dynamic ones can get another after they expire." ros="/ip/dhcp-server/lease/print">
+      <div class="flush"><table>
+        <thead><tr><th>Address</th><th>Device</th><th>MAC address</th><th>Type</th><th>Status</th><th>Renews in</th><th><span class="sr">Actions</span></th></tr></thead>
+        <tbody>
+          {#each leaseRows as l}
+            {@const mac = String(l['mac-address'] ?? '').toUpperCase()}
+            {@const c = clients.find((x) => x.mac.toUpperCase() === mac)}
+            <tr class="nohover"><td class="mono">{l.address}</td>
+              <td>{#if c}<a href="#/clients/{c.mac}">{displayName(c)}</a>{:else}<span class="muted">{l['host-name'] ?? l.comment ?? '—'}</span>{/if}</td>
+              <td class="mono small">{mac}</td><td>{l.dynamic ? 'Dynamic' : 'Fixed'}</td>
+              <td><span class="pill" class:ok={l.status === 'bound'}>{l.status ?? '—'}</span></td><td class="small">{l['expires-after'] ?? (l.dynamic ? '—' : 'never')}</td>
+              <td class="r">{#if l.dynamic && mac}<button class="btn small" onclick={() => review('Fixed IP', `/ip/dhcp-server/lease/make-static [find mac-address=${mac}]`, { kind: 'fixed-ip', mac })}>Make fixed</button>{/if}</td></tr>
+          {:else}<tr><td colspan="7" class="muted">{allLeases.length ? 'No lease matches.' : 'The router has no DHCP leases.'}</td></tr>{/each}
+        </tbody>
+      </table></div>
+    </Section>
   {:else if tab === 'offline'}
     <Section title="Recently seen" desc="Devices the router still remembers (ARP / DHCP) that aren't connected right now." ros="/ip/arp/print where status!=reachable; /ip/dhcp-server/lease/print where status!=bound">
       <table>
@@ -231,6 +281,10 @@
 
 
 <style>
+  .lease-bar { gap: 10px; margin-bottom: 12px; }
+  .lease-bar .row { gap: 6px; flex-wrap: wrap; }
+  .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
+  .btn.small { padding: 4px 9px; }
   .flush { padding: 4px 6px; overflow-x: auto; }
   .name { font-weight: 550; }
   .num { text-align: right; }

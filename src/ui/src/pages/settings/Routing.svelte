@@ -1,6 +1,6 @@
 <script lang="ts">
   import { raw, clients, internet, bytes } from '../../lib/data'
-  import { review } from '../../lib/apply.svelte'
+  import { review, type Intent } from '../../lib/apply.svelte'
   import Icon from '../../lib/Icon.svelte'
   import Section from '../../lib/ui/Section.svelte'
   import Field from '../../lib/ui/Field.svelte'
@@ -9,7 +9,19 @@
   const nat: any[] = raw.nat ?? []
   const routes: any[] = raw.routes ?? []
   const dnsStatic: any[] = raw.dnsStatic ?? []
-  let fwd = $state({ name: '', port: '', to: '', toPort: '', proto: 'tcp' })
+  let fwd = $state({ name: '', port: '', to: '', toPort: '', proto: 'tcp', fix: true })
+  // a forward to a dynamic address breaks when the lease moves: offer to fix it in the same change
+  const fwdClient = $derived(clients.find((c) => c.ip === fwd.to))
+  const okPort = (v: string) => /^\d{1,5}$/.test(v) && +v >= 1 && +v <= 65535
+  const fwdWhy = $derived(!fwd.name.trim() ? 'Give it a name.' : !okPort(fwd.port) ? 'WAN port: 1 to 65535.' : fwd.toPort && !okPort(fwd.toPort) ? 'Device port: 1 to 65535.' : !fwd.to ? 'Pick a device.' : '')
+  function addForward() {
+    const pf: Intent = { kind: 'port-forward', protocol: fwd.proto, port: +fwd.port, to_ip: fwd.to, to_port: +(fwd.toPort || fwd.port), name: fwd.name.trim() }
+    const cmd = `/ip/firewall/nat/add chain=dstnat in-interface-list=WAN protocol=${fwd.proto} dst-port=${fwd.port} action=dst-nat to-addresses=${fwd.to} to-ports=${fwd.toPort || fwd.port} comment=tik:pf:${fwd.proto}:${fwd.port}`
+    const title = `Port forward ${fwd.name.trim()}`
+    if (fwdClient && !fwdClient.fixedIp && fwd.fix) {
+      review(title, [`/ip/dhcp-server/lease/make-static [find mac-address=${fwdClient.mac}]`, cmd], { kind: 'batch', title, intents: [{ kind: 'fixed-ip', mac: fwdClient.mac }, pf] })
+    } else review(title, [cmd], pf)
+  }
   let rt = $state({ dst: '', gw: '' })
   let dns = $state({ name: '', ip: '' })
   let upnp = $state({ on: !!raw.upnp?.enabled })
@@ -31,13 +43,15 @@
     <tbody>{#each nat as r}{@const pf = pfOf(r)}<tr class="nohover"><td>{r.comment ?? '—'}</td><td>{r.chain}</td><td>{r.action}</td><td class="mono small">{r['to-addresses'] ?? ''}{r['to-ports'] ? `:${r['to-ports']}` : ''}</td><td class="r mono small">{#if r.packets != null}<span title="{Number(r.packets).toLocaleString()} packets, {bytes(Number(r.bytes ?? 0))} since the counters were last reset">{Number(r.packets) ? Number(r.packets).toLocaleString(undefined, { notation: 'compact' }) : '0'}</span>{:else}—{/if}</td>
       <td class="r">{#if pf}<button class="btn small" aria-label="Remove port forward {pf[1]} {pf[2]}" onclick={() => review(`Remove port forward ${pf[1]} ${pf[2]}`, [`/ip/firewall/nat/remove [find comment="${r.comment}"]`], { kind: 'remove-port-forward', protocol: pf[1], port: +pf[2] })}>Remove</button>{/if}</td></tr>{/each}</tbody></table>
   <div class="add">
-    <input type="text" bind:value={fwd.name} placeholder="Name" />
-    <select bind:value={fwd.proto}><option>tcp</option><option>udp</option></select>
-    <input type="text" bind:value={fwd.port} placeholder="WAN port" style="width:90px" />
-    <select bind:value={fwd.to}><option value="">Device…</option>{#each clients as c}<option value={c.ip}>{c.name} ({c.ip})</option>{/each}</select>
-    <input type="text" bind:value={fwd.toPort} placeholder="Device port" style="width:100px" />
-    <button class="btn primary" disabled={!fwd.name || !fwd.port || !fwd.to} onclick={() => review(`Port forward ${fwd.name}`, [`/ip/firewall/nat/add chain=dstnat in-interface-list=WAN protocol=${fwd.proto} dst-port=${fwd.port} action=dst-nat to-addresses=${fwd.to} to-ports=${fwd.toPort || fwd.port} comment=tik:pf:${fwd.proto}:${fwd.port}`], { kind: 'port-forward', protocol: fwd.proto, port: +fwd.port, to_ip: fwd.to, to_port: +(fwd.toPort || fwd.port), name: fwd.name })}><Icon name="plus" size={14} /> Add</button>
+    <input type="text" bind:value={fwd.name} placeholder="Name" aria-label="Forward name" maxlength="32" />
+    <select bind:value={fwd.proto} aria-label="Protocol"><option>tcp</option><option>udp</option></select>
+    <input type="text" inputmode="numeric" bind:value={fwd.port} placeholder="WAN port" aria-label="WAN port" style="width:90px" />
+    <select bind:value={fwd.to} aria-label="Device"><option value="">Device…</option>{#each clients.filter((c) => c.ip) as c}<option value={c.ip}>{c.name} ({c.ip}){c.fixedIp ? '' : ' · dynamic'}</option>{/each}</select>
+    <input type="text" inputmode="numeric" bind:value={fwd.toPort} placeholder="Device port" aria-label="Device port" style="width:100px" />
+    <button class="btn primary" disabled={!!fwdWhy} onclick={addForward}><Icon name="plus" size={14} /> Add</button>
   </div>
+  {#if fwdWhy && (fwd.name || fwd.port || fwd.to)}<p class="muted small">{fwdWhy}</p>{/if}
+  {#if fwdClient && !fwdClient.fixedIp}<label class="row small fixnote"><input type="checkbox" bind:checked={fwd.fix} /> {fwdClient.name} has a dynamic address: also make {fwdClient.ip} fixed, so the forward keeps working after its lease changes.</label>{/if}
 </Section>
 
 <Section title="Static routes" ros="/ip/route/print">
@@ -88,6 +102,7 @@
 </Section>
 
 <style>
+  .fixnote { gap: 6px; margin: 8px 0 0; }
   .add { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 10px; }
   .warn { color: var(--warn); margin-bottom: 8px; }
   .r { text-align: right; margin-top: 10px; }
