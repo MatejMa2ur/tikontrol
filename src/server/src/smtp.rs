@@ -267,11 +267,21 @@ pub fn send(m: &Mail) -> Result<(), String> {
 fn send_with(m: &Mail, tls: Arc<ClientConfig>, t: u64) -> Result<(), String> {
     check(m)?;
     let host = m.host;
-    let addr = (host, m.port).to_socket_addrs().map_err(|_| format!("cannot resolve {host}"))?.next().ok_or_else(|| format!("cannot resolve {host}"))?;
-    if m.security == Security::None && !is_local(addr.ip()) {
-        return Err(format!("{host} is not a local address; unencrypted SMTP refused"));
+    let mut addrs: Vec<_> = (host, m.port).to_socket_addrs().map_err(|_| format!("cannot resolve {host}"))?.collect();
+    if addrs.is_empty() {
+        return Err(format!("cannot resolve {host}"));
     }
-    let tcp = TcpStream::connect_timeout(&addr, TIMEOUT).map_err(|e| format!("cannot connect to {host}: {}", e.kind()))?;
+    // unencrypted only to local addresses: the others aren't even tried
+    if m.security == Security::None {
+        addrs.retain(|a| is_local(a.ip()));
+        if addrs.is_empty() {
+            return Err(format!("{host} is not a local address; unencrypted SMTP refused"));
+        }
+    }
+    // every address in turn, like TcpStream::connect: "localhost" or a dual-stack server may list
+    // an IPv6 address first that isn't reachable here
+    let mut last = std::io::ErrorKind::NotFound;
+    let tcp = addrs.iter().find_map(|a| TcpStream::connect_timeout(a, TIMEOUT).map_err(|e| last = e.kind()).ok()).ok_or_else(|| format!("cannot connect to {host}: {last}"))?;
     tcp.set_read_timeout(Some(TIMEOUT)).ok();
     tcp.set_write_timeout(Some(TIMEOUT)).ok();
     let name = || ServerName::try_from(host.to_string()).map_err(|_| "invalid host".to_string());
