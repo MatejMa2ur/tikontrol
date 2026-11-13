@@ -12,7 +12,7 @@ Clean-room: we copy the behaviour, never the assets.
 **Backing:** `ROS` = RouterOS API on the router · `CMR` = MikroTik CMR server · `tik` = our own logic/DB · `✗` = nothing can back it
 
 <!-- progress:start -->
-**Progress:** 122 ✅ · 105 🟨 · 0 🎨 · 1 ⬜ · 9 ➖ (237 items, 54% done) · 106 🔌 waiting for a hardware test ([list](HARDWARE_TESTS.md))
+**Progress:** 125 ✅ · 108 🟨 · 0 🎨 · 1 ⬜ · 9 ➖ (243 items, 53% done) · 109 🔌 waiting for a hardware test ([list](HARDWARE_TESTS.md))
 <!-- progress:end -->
 
 ---
@@ -104,6 +104,8 @@ Clean-room: we copy the behaviour, never the assets.
 | Per-client apps / domains (flow destinations per client, named from the DNS cache; the cache itself has no client field) | tik flows + DNS cache (CMR is per-device) 🔌 real traffic-flow export plus the DNS cache | 3 | 🟨 |
 | Rename / alias, custom icon, notes (stored on the server, checked end to end in a browser: `src/scripts/ui-e2e.mjs`) | tik | 1 | ✅ |
 | Fixed IP (reservation) | ROS lease make-static | 2 | ✅ |
+| Leases tab: every DHCP lease, pool fill level, network filter, CSV, Make fixed (sample data only so far) 🔌 a real router's leases and expiry times | ROS `/ip/dhcp-server/lease`, `/ip/pool` | 2 | 🟨 |
+| Ping a client from the router (runs as the reader) 🔌 a real ping from the client panel | ROS `/ping` | 2 | 🟨 |
 | Local DNS record for client | ROS `/ip/dns/static` | 2 | ✅ |
 | Block / unblock | ROS address-list + filter | 2 | ✅ |
 | Pause internet / schedules | ROS kid-control | 2 | ✅ |
@@ -170,6 +172,8 @@ Clean-room: we copy the behaviour, never the assets.
 | Categories: clients, devices, admin activity, security, updates | tik (topic mapping) | 1 | ✅ |
 | Derived events (client joined/left, WAN flap) (shown from the server; joins need Wi-Fi clients, a WAN flap a real WAN) 🔌 real Wi-Fi joins and a real WAN flap | tik | 2 | 🟨 |
 | Search / filter / export CSV | tik | 2 | ✅ |
+| Severity filter, repeats folded into one row (×N), rows link to their client (`lib/events.ts`, tested) | tik | 2 | ✅ |
+| Sign-in audit: every sign-in, failed sign-in and lockout as an Admin event (server test) | tik | 2 | ✅ |
 | Remote syslog / SIEM forwarding | ROS logging action | 3 | ✅ |
 
 ## WiFi settings
@@ -197,6 +201,7 @@ Clean-room: we copy the behaviour, never the assets.
 |---|---|---|---|
 | Create network: name, VLAN, subnet, DHCP in one form | ROS composite (Safe apply) | 3 | ✅ |
 | DHCP range, lease time, DNS, gateway | ROS dhcp-server | 3 | ✅ |
+| Leases used per pool, "nearly full" from 80 %; New Network suggests a free VLAN and subnet and refuses overlaps (`lib/pool.ts`, tested; server refuses overlaps too) | tik on ROS pools + leases | 3 | ✅ |
 | DHCP options (custom) | ROS dhcp option | 4 | ✅ |
 | Network isolation | ROS firewall | 3 | ✅ |
 | IPv6 (prefix delegation, SLAAC, DHCPv6 server per network) 🔌 a real ISP prefix: check `address-pool` with a delegated pool on 7.18+, a client getting an address with the RA managed flag, and remove + revert | ROS ipv6 | 4 | 🟨 |
@@ -251,6 +256,7 @@ Clean-room: we copy the behaviour, never the assets.
 | Feature | Backing | Phase | Status |
 |---|---|---|---|
 | Port forwarding | ROS NAT dst-nat | 2 | ✅ |
+| Hit counters on firewall and port-forward rules 🔌 counters from a real router | ROS `bytes`, `packets` | 2 | 🟨 |
 | Static routes | ROS `/ip/route` | 2 | ✅ |
 | Policy-based routes | ROS routing rules | 3 | ✅ |
 | UPnP / NAT-PMP | ROS `/ip/upnp` | 2 | ✅ |

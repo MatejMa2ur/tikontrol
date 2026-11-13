@@ -53,6 +53,8 @@ Cross-cutting questions (dotted proplists, Safe apply under device mode or after
 - [ ] **Live per-client throughput (wired via kid-control device counters)** 🟨: compare a wired client's rate with `/interface/monitor-traffic` on its port
 - [ ] **Per-client traffic history (hourly bytes, wired and Wi-Fi)** 🟨: a day of history on a real router with wired and Wi-Fi clients
 - [ ] **tik flows + DNS cache (CMR is per-device)** 🟨: real traffic-flow export plus the DNS cache
+- [ ] **Leases tab: every DHCP lease, pool fill level, network filter, CSV, Make fixed (sample data only so far)** 🟨: a real router's leases and expiry times
+- [ ] **Ping a client from the router (runs as the reader)** 🟨: a real ping from the client panel
 - [ ] **"Why is this client on 2.4 GHz?": reasons, band history from the log, Safe apply fixes (channel 36, 40 MHz, own 5 GHz SSID, signal-range access list)** 🟨: a dual-band AP with a client that hops bands
 - [ ] **Kick / reconnect wireless client** 🟨: kick a client on a real AP with each Wi-Fi package
 - [ ] **Override network/VLAN for client (client drawer: set/remove; needs hardware (Wi-Fi AP), CHR refusal tested)** 🟨: a client lands in the chosen VLAN on a real AP
@@ -138,6 +140,7 @@ Cross-cutting questions (dotted proplists, Safe apply under device mode or after
 
 ## Routing
 
+- [ ] **Hit counters on firewall and port-forward rules** 🟨: counters from a real router
 - [ ] **Dynamic routing (OSPF / BGP)** 🟨: a router with OSPF/BGP neighbours
 
 ## Hotspot / Guest portal
