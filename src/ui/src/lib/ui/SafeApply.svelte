@@ -33,7 +33,7 @@
       {#if manual}
         <button class="btn" onclick={() => navigator.clipboard?.writeText(apply.cmds.join('\n'))}><Icon name="code" size={14} /> Copy commands</button>
       {:else}
-        <button class="btn primary" onclick={confirm} disabled={apply.busy || apply.armed || (isBackend && (!p || !p.canApply))} title={p && !p.canApply ? (p.reason ?? '') : ''}><Icon name="check" size={14} /> {p && !p.revertible ? 'Apply' : 'Apply with auto-revert'}</button>
+        <button class="btn primary" onclick={confirm} disabled={apply.busy || (isBackend && (!p || !p.canApply))} title={p && !p.canApply ? (p.reason ?? '') : ''}><Icon name="check" size={14} /> {p && !p.revertible ? 'Apply' : 'Apply with auto-revert'}</button>
       {/if}
     {/snippet}
   </Modal>
@@ -44,6 +44,7 @@
     <Icon name="alert" size={16} />
     <span><b>{apply.title}</b> applied. Reverting in {Math.floor(left / 60)}:{String(left % 60).padStart(2, '0')} unless you keep it.</span>
     {#if apply.error}<span class="err">{apply.error}</span>{/if}
+    {#if apply.notice}<span class="note" role="alert">{apply.notice}</span>{/if}
     <button class="btn" onclick={revert}>Revert now</button>
     <button class="btn primary" onclick={keep}>Keep changes</button>
   </div>
@@ -55,6 +56,7 @@
   .tiny { font-size: 11.5px; }
   .warn { color: var(--warn); margin: 4px 0; display: flex; gap: 6px; align-items: flex-start; }
   .err { color: var(--bad); }
+  .note { color: var(--warn); font-weight: 600; }
   .banner { position: fixed; bottom: 18px; left: 50%; transform: translateX(-50%); z-index: 45; background: var(--panel); border: 1px solid var(--warn); box-shadow: var(--shadow); border-radius: 10px; padding: 10px 14px; gap: 12px; color: var(--text); }
   .banner :global(svg) { color: var(--warn); }
 </style>

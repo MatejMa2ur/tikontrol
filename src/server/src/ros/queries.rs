@@ -58,7 +58,7 @@ const QUERIES: &[Q] = &[
     q("ethernet", "/interface/ethernet/print", &["name", "running", "disabled"]),
     q("wifi", "/interface/wireless/print", &["name", "ssid", "band", "frequency", "channel-width", "running", "disabled", "mode", "master-interface", "security-profile", "hide-ssid", "default-forwarding", "default-ap-tx-limit", "default-client-tx-limit", "comment"]),
     q("stations", "/interface/wireless/registration-table/print", &["interface", "mac-address", "signal-strength", "tx-rate", "rx-rate", "uptime", "bytes", "last-ip"]),
-    q("leases", "/ip/dhcp-server/lease/print", &["address", "mac-address", "host-name", "comment", "status", "dynamic", "last-seen", "class-id", "expires-after"]),
+    q("leases", "/ip/dhcp-server/lease/print", &["address", "mac-address", "host-name", "comment", "status", "dynamic", "last-seen", "class-id", "expires-after", "server"]),
     q("arp", "/ip/arp/print", &["address", "mac-address", "interface", "status"]),
     q("bridgeHosts", "/interface/bridge/host/print", &["mac-address", "interface", "on-interface", "local"]),
     one("dns", "/ip/dns/print", &["cache-size", "cache-used"]),

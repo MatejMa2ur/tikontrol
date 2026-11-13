@@ -10,20 +10,17 @@ type Preview = { id: string; title: string; risk: 'low' | 'medium' | 'high'; war
 
 export const apply = $state({
   open: false, title: '', cmds: [] as string[], armed: false, deadline: 0, done: [] as { title: string; at: string }[],
-  intent: null as Intent | null, preview: null as Preview | null, busy: false, error: '', id: '',
+  intent: null as Intent | null, preview: null as Preview | null, busy: false, error: '', id: '', notice: '',
 })
 
 export function review(title: string, cmds: string | string[], intent?: Intent) {
   // one change at a time: the router holds one revert job, and a second change would be undone with it
+  // (the waiting change keeps its title and commands: the banner and Keep still refer to it)
   if (apply.armed) {
-    apply.title = title
-    apply.cmds = Array.isArray(cmds) ? cmds : [cmds]
-    apply.intent = intent ?? null
-    apply.preview = null
-    apply.error = 'A change is still waiting for Keep or Undo (the bar at the top). Finish that first, then review this one.'
-    apply.open = true
+    apply.notice = `Keep or revert this first, then try "${title}" again.`
     return
   }
+  apply.notice = ''
   apply.title = title
   apply.cmds = Array.isArray(cmds) ? cmds : [cmds] // one entry per command; RouterOS scripts may contain ';' themselves
   apply.intent = intent ?? null
@@ -62,10 +59,12 @@ export async function keep() {
     try { await api('/apply/keep', { method: 'POST', body: { id: apply.id } }) } catch (e) { apply.error = (e as Error).message; return }
   }
   apply.armed = false
+  apply.notice = ''
   apply.done = [{ title: apply.title, at: new Date().toLocaleTimeString() }, ...apply.done]
 }
 
 export async function revert() {
   if (isBackend && apply.id && apply.armed) await api('/apply/revert', { method: 'POST', body: { id: apply.id } }).catch(() => {})
   apply.armed = false
+  apply.notice = ''
 }
