@@ -12,7 +12,7 @@ Clean-room: we copy the behaviour, never the assets.
 **Backing:** `ROS` = RouterOS API on the router · `CMR` = MikroTik CMR server · `tik` = our own logic/DB · `✗` = nothing can back it
 
 <!-- progress:start -->
-**Progress:** 125 ✅ · 108 🟨 · 0 🎨 · 1 ⬜ · 9 ➖ (243 items, 53% done) · 109 🔌 waiting for a hardware test ([list](HARDWARE_TESTS.md))
+**Progress:** 125 ✅ · 109 🟨 · 0 🎨 · 1 ⬜ · 9 ➖ (244 items, 53% done) · 110 🔌 waiting for a hardware test ([list](HARDWARE_TESTS.md))
 <!-- progress:end -->
 
 ---
@@ -67,6 +67,7 @@ Clean-room: we copy the behaviour, never the assets.
 | Gateway column (WAN/gateway IP, uptime from stored history, latency to 3 resolvers, channel widths) 🔌 real WAN latency and Wi-Fi channel widths | ROS | 1 | 🟨 |
 | WiFi experience / satisfaction score 🔌 scores match how real Wi-Fi clients behave | tik (signal + rate heuristic) | 2 | 🟨 |
 | Recent critical events 🔌 real log errors and a WAN flap show up | ROS log + tik | 1 | 🟨 |
+| Recent changes card: the latest Safe apply changes, sign-ins and mode switches (server Admin events) 🔌 real changes and sign-ins on the router | tik | 2 | 🟨 |
 | Firmware update available banner 🔌 a router with a real pending RouterOS/RouterBOOT update | ROS / CMR | 2 | 🟨 |
 | Speed test (run + history) 🔌 run against Cloudflare on a real WAN; results near the line speed | tik server (HTTPS, Cloudflare by default, opt-in) | 3 | 🟨 |
 | Customisable widgets / layout (reorder, hide/show, normal or full width per card; stored on the server and checked in a browser) | tik | 4 | ✅ |

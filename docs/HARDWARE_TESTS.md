@@ -32,6 +32,7 @@ Cross-cutting questions (dotted proplists, Safe apply under device mode or after
 - [ ] **Gateway column (WAN/gateway IP, uptime from stored history, latency to 3 resolvers, channel widths)** 🟨: real WAN latency and Wi-Fi channel widths
 - [ ] **WiFi experience / satisfaction score** 🟨: scores match how real Wi-Fi clients behave
 - [ ] **Recent critical events** 🟨: real log errors and a WAN flap show up
+- [ ] **Recent changes card: the latest Safe apply changes, sign-ins and mode switches (server Admin events)** 🟨: real changes and sign-ins on the router
 - [ ] **Firmware update available banner** 🟨: a router with a real pending RouterOS/RouterBOOT update
 - [ ] **Speed test (run + history)** 🟨: run against Cloudflare on a real WAN; results near the line speed
 
