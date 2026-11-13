@@ -266,11 +266,10 @@
     <section class="card">
       <header class="row between"><h3>Most Active Clients</h3><a href="#/clients" class="muted" aria-label="All clients">›</a></header>
       <div class="tiles">
-        {#each mostActive as c, i}
-          <a class="tile" class:first={i === 0} href="#/clients/{c.mac}" title="{displayName(c)} · {bps(live.rate[c.mac]?.rx ?? 0)}">
-            <span class="ti"><Icon name={c.kind} size={20} /></span><span class="ell">{displayName(c)}</span>
+        {#each mostActive as c}
+          <a class="tile" href="#/clients/{c.mac}" title="{displayName(c)} · {bps(live.rate[c.mac]?.rx ?? 0)}">
+            <span class="ti"><Icon name={c.kind} size={20} /></span><span class="nm">{displayName(c)}</span><span class="rate">{bps(live.rate[c.mac]?.rx ?? 0)}</span>
           </a>
-          {#if i === 0}<span class="sep"></span>{/if}
         {/each}
       </div>
     </section>
@@ -281,7 +280,7 @@
       <header class="row between"><h3>Most Active Access Points</h3><a href="#/devices/radios" class="muted" aria-label="Radios">›</a></header>
       <div class="tiles">
         {#each radios as r}
-          <a class="tile" href="#/device/router" title="{r.name} · {r.clients} clients"><span class="ti ap"><Icon name="wifi" size={20} /></span><span class="ell">{router.identity} {r.band}</span></a>
+          <a class="tile" href="#/device/router" title="{r.name} · {r.clients} clients"><span class="ti ap"><Icon name="wifi" size={20} /></span><span class="nm">{router.identity} {r.band}</span><span class="rate">{r.clients} clients</span></a>
         {/each}
       </div>
     </section>
@@ -420,13 +419,13 @@
   .act { width: 100px; height: 5px; border-radius: 3px; background: var(--line); }
   .act i { display: block; height: 100%; border-radius: 3px; background: var(--accent); transition: width .5s; }
   .note { margin-top: 8px; }
-  .tiles { display: flex; gap: 6px; align-items: flex-start; overflow-x: auto; padding-bottom: 2px; }
-  .tile { display: grid; justify-items: center; gap: 6px; width: 78px; font-size: 11px; color: var(--muted); text-align: center; }
-  .tile .ell { max-width: 78px; }
+  .tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(88px, 1fr)); gap: 10px 8px; }
+  .tile { display: grid; justify-items: center; align-content: start; gap: 4px; min-width: 0; padding: 4px 2px; border-radius: 8px; font-size: 11px; color: var(--muted); text-align: center; }
+  .tile .ti { margin-bottom: 2px; }
+  .nm { color: var(--text); line-height: 1.3; overflow-wrap: anywhere; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; overflow: hidden; }
+  .rate { font-variant-numeric: tabular-nums; }
   .ti { width: 44px; height: 44px; display: grid; place-items: center; border-radius: 9px; border: 1.5px solid var(--accent); background: color-mix(in srgb, var(--accent) 8%, var(--panel)); color: var(--text); }
-  .tile.first .ti { box-shadow: 0 0 0 6px color-mix(in srgb, var(--accent) 20%, transparent); }
-  .tile:hover { color: var(--text); }
-  .sep { width: 1px; height: 30px; background: var(--line); margin: 7px 6px; }
+  .tile:hover { background: color-mix(in srgb, var(--accent) 6%, transparent); }
   .buckets { display: grid; grid-template-columns: repeat(6, 1fr); gap: 4px; text-align: center; }
   .buckets i { display: block; height: 18px; border-radius: 3px; font: 600 11px/18px var(--font); color: #fff; opacity: .25; }
   .buckets i.has { opacity: 1; }
