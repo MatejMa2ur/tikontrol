@@ -170,7 +170,7 @@
 </script>
 
 {#if isBackend && session.me?.router}
-  <Section title="Changes from tikontrol" desc="Read-only shows everything and changes nothing. Read & write lets admins change the router from tikontrol.">
+  <Section title="Access mode" desc="Read-only shows everything and changes nothing. Read & write lets admins change the router from tikontrol.">
     <p class="small">tikontrol is <b>{rw ? 'read & write' : 'read-only'}</b>.
       {#if rw}Changes run as the MikroTik admin who is signed in (nothing extra is stored) and every change goes through Safe apply: you review it, and it rolls back by itself if the router stops answering.{/if}</p>
     {#if !isAdmin}<p class="muted small">Only an admin can change this.</p>

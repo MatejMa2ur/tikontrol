@@ -172,7 +172,7 @@
     <a class="row between card-link" href="#/settings/security"><b>Ad Blocking</b><span class="small good">Active ›</span></a>
     <div class="kv tiny"><span>Blocked domains</span><span>{adblock.names.toLocaleString()}</span><span>Blocked requests</span><span>{adblock.hits.toLocaleString()}</span></div>
     <hr />
-    <a class="row between card-link" href="#/settings/security"><b class="row"><Icon name="shield" size={14} /> Security Checks</b><span>›</span></a>
+    <a class="row between card-link" href="#/settings/security"><b class="row"><Icon name="shield" size={14} /> Health Checks</b><span>›</span></a>
     {#each problems as p}
       {#if p.href}<a class="row tiny check" href={p.href} title={p.detail}><span class="dot {p.level}"></span>{p.title} ›</a>
       {:else}<div class="row tiny check" title={p.detail}><span class="dot {p.level}"></span>{p.title}</div>{/if}

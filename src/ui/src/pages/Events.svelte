@@ -74,7 +74,7 @@
 
 <div class="grid">
   <h1>Logs & Alarms</h1>
-  <Tabs base="events" active={tab} tabs={[{ id: 'events', label: 'Events', count: all.length }, { id: 'alarms', label: 'Alarm Manager', count: isBackend ? unacked : history.filter((h) => !h.ack).length }, { id: 'channels', label: 'Notifications' }]} />
+  <Tabs base="events" active={tab} tabs={[{ id: 'events', label: 'Events', count: all.length }, { id: 'alarms', label: 'Alarms', count: isBackend ? unacked : history.filter((h) => !h.ack).length }, { id: 'channels', label: 'Notifications' }]} />
 
   {#if tab === 'events'}
     <div class="row between wrap">

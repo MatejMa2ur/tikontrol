@@ -144,7 +144,7 @@
         {/each}
       </div>
       <input type="search" placeholder="Search name, IP, MAC…" bind:value={q} />
-      {#if isAdmin}<button class="btn" disabled={disc.running || disc.wait > 0} onclick={discover} title="Asks devices on your LAN over mDNS and SSDP; nothing leaves your network">{disc.running ? 'Asking…' : 'Discover devices'}</button>{/if}
+      {#if isAdmin}<button class="btn" disabled={disc.running || disc.wait > 0} onclick={discover} title="Asks devices on your LAN over mDNS and SSDP; nothing leaves your network">{disc.running ? 'Asking…' : 'Identify clients'}</button>{/if}
     </div>
   </div>
 

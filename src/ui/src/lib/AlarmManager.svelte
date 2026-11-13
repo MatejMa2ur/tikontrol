@@ -135,7 +135,7 @@
 {#if msg}<p class="okmsg" role="status">{msg}</p>{/if}
 
 {#if !data}
-  <Section title="Alarm Manager"><div class="muted small">{busy ? 'Loading…' : 'Could not load alerts.'}</div></Section>
+  <Section title="Alarms"><div class="muted small">{busy ? 'Loading…' : 'Could not load alerts.'}</div></Section>
 {:else if view === 'alarms'}
   <Section title="Active alarms" desc="Alerts that fired and haven't been acknowledged.">
     {#each active as a (a.id)}

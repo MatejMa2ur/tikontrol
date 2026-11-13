@@ -195,7 +195,7 @@
     {#if bridge.name}<button class="btn small danger" onclick={() => (vf = { on: !bridge['vlan-filtering'], ack: false })}>{bridge['vlan-filtering'] ? 'Turn off…' : 'Turn on…'}</button>{/if}
   </Field>
   <Field label="IPv6"><span class="pill">{v6off ? 'Disabled' : 'Enabled'}</span> <span class="muted small">{v6pools.length ? `Delegated pools: ${v6pools.map((p) => p.name).join(', ')}` : 'No delegated prefix yet (Internet → IPv6)'}</span></Field>
-  <Field label="Local DNS records" help="Names the router answers for its networks"><span class="muted small">{(raw.dnsStatic ?? []).length} records · edit them under Routing → DNS</span></Field>
+  <Field label="Local DNS records" help="Names the router answers for its networks"><span class="muted small">{(raw.dnsStatic ?? []).length} records · edit them under Routing → Local DNS records</span></Field>
 </Section>
 
 <Section title="DHCP options" desc="Extra settings DHCP hands out, such as a boot server (code 66) or NTP server (code 42)." ros="/ip/dhcp-server/option/print">

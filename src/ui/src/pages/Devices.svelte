@@ -153,7 +153,7 @@
       {/if}
     </Section>
   {:else if tab === 'supervisor'}
-    <Section title="Device Supervisor" desc="Health anomalies across devices: offline, high CPU/memory, failed upgrades. Needs the CMR server; for this router, CPU and memory alerts are in Logs & Alarms." ros="/system/resource/print; /cmr/alert/print">
+    <Section title="Device Supervisor" desc="Health anomalies across devices: offline, high CPU/memory, failed upgrades. Needs the CMR server; for this router, CPU and memory alarms are in Logs & Alarms → Alarms." ros="/system/resource/print; /cmr/alert/print">
       <div class="row sup"><span class="dot ok"></span> {router.identity}: online, CPU {live.cpu}%, memory <span class={memPct > 75 ? 'warnc' : ''}>{memPct}%</span>{#if memPct > 75}<span class="pill warn">memory high</span>{/if}</div>
       {#if cmrOk()}
         {#each cmr.data!.devices.filter((d) => d.paired && !d.online) as d}<div class="row sup"><span class="dot bad"></span> {d.identity}: offline</div>{/each}
