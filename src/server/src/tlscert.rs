@@ -13,7 +13,7 @@ use rustls::server::{ClientHello, ResolvesServerCert};
 use rustls::sign::CertifiedKey;
 use std::net::Ipv4Addr;
 use std::path::{Path, PathBuf};
-use std::sync::{Arc, RwLock};
+use std::sync::{Arc, OnceLock, RwLock};
 use std::time::{Duration, SystemTime};
 
 const DAY: u64 = 86_400;
@@ -22,6 +22,9 @@ const RENEW_DAYS: u64 = 30;
 /// DNS subtrees the CA may vouch for (a constraint also covers its subdomains, e.g. "lan" covers tikontrol.lan).
 const DNS_ZONES: &[&str] = &["tikontrol", "localhost", "lan", "home.arpa", "internal", "local"];
 const PRIVATE_V4: &[([u8; 4], u8)] = &[([10, 0, 0, 0], 8), ([172, 16, 0, 0], 12), ([192, 168, 0, 0], 16), ([127, 0, 0, 0], 8)];
+
+/// The data directory holding the local CA, once `setup` made or found one (not with an operator certificate).
+static CA_DIR: OnceLock<PathBuf> = OnceLock::new();
 
 pub struct Tls {
     pub config: Arc<rustls::ServerConfig>,
@@ -54,6 +57,7 @@ pub fn setup(data: &Path, cert: Option<&str>, key: Option<&str>, extra: Option<&
             if ensure(data, &names)? {
                 println!("tikontrol: new server certificate for {}", names.join(", "));
             }
+            let _ = CA_DIR.set(data.to_path_buf());
             let ca = CertificateDer::from_pem_file(data.join("ca-cert.pem")).map_err(|e| format!("ca-cert.pem: {e}"))?;
             (data.join("tls-cert.pem"), data.join("tls-key.pem"), Some(colon_hex(&ca)))
         }
@@ -195,21 +199,119 @@ fn ensure(data: &Path, names: &[String]) -> Result<bool, String> {
     if key.exists() && CertificateDer::from_pem_file(&crt).is_ok_and(|c| [UnixTime::now(), soon].iter().all(|t| covers(&ca_der, &c, names, *t))) {
         return Ok(false);
     }
-    let issuer = ca_params(&ca_kp).self_signed(&ca_kp).map_err(e)?;
+    let (leaf, kp) = leaf(&ca_kp, names, "tikontrol")?;
+    write_private(&key, kp.as_bytes()).map_err(io)?;
+    write_private(&crt, leaf.as_bytes()).map_err(io)?;
+    Ok(true)
+}
+
+/// A server certificate (PEM) and its new key (PEM) for `names`, signed by the CA key, valid 397 days.
+fn leaf(ca_kp: &KeyPair, names: &[String], cn: &str) -> Result<(String, String), String> {
+    let kp = KeyPair::generate().map_err(|e| e.to_string())?;
+    Ok((leaf_for(ca_kp, names, cn, &kp)?, kp.serialize_pem()))
+}
+
+/// A server certificate (PEM) for someone else's public key.
+fn leaf_for(ca_kp: &KeyPair, names: &[String], cn: &str, key: &impl rcgen::PublicKeyData) -> Result<String, String> {
+    let e = |e: rcgen::Error| e.to_string();
+    let issuer = ca_params(ca_kp).self_signed(ca_kp).map_err(e)?;
     let mut p = CertificateParams::new(names.to_vec()).map_err(e)?;
     p.distinguished_name = DistinguishedName::new();
-    p.distinguished_name.push(DnType::CommonName, "tikontrol");
+    p.distinguished_name.push(DnType::CommonName, cn);
     p.is_ca = IsCa::ExplicitNoCa;
     p.key_usages = vec![KeyUsagePurpose::DigitalSignature];
     p.extended_key_usages = vec![ExtendedKeyUsagePurpose::ServerAuth];
     p.use_authority_key_identifier_extension = true;
     p.not_before = (SystemTime::now() - Duration::from_secs(3600)).into();
     p.not_after = p.not_before + Duration::from_secs(LEAF_DAYS * DAY);
-    let kp = KeyPair::generate().map_err(e)?;
-    let leaf = p.signed_by(&kp, &issuer, &ca_kp).map_err(e)?;
-    write_private(&key, kp.serialize_pem().as_bytes()).map_err(io)?;
-    write_private(&crt, leaf.pem().as_bytes()).map_err(io)?;
-    Ok(true)
+    Ok(p.signed_by(key, &issuer, ca_kp).map_err(e)?.pem())
+}
+
+/// True for a name or address the local CA may vouch for (its name constraints).
+pub fn allowed_name(n: &str) -> bool {
+    !n.contains(',') && parse_extra(n).is_ok_and(|v| v.len() == 1)
+}
+
+fn ca_key() -> Result<KeyPair, String> {
+    let dir = CA_DIR.get().ok_or("tikontrol serves the certificate you gave it (TIK_TLS_CERT), so it has no local CA to sign with")?;
+    let key = std::fs::read_to_string(dir.join("ca-key.pem")).map_err(|e| format!("ca-key.pem: {e}"))?;
+    KeyPair::from_pem(&key).map_err(|e| e.to_string())
+}
+
+/// The passphrase that protects the router's key file between the two WebFig HTTPS steps. Derived from the CA key,
+/// so tikontrol needn't store it; it only ever goes to the router as a masked `key-passphrase`/`passphrase`.
+pub fn router_key_passphrase() -> Result<String, String> {
+    let k = ring::hmac::Key::new(ring::hmac::HMAC_SHA256, &ca_key()?.serialize_der());
+    Ok(ring::hmac::sign(&k, b"tikontrol router key passphrase").as_ref()[..16].iter().map(|b| format!("{b:02x}")).collect())
+}
+
+/// One DER element: (tag, the whole element, its content, what follows). Short and 1-2 byte long-form lengths only.
+type Tlv<'a> = (u8, &'a [u8], &'a [u8], &'a [u8]);
+
+fn tlv(d: &[u8]) -> Option<Tlv<'_>> {
+    let (&tag, rest) = d.split_first()?;
+    let (&l, rest) = rest.split_first()?;
+    let (len, rest) = match l {
+        0..=0x7f => (l as usize, rest),
+        0x81 => (*rest.first()? as usize, &rest[1..]),
+        0x82 => ((*rest.first()? as usize) << 8 | *rest.get(1)? as usize, rest.get(2..)?),
+        _ => return None,
+    };
+    let content = rest.get(..len)?;
+    Some((tag, &d[..d.len() - rest.len() + len], content, &rest[len..]))
+}
+
+/// A P-256 public key taken from a certificate request.
+struct RequestKey(Vec<u8>);
+
+impl rcgen::PublicKeyData for RequestKey {
+    fn der_bytes(&self) -> &[u8] {
+        &self.0
+    }
+    fn algorithm(&self) -> &rcgen::SignatureAlgorithm {
+        &rcgen::PKCS_ECDSA_P256_SHA256
+    }
+}
+
+/// The public key of a PKCS#10 request, if it is P-256 and the request is signed by its own key.
+fn request_key(der: &[u8]) -> Option<RequestKey> {
+    const EC_P256: &[u8] = &[0x30, 0x13, 0x06, 0x07, 0x2a, 0x86, 0x48, 0xce, 0x3d, 0x02, 0x01, 0x06, 0x08, 0x2a, 0x86, 0x48, 0xce, 0x3d, 0x03, 0x01, 0x07];
+    const ECDSA_SHA256: &[u8] = &[0x30, 0x0a, 0x06, 0x08, 0x2a, 0x86, 0x48, 0xce, 0x3d, 0x04, 0x03, 0x02];
+    let (0x30, _, req, _) = tlv(der)? else { return None };
+    let (0x30, info, info_c, rest) = tlv(req)? else { return None };
+    let (sig_alg, rest) = tlv(rest).map(|(_, w, _, r)| (w, r))?;
+    let (0x03, _, sig, _) = tlv(rest)? else { return None };
+    let (0x02, _, _, r) = tlv(info_c)? else { return None }; // version
+    let (0x30, _, _, r) = tlv(r)? else { return None }; // subject
+    let (0x30, _, spki, _) = tlv(r)? else { return None };
+    let (alg, r) = tlv(spki).map(|(_, w, _, r)| (w, r))?;
+    let (0x03, _, bits, _) = tlv(r)? else { return None };
+    let point = bits.strip_prefix(&[0])?;
+    let ok = alg == EC_P256 && sig_alg == ECDSA_SHA256 && point.len() == 65 && point[0] == 4;
+    let signed = || ring::signature::UnparsedPublicKey::new(&ring::signature::ECDSA_P256_SHA256_ASN1, point).verify(info, sig.strip_prefix(&[0])?).ok();
+    (ok && signed().is_some()).then(|| RequestKey(point.to_vec()))
+}
+
+/// A certificate for the router's own HTTPS (WebFig) from tikontrol's local CA, for the key in the router's
+/// certificate request (`/certificate/create-certificate-request`). The private key never leaves the router; only
+/// the public key is taken from the request. Its subject and requested names are ignored: `names` are used.
+pub fn sign_router_request(csr_pem: &str, names: &[String]) -> Result<String, String> {
+    if names.is_empty() || !names.iter().all(|n| allowed_name(n)) {
+        return Err("the router needs a private IPv4 address or a local name (.lan, .home.arpa, .internal, .local) for the certificate".into());
+    }
+    let der = rustls::pki_types::CertificateSigningRequestDer::from_pem_slice(csr_pem.as_bytes()).map_err(|_| "the router's certificate request is not valid PEM")?;
+    let key = request_key(der.as_ref()).ok_or("the router's certificate request is not a self-signed P-256 request: run step 1 again")?;
+    leaf_for(&ca_key()?, names, "router", &key)
+}
+
+/// Tests: a local CA in a temporary directory that `sign_for_router` uses.
+#[cfg(test)]
+pub fn test_ca() {
+    CA_DIR.get_or_init(|| {
+        let d = crate::store::tests::tmpdir("router-ca");
+        ensure(&d, &["tikontrol".into()]).unwrap();
+        d
+    });
 }
 
 /// True when `leaf` chains to `ca` and is valid for every name at `at`.
@@ -224,8 +326,11 @@ fn covers(ca: &CertificateDer, leaf: &CertificateDer, names: &[String], at: Unix
 }
 
 #[cfg(test)]
-mod tests {
+pub mod tests {
     use super::*;
+
+    /// A request made by RouterOS 7.26 (`/certificate/create-certificate-request`, key-size=prime256v1) on a test CHR.
+    pub const TEST_CSR: &str = include_str!("../tests/router-csr.pem");
 
     #[test]
     fn local_ca_signs_a_short_server_cert_and_renews_on_new_names() {
@@ -256,5 +361,30 @@ mod tests {
         assert_ne!(a.fingerprint, c.fingerprint, "new IP renews the server cert");
         assert_eq!(a.ca_fingerprint, c.ca_fingerprint, "with the same CA");
         assert!(setup(&d, Some("x"), None, None).is_err());
+    }
+
+    #[test]
+    fn router_certificate_chains_to_the_local_ca_and_stays_inside_its_constraints() {
+        test_ca();
+        let names: Vec<String> = vec!["10.20.0.1".into(), "router.lan".into()];
+        let crt = sign_router_request(TEST_CSR, &names).unwrap();
+        assert!(crate::ros::cmd::valid_pem(&crt));
+        let ca = CertificateDer::from_pem_file(CA_DIR.get().unwrap().join("ca-cert.pem")).unwrap();
+        let leaf = CertificateDer::from_pem_slice(crt.as_bytes()).unwrap();
+        assert!(covers(&ca, &leaf, &names, UnixTime::now()));
+        // the router's own key is in the certificate: its public point appears verbatim
+        let der = rustls::pki_types::CertificateSigningRequestDer::from_pem_slice(TEST_CSR.as_bytes()).unwrap();
+        let point = request_key(der.as_ref()).unwrap().0;
+        assert!(leaf.windows(point.len()).any(|w| w == point.as_slice()));
+        assert!(sign_router_request(TEST_CSR, &["example.com".into()]).is_err() && sign_router_request(TEST_CSR, &["8.8.8.8".into()]).is_err() && sign_router_request(TEST_CSR, &[]).is_err());
+        // a request whose signature doesn't match its key is refused
+        let mut bad = der.as_ref().to_vec();
+        let n = bad.len() - 5;
+        bad[n] ^= 1;
+        assert!(request_key(&bad).is_none());
+        assert!(sign_router_request("not pem", &names).is_err());
+        assert_eq!(router_key_passphrase().unwrap(), router_key_passphrase().unwrap());
+        assert_eq!(router_key_passphrase().unwrap().len(), 32);
+        assert!(allowed_name("nas.home.arpa") && !allowed_name("a.lan,b.lan") && !allowed_name("example.com"));
     }
 }

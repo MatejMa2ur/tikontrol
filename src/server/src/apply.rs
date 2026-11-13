@@ -9,7 +9,7 @@
 //!
 //! Objects we create carry `comment=tik:<kind>:<key>` so the inverse can find exactly them.
 
-use crate::ros::cmd::{cli_quote, valid_value, Cmd};
+use crate::ros::cmd::{cli_quote, valid_arg, valid_value, Cmd};
 use crate::ros::conn::Router;
 use serde::{Deserialize, Serialize};
 use std::net::Ipv4Addr;
@@ -82,7 +82,7 @@ impl Op {
     }
 
     fn valid(&self) -> bool {
-        self.args.iter().all(|(_, v)| valid_value(v)) && self.find.as_ref().is_none_or(|(_, v)| valid_value(v))
+        self.args.iter().all(|(k, v)| valid_arg(k, v)) && self.find.as_ref().is_none_or(|(_, v)| valid_value(v))
     }
 
     /// Runs the operation over the API. Returns how many rows it touched.
@@ -119,7 +119,17 @@ impl Op {
                 // `run` (scripts) and `sign` (certificates, refuses `numbers` on 7.25: seen on CHR) name their one
                 // target `number`; every other verb takes `numbers`
                 let key = if matches!(self.verb, "run" | "sign") { "number" } else { "numbers" };
-                r.run(&with_args(Cmd::new(&full).arg(key, &list))).map(|_| ids.len())
+                let mut res = r.run(&with_args(Cmd::new(&full).arg(key, &list)));
+                // a certificate imported a moment ago isn't selectable in /ip/service yet (seen on CHR 7.26:
+                // "input does not match any value of certificate" for well under a second)
+                for _ in 0..10 {
+                    if !(self.path == "/ip/service" && res.as_ref().is_err_and(|e| e.contains("any value of certificate"))) {
+                        break;
+                    }
+                    std::thread::sleep(std::time::Duration::from_millis(300));
+                    res = r.run(&with_args(Cmd::new(&full).arg(key, &list)));
+                }
+                res.map(|_| ids.len())
             }
         }
     }
@@ -131,7 +141,7 @@ impl Op {
 pub const PLACE_BEFORE_TAG: &str = "place-before-tag";
 
 /// Argument names whose values are secrets: masked in every CLI rendering and never allowed in an inverse.
-pub const SECRET_KEYS: &[&str] = &["password", "secret", "wpa-pre-shared-key", "wpa2-pre-shared-key", "wpa3-pre-shared-key", "private-pre-shared-key", "security.passphrase", "passphrase", "private-key", "preshared-key", "ipsec-secret"];
+pub const SECRET_KEYS: &[&str] = &["password", "secret", "wpa-pre-shared-key", "wpa2-pre-shared-key", "wpa3-pre-shared-key", "private-pre-shared-key", "security.passphrase", "passphrase", "private-key", "preshared-key", "ipsec-secret", "key-passphrase"];
 
 /// Always-quoted string for `[find k="v"]`, escaping like `cli_quote`.
 fn quoted(v: &str) -> String {
@@ -510,6 +520,7 @@ pub const AREAS: &[Area] = &[
     crate::intents::users::compile,
     crate::intents::cmr::compile,
     crate::intents::switchmode::compile,
+    crate::intents::webfig::compile,
 ];
 
 /// Entry point for the API: a batch, the areas, then the core intents. Unknown kinds are rejected.

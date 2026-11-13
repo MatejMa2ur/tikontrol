@@ -30,6 +30,7 @@
   const snmpInit = { snmp: mon.snmp, contact: mon.contact, location: mon.location }
   const siteDirty = $derived(JSON.stringify(site) !== JSON.stringify(siteInit))
   const snmpDirty = $derived(mon.snmp !== snmpInit.snmp || mon.contact !== snmpInit.contact || mon.location !== snmpInit.location)
+  const webfigCert = $derived(services.find((s) => s.name === 'www-ssl' && !s.disabled && String(s.certificate ?? '').startsWith('tik-webfig-'))?.certificate as string | undefined)
   const svcDirty = $derived(services.some((s) => svc[s.name] === !!s.disabled))
   let safe = $state({ minutes: 5 })
   // tikontrol's own history (src/server/src/live.rs prune): days kept, stored on the tikontrol server
@@ -111,6 +112,13 @@
 <Section title="Router services" desc="Turn off what you don't use. Red ones send passwords unencrypted." ros="/ip/service/print">
   <div class="svc">{#each services as s}<label class="row" class:bad={INSECURE.includes(s.name) && svc[s.name]}><Toggle bind:checked={svc[s.name]} label={s.name} /><span>{s.name}</span><span class="muted mono small">:{s.port}</span></label>{/each}</div>
   {#if svcDirty}<div class="r"><button class="btn" onclick={() => (svc = Object.fromEntries(services.map((s) => [s.name, !s.disabled])))}>Cancel</button> <button class="btn primary" onclick={() => { const parts = serviceIntents(); review('Router services', services.filter((s) => svc[s.name] === !!s.disabled).map((s) => `/ip/service/set ${s.name} disabled=${svc[s.name] ? 'no' : 'yes'}`), parts.length === 1 ? parts[0] : { kind: 'batch', title: 'Router services', intents: parts }) }}>Review & apply</button></div>{/if}
+</Section>
+
+<Section title="HTTPS for WebFig" desc="Serve the router's own web interface over HTTPS with a certificate from tikontrol's local CA, and turn plain-HTTP WebFig off." ros="/ip/service/print where name~&quot;www&quot;; /certificate/print">
+  {#if webfigCert}<p class="small">WebFig uses HTTPS with <span class="mono">{webfigCert}</span>. Run both steps again to renew it before it expires (397 days) or after the router's addresses change.</p>{/if}
+  <p class="muted small">Two steps, each with Safe apply. The router makes its own private key, which never leaves it; tikontrol only signs its public key. Devices that trust tikontrol's local CA (below) then show a padlock for the router too.</p>
+  <Field label="Step 1" help="The router creates its key and a certificate request" na={serverOnly}><button class="btn" disabled={!!serverOnly} onclick={() => review("HTTPS for WebFig, step 1: the router makes its key", ['/certificate/add name=tik-webfig-request common-name=router key-size=prime256v1', '/certificate/create-certificate-request template=tik-webfig-request key-passphrase=…'], { kind: 'webfig-key' })}>Create the router's key</button></Field>
+  <Field label="Step 2" help="High risk: plain-HTTP WebFig goes off. Keep WinBox or SSH at hand." na={serverOnly}><button class="btn primary" disabled={!!serverOnly} onclick={() => review('HTTPS for WebFig', ['/certificate/import …', '/ip/service/set www-ssl certificate=tik-webfig-… disabled=no', '/ip/service/set www disabled=yes'], { kind: 'webfig-https' })}>Turn on HTTPS</button></Field>
 </Section>
 
 <Section title="SNMP" desc="tikontrol never reads or sets SNMP communities: change the default community in WinBox." ros="/snmp/print">

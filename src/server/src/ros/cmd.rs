@@ -30,6 +30,17 @@ pub fn valid_value(v: &str) -> bool {
     v.len() <= MAX_VALUE && !v.chars().any(|c| c.is_control() && c != '\t')
 }
 
+/// A PEM block for `/file` `contents` (certificate import): the only value that may carry newlines. The API
+/// framing is length-prefixed, and `cli_quote` escapes them, so they can't start a new command anywhere.
+pub fn valid_pem(v: &str) -> bool {
+    v.len() <= MAX_VALUE && v.starts_with("-----BEGIN ") && v.bytes().all(|b| b.is_ascii_alphanumeric() || b"+/=- \n".contains(&b))
+}
+
+/// `valid_value`, plus PEM text when the argument is `contents`.
+pub fn valid_arg(k: &str, v: &str) -> bool {
+    valid_value(v) || (k == "contents" && valid_pem(v))
+}
+
 impl Cmd {
     pub fn new(path: &str) -> Self {
         let err = (!valid_path(path)).then(|| format!("invalid command path {path:?}"));
@@ -46,7 +57,7 @@ impl Cmd {
 
     /// `=key=value`
     pub fn arg(self, k: &str, v: &str) -> Self {
-        let ok = valid_key(k) && valid_value(v);
+        let ok = valid_key(k) && valid_arg(k, v);
         self.push(format!("={k}={v}"), ok, &format!("argument {k:?}"))
     }
 
@@ -111,6 +122,7 @@ pub fn cli_quote(v: &str) -> String {
                 s.push(c)
             }
             '\t' => s.push_str("\\t"),
+            '\n' => s.push_str("\\n"),
             _ => s.push(c),
         }
     }
@@ -145,6 +157,13 @@ mod tests {
         assert!(Cmd::new("/ip/x").proplist(&[]).words().is_err());
         assert!(Cmd::new("/ip/x").proplist(&["a,b"]).words().is_err());
         assert!(Cmd::new("/ip/x").arg("a", &"x".repeat(MAX_VALUE + 1)).words().is_err());
+        // newlines only in PEM `contents`, and only PEM characters there
+        let pem = "-----BEGIN CERTIFICATE-----\nMIIB+/=\n-----END CERTIFICATE-----\n";
+        assert!(Cmd::new("/file/add").arg("contents", pem).words().is_ok());
+        assert!(Cmd::new("/file/add").arg("comment", pem).words().is_err());
+        assert!(Cmd::new("/file/add").arg("contents", "-----BEGIN x\n:do { /system/reboot }\n").words().is_err());
+        assert!(Cmd::new("/file/add").arg("contents", "x\n/system/reboot").words().is_err());
+        assert_eq!(cli_quote(pem), r#""-----BEGIN CERTIFICATE-----\nMIIB+/=\n-----END CERTIFICATE-----\n""#);
     }
 
     #[test]

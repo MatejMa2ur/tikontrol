@@ -57,6 +57,7 @@ CASES = [
     ({"kind": "forget-client", "mac": M1}, None, "error"),
     ({"kind": "set-service", "name": "api-ssl", "enabled": False}, None, "error"),
     ({"kind": "set-service", "name": "ssh", "enabled": False}, None, "ok"),
+    ({"kind": "webfig-https"}, None, "error"),  # needs the router's request first: see the webfig scenario
     ({"kind": "batch", "title": "Two things", "intents": [{"kind": "dns-record", "name": "tv.lan", "address": "192.168.88.61"}, {"kind": "block-client", "mac": M2}]}, None, "ok"),
     ({"kind": "kick-wifi", "mac": M1}, None, "error"),
     # Wi-Fi: CHR has no Wi-Fi package, so every one must be refused cleanly (real tests need an AP)
@@ -930,6 +931,36 @@ def sc_switch_mode(c, data):
     return f
 
 
+def sc_webfig(c, data):
+    """webfig-key, webfig-https: the router makes its own key and request (revert removes them), tikontrol signs the
+    request, www-ssl serves the new certificate with the router's key and www goes off; revert puts the services
+    back. No private key ever reaches the router log."""
+    f = Flow(c, "scenario WebFig HTTPS", ROWS.get("webfig-https", "HTTPS for WebFig"))
+    ros('/file/remove [find name~"^certificate-request"]')
+    log_from = len(ros_lines("/log/print"))
+    svc = lambda: ros(':put ([/ip/service/get www disabled] . " " . [/ip/service/get www-ssl disabled] . " " . [/ip/service/get www-ssl certificate])').strip()
+    start = svc()
+    f.apply_revert({"kind": "webfig-key"}, lambda: f.need(file_count("certificate-request") == "2", "step 1 wrote no request and key"), in_export=False)
+    f.need(file_count("certificate-request") == "0", "revert of step 1 left the request files")
+    f.refuse({"kind": "webfig-https"}, "step 2 without a request")
+    if f.keep({"kind": "webfig-key"}):
+        def live():
+            got = svc().split(" ")
+            f.need(got[:2] == ["true", "false"] and got[2].startswith("tik-webfig-"), f"services while applied: {got}")
+            f.need(ros(f':put [/certificate/get [find name="{got[2]}"] private-key]').strip() == "true", "the certificate has no private key")
+        f.apply_revert({"kind": "webfig-https"}, live, in_export=False)
+        f.need(svc() == start, f"revert of step 2 left the services as {svc()!r}, want {start!r}")
+        f.need(ros(':put [:len [/certificate/find name~"^tik-webfig-1"]]').strip() == "0", "revert of step 2 left the certificate")
+        if f.keep({"kind": "webfig-key"}) and f.keep({"kind": "webfig-https"}):
+            live()
+            f.need(file_count("certificate-request") == "0", "step 2 left the request files")
+    log = "\n".join(ros_lines("/log/print")[log_from:])
+    f.need("PRIVATE KEY" not in log and "key-passphrase=" not in log.replace('key-passphrase="********"', ""), "a private key or its passphrase reached the router log")
+    # back to the start: services, our certificates and the template, any request files
+    ros('/ip/service/set www disabled=no; /ip/service/set www-ssl certificate=none disabled=yes; /certificate/remove [find name~"^tik-webfig-"]; /file/remove [find name~"^certificate-request"]')
+    return f.done()
+
+
 # name for --only, function, kinds it covers (for the coverage list)
 SCENARIOS = [
     ("backups", sc_backups, ["export-config", "save-backup", "remove-backup-file"]),
@@ -942,6 +973,7 @@ SCENARIOS = [
     ("secrets", sc_secrets_out_of_revert, ["vpn-server", "vpn-user", "radius-server", "wan-type"]),
     ("mcp", sc_mcp, ["dns-record"]),
     ("switch-mode", sc_switch_mode, ["switch-mode", "leave-switch-mode"]),
+    ("webfig", sc_webfig, ["webfig-key", "webfig-https"]),
 ]
 
 

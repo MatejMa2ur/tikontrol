@@ -14,4 +14,5 @@ pub mod system;
 pub mod traffic;
 pub mod users;
 pub mod vpn;
+pub mod webfig;
 pub mod wifi;

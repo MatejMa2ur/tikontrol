@@ -12,7 +12,7 @@ Clean-room: we copy the behaviour, never the assets.
 **Backing:** `ROS` = RouterOS API on the router · `CMR` = MikroTik CMR server · `tik` = our own logic/DB · `✗` = nothing can back it
 
 <!-- progress:start -->
-**Progress:** 127 ✅ · 113 🟨 · 0 🎨 · 2 ⬜ · 9 ➖ (251 items, 52% done) · 114 🔌 waiting for a hardware test ([list](HARDWARE_TESTS.md))
+**Progress:** 127 ✅ · 114 🟨 · 0 🎨 · 2 ⬜ · 9 ➖ (252 items, 52% done) · 114 🔌 waiting for a hardware test ([list](HARDWARE_TESTS.md))
 <!-- progress:end -->
 
 ---
@@ -304,6 +304,7 @@ Clean-room: we copy the behaviour, never the assets.
 | Data retention settings | tik | 2 | ✅ |
 | Trusted HTTPS: local CA (name-constrained) signs a 397-day server cert, auto-renewed; CA download + per-device trust steps | tik `/api/v1/ca.crt` | 2 | ✅ |
 | Device auth / SSH settings, service hardening | ROS `/ip/service` | 2 | ✅ |
+| HTTPS for WebFig: the router makes its own key + request, tikontrol's local CA signs it, www-ssl on, www off (two Safe apply steps; CHR e2e) | ROS `/certificate/create-certificate-request`, `/certificate/import`, `/ip/service` | 2 | 🟨 |
 | Debug tools: ping, traceroute, DNS cache lookup (verified on CHR) | ROS `/ping`, `/tool/traceroute`, DNS cache | 3 | ✅ |
 | Packet capture: not offered, because it needs the `sniff` policy, which tikontrol's users must not have (least privilege); use WinBox Tools → Packet Sniffer | ✗ by design | – | ➖ |
 | Safe apply (auto-revert) | tik + ROS scheduler | 3 | ✅ |
