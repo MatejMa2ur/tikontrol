@@ -66,12 +66,16 @@ function osOfClass(cls: string): Guess | undefined {
   if (/linux/i.test(cls)) return g('unknown', '', 'Linux')
 }
 
+/** Settings · System · Device identification. Off: no type/OS guesses, only what the router and the device report. */
+export const identOn = { v: true }
+
 export type Neighbor = { identity?: string; platform?: string; board?: string; version?: string }
 export function guessDevice(o: { hostname?: string; classId?: string; maker?: string; neighbor?: Neighbor; priv: boolean; wired: boolean }): Guess | undefined {
   if (o.neighbor) {
     const n = o.neighbor
     return g('devices', n.board || 'Network gear', [n.platform, n.version].filter(Boolean).join(' ') || undefined)
   }
+  if (!identOn.v) return
   const h = (o.hostname ?? '').toLowerCase()
   const byClass = o.classId ? osOfClass(o.classId) : undefined
   const hit = HOST.find(([re]) => re.test(h))?.[1] ?? MAKER.find(([re]) => re.test(o.maker ?? ''))?.[1] ?? (byClass?.type ? byClass : undefined)
@@ -79,6 +83,46 @@ export function guessDevice(o: { hostname?: string; classId?: string; maker?: st
   if (hit) return { ...hit, os }
   if (o.priv && !o.wired) return g('phone', 'Phone or laptop', os)
   if (os) return g('unknown', '', os)
+}
+
+// Model identifiers devices announce over mDNS TXT (model, md, rpMd, am, ty) and UPnP (modelName, deviceType).
+// Our own short table of public identifiers; first match wins. Checked before the host-name guess.
+const MODEL: [RegExp, Guess][] = [
+  [/^iPhone\d/i, g('phone', 'Phone', 'iOS')],
+  [/^iPad\d/i, g('phone', 'Tablet', 'iPadOS')],
+  [/^Watch\d/i, g('phone', 'Watch', 'watchOS')],
+  [/^AppleTV\d/i, g('speaker', 'TV', 'tvOS')],
+  [/^AudioAccessory\d/i, g('speaker', 'Speaker', 'audioOS')],
+  [/^(MacBook|iMac|Macmini|MacPro|MacStudio|Mac\d)/i, g('computer', 'Computer', 'macOS')],
+  [/^AirPort/i, g('devices', 'Network gear')],
+  [/PlayStation|Xbox|Nintendo/i, g('computer', 'Game console')],
+  [/Chromecast|Google TV|SHIELD|Fire ?TV|Roku|BRAVIA|webOS/i, g('speaker', 'TV')],
+  [/Google Home|Google Nest|Nest (Mini|Audio|Hub)|Sonos|HomePod|Echo/i, g('speaker', 'Speaker')],
+  [/:MediaRenderer:/i, g('speaker', 'Media player')],
+  [/:(InternetGatewayDevice|WLANAccessPoint):/i, g('devices', 'Network gear')],
+  [/:Printer:|LaserJet|OfficeJet|DeskJet|PIXMA|EcoTank|\b(DCP|HL|MFC)-[A-Z]?\d/i, g('iot', 'Printer')],
+  [/DiskStation|RackStation|QNAP|TrueNAS/i, g('server', 'NAS')],
+  [/:MediaServer:/i, g('server', 'Media server')],
+]
+const MODEL_KEYS = ['model', 'md', 'rpMd', 'am', 'ty', 'product', 'usb_MDL', 'modelName', 'deviceType']
+// mDNS service types that say what a device is when no model matched
+const SERVICE: [string, Guess][] = [
+  ['_ipp._tcp', g('iot', 'Printer')], ['_printer._tcp', g('iot', 'Printer')],
+  ['_googlecast._tcp', g('speaker', 'Cast device')], ['_spotify-connect._tcp', g('speaker', 'Speaker')],
+  ['_hap._tcp', g('iot', 'Smart home')],
+]
+/** Kind from what a device said about itself: [source, key, value] rows from LAN discovery. */
+export function guessModel(kv: [string, string, string][]): Guess | undefined {
+  for (const [, k, v] of kv) if (MODEL_KEYS.includes(k)) { const hit = MODEL.find(([re]) => re.test(v)); if (hit) return hit[1] }
+  for (const [, k, v] of kv) if (k === 'service') { const hit = SERVICE.find(([t]) => v === t); if (hit) return hit[1] }
+}
+
+/** What makes two clients "the same kind of device" when the user picks an icon: the DHCP request list and
+ *  vendor class, else a host-name pattern (digits and hex ids replaced), with the maker. Undefined when too weak. */
+export function fingerprintKey(o: { prl?: string; classId?: string; hostname?: string; maker?: string }): string | undefined {
+  const host = (o.hostname ?? '').toLowerCase().replace(/(?=[a-f]*\d)[0-9a-f]{4,}|\d+/g, '#').slice(0, 40)
+  if (!o.prl && !o.classId && !/[a-z]{3}/.test(host)) return
+  return [o.maker ?? '', o.classId ?? '', o.prl ?? '', o.prl || o.classId ? '' : host].join('|')
 }
 
 /** Events category of a RouterOS log line. */

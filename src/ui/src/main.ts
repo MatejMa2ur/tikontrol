@@ -1,6 +1,6 @@
 import { mount } from 'svelte'
 import './app.css'
-import { boot, preload } from './lib/backend'
+import { api, boot, preload } from './lib/backend'
 import { applyTheme } from './lib/themes'
 
 // Decide what to show before the app (and data.ts, which reads the first snapshot) is loaded.
@@ -17,6 +17,10 @@ else if (b.mode === 'setup') mount((await import('./pages/Setup.svelte')).defaul
 else if (b.mode === 'router') mount((await import('./pages/Setup.svelte')).default, { target, props: { step: 'router', me: b.me } })
 else if (b.mode === 'error') target.textContent = `tikontrol: ${b.error}`
 else {
-  if (b.mode === 'app') preload.snapshot = b.snapshot
+  if (b.mode === 'app') {
+    preload.snapshot = b.snapshot
+    // device identification on/off decides how data.ts builds the client list
+    preload.disc = await api('/discovery').catch(() => null)
+  }
   mount((await import('./App.svelte')).default, { target })
 }

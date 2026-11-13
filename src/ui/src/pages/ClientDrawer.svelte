@@ -7,7 +7,7 @@
   import { live, prefs, displayName, iconOf } from '../lib/live.svelte'
   import { review } from '../lib/apply.svelte'
   import { trafficDraft } from './settings/Security.svelte'
-  import { identity, saidBy } from '../lib/discovery.svelte'
+  import { heardFrom, identity, saidBy, SOURCES } from '../lib/discovery.svelte'
   import Icon from '../lib/Icon.svelte'
   import Ros from '../lib/Ros.svelte'
   import Field from '../lib/ui/Field.svelte'
@@ -44,6 +44,7 @@
     } catch (e) { ping = { busy: false, ok: false, text: (e as Error).message } }
   }
   const said = $derived(saidBy(c))
+  const heard = $derived(heardFrom(c))
   const history = $derived(events.filter((e) => e.text.includes(displayName(c)) || e.text.includes(c.name)).slice(0, 12))
   const save = () => { prefs.aliases[c.mac] = draft.trim(); if (!draft.trim()) delete prefs.aliases[c.mac]; editing = false }
 
@@ -184,7 +185,7 @@
       <dt>MAC address</dt><dd class="mono">{c.mac}</dd>
       <dt>Maker</dt><dd>{me.vendor ?? (c.privateMac ? (c.wired ? 'Private address' : 'Private Wi-Fi address') : 'Unknown')}{#if c.privateMac && !me.vendor}<div class="tiny muted">The device made up this address for privacy, so it can't name its maker.</div>{/if}</dd>
       {#if me.model}<dt>Model</dt><dd>{me.model}</dd>{/if}
-      {#if me.type || me.os}<dt>Type</dt><dd>{[me.type, me.os].filter(Boolean).join(' · ')} <span class="pill tiny" title="Guessed from the name, DHCP vendor class and MAC maker">guess</span></dd>{/if}
+      {#if me.type || me.os}<dt>Type</dt><dd>{[me.type, me.os].filter(Boolean).join(' · ')}{#if me.source}<div class="tiny muted">{SOURCES[me.source].label}{me.from ? ` for ${me.from}` : ''} · {SOURCES[me.source].confidence} confidence</div>{/if}</dd>{/if}
       {#if c.hostname && c.hostname !== displayName(c)}<dt>Hostname</dt><dd class="mono">{c.hostname}</dd>{/if}
       {#if c.classId}<dt>DHCP vendor class</dt><dd class="mono">{c.classId}</dd>{/if}
       {#if seen}<dt>First seen</dt><dd>{when(seen.first)}</dd><dt>Last seen</dt><dd>{when(seen.last)}</dd>{/if}
@@ -193,11 +194,12 @@
       {#if c.bytesDown || c.bytesUp}<dt>Total traffic</dt><dd>{bytes(c.bytesDown)} down · {bytes(c.bytesUp)} up</dd>{/if}
       {#if prefs.notes[c.mac]}<dt>Notes</dt><dd>{prefs.notes[c.mac]}</dd>{/if}
     </dl>
-    {#if said}
+    {#if said || heard}
       <section>
         <h3>What the device says</h3>
-        {#each said.kv as [src, k, v]}<div class="row small ev"><span class="pill tiny">{src === 'mdns' ? 'mDNS' : 'SSDP'}</span> <span class="muted">{k}:</span> <span class="said">{v}</span></div>{/each}
-        <p class="tiny muted">Asked {new Date(said.t * 1000).toLocaleString()} at {said.ip}. Devices describe themselves; treat it as a hint.</p>
+        {#each said?.kv ?? [] as [src, k, v]}<div class="row small ev"><span class="pill tiny">{src === 'mdns' ? 'mDNS' : 'SSDP'}</span> <span class="muted">{k}:</span> <span class="said">{v}</span></div>{/each}
+        {#if heard}{#each [['asks for (55)', heard.prl], ['vendor class (60)', heard.class], ['host name (12)', heard.host], ['FQDN (81)', heard.fqdn]].filter(([, v]) => v) as [k, v]}<div class="row small ev"><span class="pill tiny">DHCP</span> <span class="muted">{k}:</span> <span class="said mono">{v}</span></div>{/each}{/if}
+        <p class="tiny muted">{#if said}Asked {new Date(said.t * 1000).toLocaleString()} at {said.ip}. {/if}{#if heard}DHCP request heard {new Date(heard.t * 1000).toLocaleString()}. {/if}Devices describe themselves; treat it as a hint.</p>
       </section>
     {/if}
     {#if why}

@@ -144,7 +144,7 @@
         {/each}
       </div>
       <input type="search" placeholder="Search name, IP, MAC…" bind:value={q} />
-      {#if isAdmin}<button class="btn" disabled={disc.running || disc.wait > 0} onclick={discover} title="Asks devices on your LAN over mDNS and SSDP; nothing leaves your network">{disc.running ? 'Asking…' : 'Identify clients'}</button>{/if}
+      {#if isAdmin && disc.ident}<button class="btn" disabled={disc.running || disc.wait > 0} onclick={discover} title="Asks devices on your LAN over mDNS and SSDP; nothing leaves your network">{disc.running ? 'Asking…' : 'Identify clients'}</button>{/if}
     </div>
   </div>
 
@@ -195,7 +195,7 @@
       </tbody>
     </table>
   </section>
-  {#if isAdmin}
+  {#if isAdmin && disc.ident}
     <label class="row small muted"><input type="checkbox" checked={disc.auto} onchange={(e) => setAuto((e.target as HTMLInputElement).checked)} /> Ask devices on the LAN for details (mDNS/SSDP, stays on your network) every 10 minutes</label>
     {#if discErr}<p class="small bad" role="alert">{discErr}</p>{/if}
   {/if}

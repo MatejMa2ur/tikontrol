@@ -37,7 +37,7 @@ export function switchSite(id: string) {
   location.reload()
 }
 /** The first snapshot, set by main.ts before the app (and data.ts) load. */
-export const preload = { snapshot: null as any }
+export const preload = { snapshot: null as any, disc: null as any }
 
 export class ApiError extends Error {
   constructor(public status: number, message: string, public data: any = null) { super(message) }

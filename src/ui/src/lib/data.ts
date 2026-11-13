@@ -5,7 +5,7 @@
 import { simulateBe3 } from './be3'
 import { bandLabel, detectHardware, normalizeWifi, parseChannel, standardOf } from './hardware'
 import { preload } from './backend'
-import { catOf, guessDevice, isPrivateMac, makerOf, type Kind } from './identify'
+import { catOf, guessDevice, identOn, isPrivateMac, makerOf, type Kind } from './identify'
 import { guestTest } from './guest'
 import { securityAudit, type Insight } from './security'
 import { uplinkOf } from './topology'
@@ -309,6 +309,7 @@ export let raw: any, hw: Built['hw'], clients: Built['clients'], offline: Built[
 export function load(snapshot: any) {
   ;({ raw, hw, clients, offline, ports, router, internet, ssids, events, insights, radios, wifiTech, connectivity, adblock, neighbors } = build(normalizeWifi(snapshot)))
 }
+identOn.v = isBackend ? preload.disc?.ident !== false : localStorage.getItem('tik.ident') !== 'false'
 load(preload.snapshot ?? (simulated ? simulateBe3(files['./sample.json']) : files['./snapshot.json'] ?? files['./sample.json']))
 
 // "Why is this client on 2.4 GHz?" Plain-language reasons from what the router reports; null when there's nothing to explain.

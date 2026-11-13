@@ -9,6 +9,7 @@
   import Icon from '../../lib/Icon.svelte'
   import TrustCa from '../../lib/ui/TrustCa.svelte'
   import { prefs } from '../../lib/live.svelte'
+  import { disc, loadDiscovery } from '../../lib/discovery.svelte'
   import { designs, looks, palettes, tweaks, type Tweaks } from '../../lib/themes'
 
   const clock: any = raw.clock ?? {}
@@ -40,6 +41,20 @@
     if (+keep.days < keep.saved && !confirm('Delete history older than this now?')) return
     try { await api('/retention', { method: 'PUT', body: { days: +keep.days } }); keep.saved = +keep.days; keep.msg = 'Saved. Older history was deleted.' } catch (e) { keep.msg = (e as Error).message }
   }
+  // Device identification (src/server/src/discovery.rs): guesses on by default; asking and listening on the LAN are opt-in.
+  // Turning the guesses on or off reloads the page, since the client list is built with them.
+  let idMsg = $state('')
+  async function setIdent(body: { ident?: boolean; auto?: boolean; dhcp?: boolean }) {
+    idMsg = ''
+    if (!isBackend) { if (body.ident != null) { localStorage.setItem('tik.ident', String(body.ident)); location.reload() } return }
+    try {
+      await api('/discovery', { method: 'PUT', body })
+      if (body.ident != null) return location.reload()
+      await loadDiscovery()
+      if (body.dhcp) setTimeout(loadDiscovery, 6000) // the listener binds within 5 s
+    } catch (e) { idMsg = (e as Error).message }
+  }
+  const serverOnly = isBackend ? (isAdmin ? undefined : 'Only an admin can change this') : 'Available with the tikontrol server'
   let diag = $state({ tool: 'ping', host: '1.1.1.1', count: 4 })
   let out = $state<{ command: string; rows: Record<string, string>[]; note?: string | null } | null>(null)
   let diagErr = $state('')
@@ -122,6 +137,19 @@
   <TrustCa />
 </Section>
 {/if}
+
+<Section title="Device identification" desc="How tikontrol tells what each client is. Nothing is ever sent outside your network, and nothing is changed on the router.">
+  <Field label="Identify devices" help="Guesses each client's type and OS (phone, TV, printer…) from what tikontrol already reads from the router: the DHCP host name and vendor class, the maker of the MAC address (a built-in table) and MikroTik neighbour announcements. When you pick an icon, similar devices get the same one. Off: clients show only what the router reports, and the two options below stop." na={isBackend && !isAdmin ? 'Only an admin can change this' : undefined}>
+    <Toggle bind:checked={() => disc.ident, (v) => setIdent({ ident: v })} disabled={isBackend && !isAdmin} label="Identify devices" /></Field>
+  <Field label="Ask devices on the LAN (sends queries)" help="Listens on the network. Every 10 minutes, sends mDNS and SSDP queries on tikontrol's own network and reads the name and model each device reports about itself." na={serverOnly ?? (disc.ident ? undefined : 'Needs Identify devices')}>
+    <Toggle bind:checked={() => disc.auto, (v) => setIdent({ auto: v })} disabled={!!serverOnly || !disc.ident} label="Ask devices on the LAN" /></Field>
+  <Field label="Listen for DHCP requests (listens on UDP 67)" help="Listens on the network, receive-only, on UDP port 67. Keeps the options devices ask for when they join (55, 60, 12, 81) per MAC address, never replies. Sees only tikontrol's own network segment." na={serverOnly ?? (disc.ident ? undefined : 'Needs Identify devices')}>
+    <Toggle bind:checked={() => disc.dhcp, (v) => setIdent({ dhcp: v })} disabled={!!serverOnly || !disc.ident} label="Listen for DHCP requests" /></Field>
+  {#if isBackend && disc.ident && disc.dhcp}
+    <div class="small" class:muted={disc.listening} class:err={!disc.listening && disc.dhcpError} role="status">{disc.listening ? `Listening on UDP 67. Heard from ${disc.fingerprints.length} device${disc.fingerprints.length === 1 ? '' : 's'} so far; devices show up when they next join.` : disc.dhcpError ? `Not listening: ${disc.dhcpError}. Port 67 needs a network that lets tikontrol bind it (see docs/DEPLOY.md).` : 'Starting…'}</div>
+  {/if}
+  {#if idMsg}<div class="err small" role="alert">{idMsg}</div>{/if}
+</Section>
 
 <Section title="Data retention" desc="How long tikontrol keeps its own history: traffic charts, events and per-client usage. Stored on the tikontrol server, not the router. Minute detail is kept for at most 7 days.">
   <Field label="Keep history for" help={isBackend ? (isAdmin ? 'Shortening it deletes older history right away' : 'Only an admin can change this') : 'Available with the tikontrol server'}>
