@@ -10,6 +10,8 @@
   import { isBackend } from '../lib/data'
   import { api, session } from '../lib/backend'
   import { cmr, loadCmr } from '../lib/cmr.svelte'
+  import { apply } from '../lib/apply.svelte'
+  import { keep } from '../lib/keep'
 
   // speed test (server side, src/server/src/speedtest.rs)
   type Run = { t: number; down: number; up: number; ping: number; host: string }
@@ -82,7 +84,12 @@
     activity: { title: 'Internet Activity', body: activityCard },
     link: { title: 'Radio Link Quality', body: linkCard },
     conn: { title: 'WiFi Connectivity', body: connCard },
+    changes: { title: 'Recent Changes', body: changesCard },
   }
+  // the latest admin events (changes, sign-ins, mode switches) from the server; this session's changes without it
+  let adminEv = $state<{ t: number; level: string; text: string }[]>([])
+  if (isBackend) api<{ t: number; level: string; text: string }[]>('/events?cat=Admin').then((l) => (adminEv = (l ?? []).slice(0, 5))).catch(() => {})
+  const recent = $derived(isBackend ? adminEv.map((e) => ({ when: new Date(e.t * 1000).toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }), text: e.text, level: e.level })) : apply.done.slice(0, 5).map((d) => ({ when: d.at, text: `Configuration changed: ${d.title}`, level: 'info' })))
   type Card = keyof typeof CARDS
   const ALL = Object.keys(CARDS) as Card[]
   const isCard = (id: string): id is Card => Object.hasOwn(CARDS, id)
@@ -274,9 +281,18 @@
       <header class="row between"><h3>Most Active Access Points</h3><a href="#/devices/radios" class="muted" aria-label="Radios">›</a></header>
       <div class="tiles">
         {#each radios as r}
-          <a class="tile" href="#/ports" title="{r.name} · {r.clients} clients"><span class="ti ap"><Icon name="wifi" size={20} /></span><span class="ell">{router.identity} {r.band}</span></a>
+          <a class="tile" href="#/device/router" title="{r.name} · {r.clients} clients"><span class="ti ap"><Icon name="wifi" size={20} /></span><span class="ell">{router.identity} {r.band}</span></a>
         {/each}
       </div>
+    </section>
+{/snippet}
+
+{#snippet changesCard()}
+    <section class="card">
+      <header class="row between"><h3>Recent Changes</h3><a href="#/events" class="muted" aria-label="All events" onclick={() => keep('events.cat', 'Admin')}>›</a></header>
+      {#if recent.length}
+        <ul class="changes">{#each recent as r}<li><span class="muted small mono">{r.when}</span><span class:warnc={r.level !== 'info'}>{r.text}</span></li>{/each}</ul>
+      {:else}<p class="muted small">No changes or sign-ins recorded yet. Changes made through Safe apply show up here.</p>{/if}
     </section>
 {/snippet}
 
@@ -343,6 +359,9 @@
 {/snippet}
 
 <style>
+  .changes { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; font-size: 12.5px; }
+  .changes li { display: grid; grid-template-columns: 110px 1fr; gap: 8px; }
+  .warnc { color: var(--warn); }
   .dash { display: grid; grid-template-columns: 250px minmax(0, 1fr); min-height: calc(100vh - 46px); }
   /* left column */
   .side { border-right: 1px solid var(--line); padding: 14px 14px 30px; display: flex; flex-direction: column; gap: 6px; font-size: 12.5px; }
