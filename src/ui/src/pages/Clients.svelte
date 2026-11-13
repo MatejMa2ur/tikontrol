@@ -242,7 +242,7 @@
       {#snippet actions()}<input type="text" bind:value={newGroup} placeholder="New group name" /><button class="btn" disabled={!newGroup} onclick={() => { prefs.groups.push({ name: newGroup, limit: '', members: [] }); newGroup = '' }}><Icon name="plus" size={14} /> Add</button>{/snippet}
       {#each prefs.groups as g, gi}
         <div class="group">
-          <div class="row between"><b>{g.name}</b><span class="row"><input type="text" bind:value={g.limit} placeholder="Per device, down/up e.g. 20M/5M" aria-label="Speed limit" />
+          <div class="row between wrap"><b>{g.name}</b><span class="row wrap"><input type="text" bind:value={g.limit} placeholder="Per device, down/up e.g. 20M/5M" aria-label="Speed limit" />
             <button class="btn primary" onclick={() => applyGroup(g)}>Apply members</button>
             <button class="btn" disabled={!g.limit} onclick={() => applyLimit(g)}>Apply limit</button>
             <button class="btn ghost" aria-label="Delete group {g.name}" onclick={() => del(gi)}><Icon name="trash" size={14} /></button></span></div>

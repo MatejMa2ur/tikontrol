@@ -79,7 +79,7 @@
   {#if tab === 'events'}
     <div class="row between wrap">
       <div class="seg">{#each cats as c}<button class:on={cat === c} onclick={() => (cat = c)}>{c} {count(c)}</button>{/each}</div>
-      <div class="row"><div class="seg" aria-label="Severity">{#each sevs as [id, label]}<button class:on={sev === id} aria-pressed={sev === id} onclick={() => (sev = id)}>{label} {sevCount(id)}</button>{/each}</div>
+      <div class="row wrap"><div class="seg" aria-label="Severity">{#each sevs as [id, label]}<button class:on={sev === id} aria-pressed={sev === id} onclick={() => (sev = id)}>{label} {sevCount(id)}</button>{/each}</div>
         <input type="search" placeholder="Search events…" aria-label="Search events" bind:value={q} /><button class="btn" onclick={exportCsv}><Icon name="download" size={14} /> CSV</button></div>
     </div>
     <section class="card flush">
@@ -115,7 +115,7 @@
             <tr class="nohover">
               <td><Toggle bind:checked={r.on} label={r.name} /></td>
               <td>{r.name}</td>
-              <td><select bind:value={r.sev}><option>info</option><option>warning</option><option>critical</option></select></td>
+              <td><select bind:value={r.sev} aria-label="{r.name} severity"><option>info</option><option>warning</option><option>critical</option></select></td>
               <td class="row">{#each ['push', 'email', 'telegram', 'webhook'] as c}<label class="chk"><input type="checkbox" checked={r.channels.includes(c)} onchange={() => (r.channels = r.channels.includes(c) ? r.channels.filter((x) => x !== c) : [...r.channels, c])} /> {c}</label>{/each}</td>
             </tr>
           {/each}

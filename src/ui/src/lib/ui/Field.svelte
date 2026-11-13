@@ -1,11 +1,24 @@
 <script lang="ts">
   import type { Snippet } from 'svelte'
   let { label, help, children, na }: { label: string; help?: string; children: Snippet; na?: string } = $props()
+  // The label names every control in the field that has no name of its own (WCAG 1.3.1 / 4.1.2), also ones
+  // that appear later (a select shown once a toggle is on). The help text describes them.
+  const id = `fld-${Math.random().toString(36).slice(2, 9)}`
+  function name(ctl: HTMLElement) {
+    const tag = () => ctl.querySelectorAll<HTMLElement>('input, select, textarea').forEach((el) => {
+      if (!el.hasAttribute('aria-label') && !el.hasAttribute('aria-labelledby') && !(el as HTMLInputElement).labels?.length) el.setAttribute('aria-labelledby', id)
+      if ((help || na) && !el.hasAttribute('aria-describedby')) el.setAttribute('aria-describedby', `${id}-h`)
+    })
+    tag()
+    const o = new MutationObserver(tag)
+    o.observe(ctl, { childList: true, subtree: true })
+    return () => o.disconnect()
+  }
 </script>
 
 <div class="field" class:na>
-  <div><div class="lbl">{label}</div>{#if help || na}<div class="muted tiny">{na ?? help}</div>{/if}</div>
-  <div class="ctl">{@render children()}</div>
+  <div><div class="lbl" {id}>{label}</div>{#if help || na}<div class="muted tiny" id="{id}-h">{na ?? help}</div>{/if}</div>
+  <div class="ctl" {@attach name}>{@render children()}</div>
 </div>
 
 <style>
