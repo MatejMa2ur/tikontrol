@@ -22,8 +22,14 @@
   const ourSyslog = (raw.loggingRules ?? []).some((r: any) => r.action === 'tikremote')
 
   const servers = (Array.isArray(ntp.servers) ? ntp.servers : []).join(', ')
+  const siteInit = { name: router.identity, tz: clock['time-zone-name'] ?? 'UTC', ntp: !!ntp.enabled, servers: servers || 'pool.ntp.org' }
   let site = $state({ name: router.identity, tz: clock['time-zone-name'] ?? 'UTC', ntp: !!ntp.enabled, servers: servers || 'pool.ntp.org' })
   let mon = $state({ snmp: !!snmp.enabled, contact: snmp.contact ?? '', location: snmp.location ?? '', syslog: '', topics: 'info,warning,error,critical', flow: '', flowVersion: '9' })
+  // apply buttons show only once a form differs from the router; Cancel puts it back
+  const snmpInit = { snmp: mon.snmp, contact: mon.contact, location: mon.location }
+  const siteDirty = $derived(JSON.stringify(site) !== JSON.stringify(siteInit))
+  const snmpDirty = $derived(mon.snmp !== snmpInit.snmp || mon.contact !== snmpInit.contact || mon.location !== snmpInit.location)
+  const svcDirty = $derived(services.some((s) => svc[s.name] === !!s.disabled))
   let safe = $state({ minutes: 5 })
   // tikontrol's own history (src/server/src/live.rs prune): days kept, stored on the tikontrol server
   const isAdmin = isBackend && session.me?.role === 'admin'
@@ -84,19 +90,19 @@
   <Field label="Time zone" help="IANA name, e.g. Europe/Bratislava"><input type="text" bind:value={site.tz} aria-label="Time zone" /></Field>
   <Field label="Sync time (NTP)"><Toggle bind:checked={site.ntp} label="NTP" /></Field>
   <Field label="NTP servers" help="Up to 4, comma separated"><input type="text" bind:value={site.servers} aria-label="NTP servers" /></Field>
-  <div class="r"><button class="btn primary" onclick={siteReview}>Review & apply</button></div>
+  {#if siteDirty}<div class="r"><button class="btn" onclick={() => (site = { ...siteInit })}>Cancel</button> <button class="btn primary" disabled={!site.name.trim()} onclick={siteReview}>Review & apply</button></div>{/if}
 </Section>
 
 <Section title="Router services" desc="Turn off what you don't use. Red ones send passwords unencrypted." ros="/ip/service/print">
   <div class="svc">{#each services as s}<label class="row" class:bad={INSECURE.includes(s.name) && svc[s.name]}><Toggle bind:checked={svc[s.name]} label={s.name} /><span>{s.name}</span><span class="muted mono small">:{s.port}</span></label>{/each}</div>
-  <div class="r"><button class="btn primary" disabled={!serviceIntents().length} onclick={() => { const parts = serviceIntents(); review('Router services', services.filter((s) => svc[s.name] === !!s.disabled).map((s) => `/ip/service/set ${s.name} disabled=${svc[s.name] ? 'no' : 'yes'}`), parts.length === 1 ? parts[0] : { kind: 'batch', title: 'Router services', intents: parts }) }}>Review & apply</button></div>
+  {#if svcDirty}<div class="r"><button class="btn" onclick={() => (svc = Object.fromEntries(services.map((s) => [s.name, !s.disabled])))}>Cancel</button> <button class="btn primary" onclick={() => { const parts = serviceIntents(); review('Router services', services.filter((s) => svc[s.name] === !!s.disabled).map((s) => `/ip/service/set ${s.name} disabled=${svc[s.name] ? 'no' : 'yes'}`), parts.length === 1 ? parts[0] : { kind: 'batch', title: 'Router services', intents: parts }) }}>Review & apply</button></div>{/if}
 </Section>
 
 <Section title="SNMP" desc="tikontrol never reads or sets SNMP communities: change the default community in WinBox." ros="/snmp/print">
   <Field label="SNMP"><Toggle bind:checked={mon.snmp} label="SNMP" /></Field>
   <Field label="Contact"><input type="text" bind:value={mon.contact} aria-label="SNMP contact" /></Field>
   <Field label="Location"><input type="text" bind:value={mon.location} aria-label="SNMP location" /></Field>
-  <div class="r"><button class="btn primary" onclick={snmpReview}>Review & apply</button></div>
+  {#if snmpDirty}<div class="r"><button class="btn" onclick={() => Object.assign(mon, snmpInit)}>Cancel</button> <button class="btn primary" onclick={snmpReview}>Review & apply</button></div>{/if}
 </Section>
 
 <Section title="Remote logging" ros="/system/logging/print; /ip/traffic-flow/print">
@@ -105,10 +111,10 @@
   {:else}
     <Field label="Remote syslog" help="Server address, optional :port"><input type="text" bind:value={mon.syslog} placeholder="192.0.2.50:514" aria-label="Syslog server" /></Field>
     <Field label="Topics" help="Comma separated"><input type="text" bind:value={mon.topics} aria-label="Syslog topics" /></Field>
-    <div class="r"><button class="btn primary" disabled={!mon.syslog} onclick={syslogReview}>Review & apply</button></div>
+    <div class="r"><button class="btn primary" disabled={!mon.syslog} title={mon.syslog ? '' : 'Enter a syslog server first'} onclick={syslogReview}>Review & apply</button></div>
   {/if}
   <Field label="NetFlow / IPFIX" help={flow.enabled ? 'Traffic-flow is on' : 'Collector address, optional :port'}><input type="text" bind:value={mon.flow} placeholder="192.0.2.60:2055" aria-label="Flow collector" /><select bind:value={mon.flowVersion} aria-label="Flow version"><option value="9">v9</option><option value="ipfix">IPFIX</option><option value="5">v5</option></select></Field>
-  <div class="r">{#if flow.enabled}<button class="btn" onclick={() => review('Disable traffic-flow', ['/ip/traffic-flow/set enabled=no'], { kind: 'set-traffic-flow', enabled: false })}>Turn off</button> {/if}<button class="btn primary" onclick={flowReview}>Review & apply</button></div>
+  <div class="r">{#if flow.enabled}<button class="btn" onclick={() => review('Disable traffic-flow', ['/ip/traffic-flow/set enabled=no'], { kind: 'set-traffic-flow', enabled: false })}>Turn off</button> {/if}<button class="btn primary" disabled={!mon.flow.trim()} title={mon.flow.trim() ? '' : 'Enter a collector address first'} onclick={flowReview}>Review & apply</button></div>
 </Section>
 
 {#if isBackend}

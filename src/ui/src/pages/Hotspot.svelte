@@ -87,6 +87,9 @@
     '/ip/dhcp-server/remove [find name="tik-guest"]', '/ip/dhcp-server/network/remove [find comment="tik:hotspot"]', '/ip/pool/remove [find name="tik-guest"]', '/ip/address/remove [find comment="tik:hotspot"]',
   ], { kind: 'remove-guest-hotspot' })
   const colourOk = $derived(/^#[0-9a-fA-F]{6}$/.test(portal.color))
+  // why a primary button is disabled, said next to it
+  const portalWhy = $derived(!portal.on ? 'Turn the guest portal on first.' : !useSsid ? '' : !master ? 'No Wi-Fi radio to put the guest SSID on.' : !ssidOk ? 'Guest SSID: 1 to 32 bytes, no spaces at the ends.' : !passOk ? 'Guest password: 8 to 63 plain characters.' : '')
+  const pageWhy = $derived(!ours ? '' : !portal.on ? 'Turn the guest portal on first.' : !portal.title.trim() ? 'Give the page a title.' : !colourOk ? 'Pick a brand colour.' : '')
   const uploadPage = () => review('Branded login page', ['/file/add name=tik-guest-html type=directory', '/file/add name=tik-guest-html/login.html contents=…', '/ip/hotspot/profile/set [find name="tik-guest"] html-directory=tik-guest-html'], { kind: 'hotspot-page', title: portal.title, message: portal.text, color: portal.color })
   const defaultPage = () => review("Use RouterOS's default login page", ['/ip/hotspot/profile/set [find name="tik-guest"] html-directory=hotspot', '/file/remove [find name="tik-guest-html"]'], { kind: 'remove-hotspot-page' })
   const batch = (vs: V[]) => vs.filter((v) => v.created === vs[0].created)
@@ -123,7 +126,7 @@
         {#if ours}<div class="muted small">These are the router's current settings. To change them, turn the portal off, apply, then set it up again.</div>{/if}
         <div class="r">
           {#if ours && !portal.on}<button class="btn primary" onclick={removePortal}>Review removal</button>
-          {:else if !ours}<button class="btn primary" disabled={!portal.on || (useSsid && (!ssidOk || !passOk || !master))} onclick={applyPortal}>Review & apply</button>{/if}
+          {:else if !ours}{#if portalWhy}<span class="muted small">{portalWhy} </span>{/if}<button class="btn primary" disabled={!!portalWhy} onclick={applyPortal}>Review & apply</button>{/if}
         </div>
         <h3 class="sub">Branded login page</h3>
         <Field label="Title"><input type="text" bind:value={portal.title} maxlength="60" /></Field>
@@ -132,7 +135,7 @@
         <div class="muted small">{#if !ours}Set up the guest portal first; then the page can be written to the router.{:else if branded}The router serves a branded page. Its title, message and colour aren't read back: uploading again replaces it.{:else}The router serves its default login page.{/if}</div>
         <div class="r">
           {#if branded}<button class="btn" onclick={defaultPage}>Use default page</button>{/if}
-          <button class="btn primary" disabled={!ours || !portal.on || !colourOk || !portal.title.trim()} onclick={uploadPage}>{branded ? 'Replace page' : 'Upload page'}</button>
+          {#if pageWhy}<span class="muted small">{pageWhy} </span>{/if}<button class="btn primary" disabled={!ours || !!pageWhy} onclick={uploadPage}>{branded ? 'Replace page' : 'Upload page'}</button>
         </div>
       </Section>
       <div class="preview">

@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { raw, clients, internet } from '../../lib/data'
+  import { raw, clients, internet, bytes } from '../../lib/data'
   import { review } from '../../lib/apply.svelte'
   import Icon from '../../lib/Icon.svelte'
   import Section from '../../lib/ui/Section.svelte'
@@ -27,8 +27,8 @@
 
 <Section title="Port forwarding" desc="Open a port from the internet to a device." ros="/ip/firewall/nat/print">
   {#if internet.doubleNat}<div class="muted small warn"><Icon name="alert" size={13} /> Behind double NAT: forwards also need to be set on {internet.gateway}.</div>{/if}
-  <table><thead><tr><th>Name</th><th>Chain</th><th>Action</th><th>To</th><th></th></tr></thead>
-    <tbody>{#each nat as r}{@const pf = pfOf(r)}<tr class="nohover"><td>{r.comment ?? '—'}</td><td>{r.chain}</td><td>{r.action}</td><td class="mono small">{r['to-addresses'] ?? ''}{r['to-ports'] ? `:${r['to-ports']}` : ''}</td>
+  <table><thead><tr><th>Name</th><th>Chain</th><th>Action</th><th>To</th><th class="r" title="Packets this rule matched">Hits</th><th></th></tr></thead>
+    <tbody>{#each nat as r}{@const pf = pfOf(r)}<tr class="nohover"><td>{r.comment ?? '—'}</td><td>{r.chain}</td><td>{r.action}</td><td class="mono small">{r['to-addresses'] ?? ''}{r['to-ports'] ? `:${r['to-ports']}` : ''}</td><td class="r mono small">{#if r.packets != null}<span title="{Number(r.packets).toLocaleString()} packets, {bytes(Number(r.bytes ?? 0))} since the counters were last reset">{Number(r.packets) ? Number(r.packets).toLocaleString(undefined, { notation: 'compact' }) : '0'}</span>{:else}—{/if}</td>
       <td class="r">{#if pf}<button class="btn small" aria-label="Remove port forward {pf[1]} {pf[2]}" onclick={() => review(`Remove port forward ${pf[1]} ${pf[2]}`, [`/ip/firewall/nat/remove [find comment="${r.comment}"]`], { kind: 'remove-port-forward', protocol: pf[1], port: +pf[2] })}>Remove</button>{/if}</td></tr>{/each}</tbody></table>
   <div class="add">
     <input type="text" bind:value={fwd.name} placeholder="Name" />

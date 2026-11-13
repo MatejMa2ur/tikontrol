@@ -30,6 +30,19 @@
   const isolated = $derived((raw.bridgeFilter ?? []).some((r: any) => r.comment === `tik:isolate:${c.mac}`))
   // maker/model/type improved by what the device itself said over mDNS/SSDP (untrusted, text only)
   const me = $derived(identity(c))
+  const lease = (raw.leases ?? []).find((l: any) => String(l['mac-address'] ?? '').toUpperCase() === c.mac.toUpperCase())
+
+  // Ping from the router (server tools.rs: runs as the reader, one diagnostic per 2 s per session)
+  let ping = $state<{ busy: boolean; text: string; ok?: boolean }>({ busy: false, text: '' })
+  async function runPing() {
+    ping = { busy: true, text: '' }
+    try {
+      const r = await api<{ rows: Record<string, string>[] }>('/tools/ping', { method: 'POST', body: { host: c.ip, count: 3 } })
+      const last = r.rows.at(-1) ?? {}
+      const got = Number(last.received ?? r.rows.filter((x) => x.time).length)
+      ping = { busy: false, ok: got > 0, text: got > 0 ? `${got} of ${last.sent ?? 3} replies${last['avg-rtt'] ? `, ${last['avg-rtt']} average` : ''}` : 'No reply. Phones and laptops that sleep or block ping often don\'t answer.' }
+    } catch (e) { ping = { busy: false, ok: false, text: (e as Error).message } }
+  }
   const said = $derived(saidBy(c))
   const history = $derived(events.filter((e) => e.text.includes(displayName(c)) || e.text.includes(c.name)).slice(0, 12))
   const save = () => { prefs.aliases[c.mac] = draft.trim(); if (!draft.trim()) delete prefs.aliases[c.mac]; editing = false }
@@ -152,12 +165,14 @@
       {#if !c.wired}<button class="btn" onclick={() => review('Reconnect client', `/interface/wireless/registration-table/remove [find mac-address=${c.mac}]`, { kind: 'kick-wifi', mac: c.mac })}><Icon name="wifi" size={14} /> Reconnect</button>{/if}
       <button class="btn" onclick={() => { trafficDraft.mac = c.mac; location.hash = '#/settings/security' }}><Icon name="shield" size={14} /> Traffic rule</button>
       <button class="btn" onclick={() => review(isolated ? `End isolation for ${displayName(c)}` : `Isolate ${displayName(c)}`, [`/interface/bridge/filter/${isolated ? 'remove' : 'add'} … comment=tik:isolate:${c.mac}`], { kind: isolated ? 'unisolate-device' : 'isolate-device', mac: c.mac })}><Icon name="lock" size={14} /> {isolated ? 'End isolation' : 'Isolate'}</button>
+      {#if isBackend && c.ip}<button class="btn" disabled={ping.busy} onclick={runPing}><Icon name="gauge" size={14} /> {ping.busy ? 'Pinging…' : 'Ping'}</button>{/if}
       {#if blocked}
         <button class="btn" onclick={() => review(`Unblock ${displayName(c)}`, [removeCmd('block')], { kind: 'unblock-client', mac: c.mac })}><Icon name="check" size={14} /> Unblock</button>
       {:else}
         <button class="btn danger" onclick={() => review('Block client', [dropCmd('block')], { kind: 'block-client', mac: c.mac })}><Icon name="block" size={14} /> Block</button>
       {/if}
     </div>
+    {#if ping.text}<p class="small" class:state={!ping.ok} role="status">{ping.text}</p>{/if}
     {#if blocked || paused}<p class="small state" role="status"><Icon name="alert" size={13} /> {blocked ? 'Blocked: this device has no network access through the router.' : 'Paused: this device\'s internet is paused.'}</p>{/if}
     <dl>
       <dt>Experience</dt><dd><span class="pill {sq.level}">{sq.label}</span>{#if c.signal}<span class="mono muted"> {c.signal} dBm</span>{/if}</dd>
@@ -174,6 +189,7 @@
       {#if c.classId}<dt>DHCP vendor class</dt><dd class="mono">{c.classId}</dd>{/if}
       {#if seen}<dt>First seen</dt><dd>{when(seen.first)}</dd><dt>Last seen</dt><dd>{when(seen.last)}</dd>{/if}
       <dt>Connected for</dt><dd>{dur(c.uptimeS)}</dd>
+      {#if lease?.['expires-after']}<dt>Lease renews</dt><dd>in {lease['expires-after']}</dd>{/if}
       {#if c.bytesDown || c.bytesUp}<dt>Total traffic</dt><dd>{bytes(c.bytesDown)} down · {bytes(c.bytesUp)} up</dd>{/if}
       {#if prefs.notes[c.mac]}<dt>Notes</dt><dd>{prefs.notes[c.mac]}</dd>{/if}
     </dl>

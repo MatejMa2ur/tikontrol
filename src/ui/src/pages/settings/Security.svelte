@@ -4,7 +4,7 @@
 </script>
 
 <script lang="ts">
-  import { raw, adblock, clients } from '../../lib/data'
+  import { raw, adblock, clients, bytes } from '../../lib/data'
   import { review, type Intent } from '../../lib/apply.svelte'
   import { prefs, displayName } from '../../lib/live.svelte'
   import { securityAudit, zoneCell, zonesOf } from '../../lib/security'
@@ -173,8 +173,8 @@
 
 <Section title="Firewall rules" desc="{rules.length} rules, in order. tikontrol's own rules (tagged tik:fw: and tik:input:) can be removed here." ros="/ip/firewall/filter/print">
   <div class="scroll"><table>
-    <thead><tr><th>#</th><th>Chain</th><th>Action</th><th>Match</th><th>Comment</th><th><span class="sr">Actions</span></th></tr></thead>
-    <tbody>{#each rules as r, i}<tr class="nohover" class:off={r.disabled}><td>{i}</td><td>{r.chain}</td><td><span class="pill" class:bad={r.action === 'drop' || r.action === 'reject'} class:ok={r.action === 'accept'}>{r.action}</span></td><td class="small">{desc(r)}</td><td class="muted small">{r.comment ?? ''}</td>
+    <thead><tr><th>#</th><th>Chain</th><th>Action</th><th>Match</th><th>Comment</th><th class="r" title="Packets this rule matched">Hits</th><th><span class="sr">Actions</span></th></tr></thead>
+    <tbody>{#each rules as r, i}<tr class="nohover" class:off={r.disabled}><td>{i}</td><td>{r.chain}</td><td><span class="pill" class:bad={r.action === 'drop' || r.action === 'reject'} class:ok={r.action === 'accept'}>{r.action}</span></td><td class="small">{desc(r)}</td><td class="muted small">{r.comment ?? ''}</td><td class="r mono small">{#if r.packets != null}<span title="{Number(r.packets).toLocaleString()} packets, {bytes(Number(r.bytes ?? 0))} since the counters were last reset">{Number(r.packets) ? Number(r.packets).toLocaleString(undefined, { notation: 'compact' }) : '0'}</span>{:else}—{/if}</td>
       <td class="r0">{#if tagOf(r, 'tik:fw:') || tagOf(r, 'tik:input:')}<button class="btn small" onclick={() => removeRule(r)}>Remove</button>{/if}</td></tr>{/each}</tbody>
   </table></div>
   <h4>Add a forward rule</h4>

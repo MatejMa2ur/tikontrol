@@ -424,6 +424,15 @@ struct Login {
     remember: bool,
 }
 
+/// An Admin event in the log (sign-ins, mode switches). `who` is typed by whoever signs in: control characters
+/// are dropped and it is cut to 64 characters; the UI escapes it like every other event text.
+fn admin_event(app: &App, level: &str, text: String) {
+    lock(&app.live.history).event(crate::live::Ev { t: crate::app::now(), cat: "Admin".into(), level: level.into(), text, mac: None });
+}
+fn who(name: &str) -> String {
+    name.chars().filter(|c| !c.is_control()).take(64).collect()
+}
+
 fn login(app: &App, req: &Req) -> Resp {
     let b: Login = match body(req) {
         Ok(b) => b,
@@ -436,6 +445,7 @@ fn login(app: &App, req: &Req) -> Resp {
     let admins = lock(&app.store).state.admins.clone();
     if let Some(a) = auth::verify(&admins, &b.name, &b.password) {
         lock(&app.limiter).success(ip);
+        admin_event(app, "info", format!("{} signed in (tikontrol account) from {ip}", who(&a.name)));
         if a.role == Role::Admin && app.claim().is_err() {
             return Resp::error(500, "could not save state");
         }
@@ -446,6 +456,7 @@ fn login(app: &App, req: &Req) -> Resp {
     if !admins.iter().any(|a| a.name == b.name) {
         if let Some((role, ros)) = router_login(app, &b.name, &b.password) {
             lock(&app.limiter).success(ip);
+            admin_event(app, "info", format!("{} signed in (MikroTik account) from {ip}", who(&b.name)));
             if role == Role::Admin && app.claim().is_err() {
                 return Resp::error(500, "could not save state");
             }
@@ -454,7 +465,15 @@ fn login(app: &App, req: &Req) -> Resp {
             return if b.remember { remember(app, resp, &b.name, role, ros) } else { resp };
         }
     }
-    lock(&app.limiter).fail(ip);
+    let locked = {
+        let mut l = lock(&app.limiter);
+        l.fail(ip);
+        l.check(ip).err()
+    };
+    admin_event(app, "warning", format!("Failed sign-in as {} from {ip}", who(&b.name)));
+    if let Some(wait) = locked {
+        admin_event(app, "error", format!("Sign-ins from {ip} are blocked for {wait} s after repeated failures"));
+    }
     Resp::error(401, "wrong username or password")
 }
 
@@ -767,7 +786,7 @@ fn set_mode(app: &App, req: &Req, s: &Session) -> Resp {
     let res = st.save();
     drop(st);
     let text = format!("{}: tikontrol switched to {}", s.user, if b.mode == Mode::ReadWrite { "read & write" } else { "read-only" });
-    lock(&app.live.history).event(crate::live::Ev { t: crate::app::now(), cat: "Admin".into(), level: "warning".into(), text, mac: None });
+    admin_event(app, "warning", text);
     saved(res)
 }
 
@@ -937,6 +956,15 @@ pub mod tests {
             assert_eq!(handle(&app, req("POST", "/api/v1/login", r#"{"name":"admin","password":"wrong wrong wrong"}"#)).status, 401);
         }
         assert_eq!(handle(&app, req("POST", "/api/v1/login", r#"{"name":"admin","password":"a long admin password"}"#)).status, 429);
+        // every sign-in, failure and the lockout land in the Admin events; the typed name loses control characters
+        let ev: Vec<(String, String)> = lock(&app.live.history).events.iter().filter(|e| e.cat == "Admin").map(|e| (e.level.clone(), e.text.clone())).collect();
+        assert!(ev.iter().any(|(l, t)| l == "info" && t.starts_with("admin signed in (tikontrol account)")));
+        assert_eq!(ev.iter().filter(|(l, t)| l == "warning" && t.starts_with("Failed sign-in as admin")).count(), 5);
+        assert!(ev.iter().any(|(l, t)| l == "error" && t.contains("blocked")));
+        let app = new_app();
+        admin_session(&app);
+        handle(&app, req("POST", "/api/v1/login", r#"{"name":"evil\n\u001b[31mname","password":"wrong wrong wrong"}"#));
+        assert!(lock(&app.live.history).events.iter().any(|e| e.text.starts_with("Failed sign-in as evil[31mname")));
     }
 
     #[test]

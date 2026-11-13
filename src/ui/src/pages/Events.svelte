@@ -91,6 +91,8 @@
           {:else}<tr><td colspan="3" class="muted">No events match.</td></tr>{/each}
         </tbody>
       </table>
+      <!-- the server sends the newest 500 (routes.rs events); say so instead of looking complete -->
+      {#if stored.length >= 500}<p class="muted small cap">Showing the newest 500 stored events; older ones are not listed here.</p>{/if}
     </section>
     <Ros cmd="/log/print follow" />
   {:else if isBackend && (tab === 'alarms' || tab === 'channels')}
@@ -149,6 +151,7 @@
 {/snippet}
 
 <style>
+  .cap { padding: 8px 12px; margin: 0; }
   .tiny { font-size: 11px; }
   .flush { padding: 4px 6px; overflow-x: auto; }
   .wrap { white-space: normal; }

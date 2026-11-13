@@ -6,6 +6,7 @@
   import Field from '../../lib/ui/Field.svelte'
   import Toggle from '../../lib/ui/Toggle.svelte'
   import Modal from '../../lib/ui/Modal.svelte'
+  import { poolUsage, overlap, suggest, span } from '../../lib/pool'
 
   const addrs: any[] = raw.addresses ?? []
   const dhcp: any[] = raw.dhcpServers ?? []
@@ -44,7 +45,7 @@
     return {
       name: a.interface === 'bridge' ? 'Default' : tikName || a.interface, iface: a.interface, vlan: v ? String(v['vlan-id']) : '—', tikName,
       subnet: net?.address ?? a.address, gateway: gw, dhcp: srv ? ranges.join(', ') : 'Off', lease: String(srv?.['lease-time'] ?? ''),
-      server: String(srv?.name ?? ''), pool: String(srv?.['address-pool'] ?? ''), range: ranges.join(','),
+      server: String(srv?.name ?? ''), pool: String(srv?.['address-pool'] ?? ''), range: ranges.join(','), usage: srv ? poolUsage(ranges, raw.leases ?? []) : null,
       domain: net?.domain ?? '', dns: String(net?.['dns-server'] ?? ''), filter: filterOf(String(net?.['dns-server'] ?? ''), gw), hasNet: !!net,
       v6: v6.map((x) => x.address).join(', '), v6tik: v6.some((x) => x.comment === `tik:v6lan:${a.interface}`),
       v6pool: String(v6.find((x) => x['from-pool'])?.['from-pool'] ?? ''), dhcp6: !!d6, dhcp6tik: d6?.comment === `tik:dhcpv6:${a.interface}`,
@@ -79,7 +80,11 @@
   // ---- "New network" form → ~9 RouterOS objects (PLAN §0.6 rule 1) ----
   const mdnsNow: string[] = dns['mdns-repeat-ifaces'] ?? []
   let open = $state(false)
-  let n = $state({ name: 'IoT', vlan: 30, subnet: '192.168.30.0/24', dhcp: true, lease: '1d', dns: 'router', isolate: true, internet: true, mdns: false, igmp: false, ipv6: false, domain: 'iot.lan', filter: 'none' })
+  // suggest a VLAN ID and subnet nothing uses yet; the checks below and the server refuse clashes anyway
+  const addrList: string[] = addrs.map((a) => String(a.address))
+  const vlanIds: number[] = vlans.map((v) => Number(v['vlan-id']))
+  const first = suggest(vlanIds, addrList)
+  let n = $state({ name: 'IoT', vlan: first.vlan, subnet: first.subnet, dhcp: true, lease: '1d', dns: 'router', isolate: true, internet: true, mdns: false, igmp: false, ipv6: false, domain: 'iot.lan', filter: 'none' })
   $effect(() => { n.subnet = `192.168.${n.vlan}.0/24` })
   const gw = $derived(n.subnet.replace(/\.0\/(\d+)$/, '.1'))
   const nDns = $derived(n.filter !== 'none' ? dnsFor(n.filter, gw, '') : n.dns === 'router' ? [] : [n.dns])
@@ -105,6 +110,14 @@
     ...(n.filter !== 'none' ? [`# content filter: clients get DNS ${nDns.join(',')}`] : []),
   ])
   const objects = $derived(cmds.filter((c) => !c.startsWith('#')).length)
+  const nProblem = $derived(
+    !/^[A-Za-z0-9_-]{1,32}$/.test(n.name) ? 'Name: letters, digits, - and _ only (up to 32).'
+    : existing.some((e) => e.name.toLowerCase() === n.name.toLowerCase()) ? `A network named ${n.name} exists already.`
+    : !Number.isInteger(n.vlan) || n.vlan < 2 || n.vlan > 4094 ? 'VLAN ID must be 2 to 4094.'
+    : vlanIds.includes(n.vlan) ? `VLAN ${n.vlan} is in use already.`
+    : !/^\d+\.\d+\.\d+\.\d+\/(1[6-9]|2[0-9]|30)$/.test(n.subnet) || !span(n.subnet) ? 'Subnet: like 192.168.30.0/24 (prefix /16 to /30).'
+    : overlap(n.subnet, addrList) ? `${n.subnet} overlaps ${overlap(n.subnet, addrList)} on this router.`
+    : n.ipv6 && !v6pool ? 'IPv6 needs a delegated prefix.' : '')
   // create-network, plus the network-wide extras it asks for, as one batch (one Safe apply, one undo)
   const intent = $derived.by((): Intent | undefined => {
     if (n.ipv6 && !v6pool) return undefined
@@ -156,9 +169,9 @@
 <Section title="Networks" desc="Each network is a subnet with its own DHCP, optionally on its own VLAN." ros="/ip/address/print; /ip/pool/print; /ip/dhcp-server/print; /ip/dhcp-server/network/print; /interface/vlan/print; /ipv6/address/print; /ipv6/dhcp-server/print">
   {#snippet actions()}<button class="btn primary" onclick={() => (open = true)}><Icon name="plus" size={14} /> New Network</button>{/snippet}
   <table>
-    <thead><tr><th>Name</th><th>VLAN</th><th>Subnet</th><th>Gateway</th><th>DHCP range</th><th>Lease</th><th>Domain</th><th>Filter</th><th>IPv6</th></tr></thead>
+    <thead><tr><th>Name</th><th>VLAN</th><th>Subnet</th><th>Gateway</th><th>DHCP range</th><th>Leases used</th><th>Lease</th><th>Domain</th><th>Filter</th><th>IPv6</th></tr></thead>
     <tbody>
-      {#each existing as e}<tr onclick={() => (ed = { ...e, dnsText: e.filter === 'none' ? e.dns : '' })}><td><button class="plain" onclick={(ev) => { ev.stopPropagation(); ed = { ...e, dnsText: e.filter === 'none' ? e.dns : '' } }}><b>{e.name}</b></button> <span class="muted small">{e.iface}</span></td><td>{e.vlan}</td><td class="mono">{e.subnet}</td><td class="mono">{e.gateway}</td><td class="mono small">{e.dhcp}</td><td>{e.lease || '—'}</td><td class="mono small">{e.domain || '—'}</td><td>{e.filter === 'family' ? 'Family-safe' : e.filter === 'ads' ? 'Ad-block' : '—'}</td><td class="mono small">{e.v6 || 'Off'}{e.dhcp6 ? ' · DHCPv6' : ''}</td></tr>{/each}
+      {#each existing as e}<tr onclick={() => (ed = { ...e, dnsText: e.filter === 'none' ? e.dns : '' })}><td><button class="plain" onclick={(ev) => { ev.stopPropagation(); ed = { ...e, dnsText: e.filter === 'none' ? e.dns : '' } }}><b>{e.name}</b></button> <span class="muted small">{e.iface}</span></td><td>{e.vlan}</td><td class="mono">{e.subnet}</td><td class="mono">{e.gateway}</td><td class="mono small">{e.dhcp}</td><td>{#if e.usage?.size}<span class:warnc={e.usage.pct >= 80} title="{e.usage.used} of {e.usage.size} addresses leased">{e.usage.used}/{e.usage.size}</span>{#if e.usage.pct >= 80} <span class="pill warn">nearly full</span>{/if}{:else}—{/if}</td><td>{e.lease || '—'}</td><td class="mono small">{e.domain || '—'}</td><td>{e.filter === 'family' ? 'Family-safe' : e.filter === 'ads' ? 'Ad-block' : '—'}</td><td class="mono small">{e.v6 || 'Off'}{e.dhcp6 ? ' · DHCPv6' : ''}</td></tr>{/each}
     </tbody>
   </table>
 </Section>
@@ -224,7 +237,7 @@
         <pre class="cmds">{cmds.join('\n')}</pre>
       </div>
     </div>
-    {#snippet footer()}<button class="btn" onclick={() => (open = false)}>Cancel</button><button class="btn primary" onclick={() => { review(`Create network ${n.name}`, cmds.filter((c) => !c.startsWith('#')), intent); open = false }}>Review & apply</button>{/snippet}
+    {#snippet footer()}{#if nProblem}<span class="small bad grow" role="alert">{nProblem}</span>{/if}<button class="btn" onclick={() => (open = false)}>Cancel</button><button class="btn primary" disabled={!!nProblem} onclick={() => { review(`Create network ${n.name}`, cmds.filter((c) => !c.startsWith('#')), intent); open = false }}>Review & apply</button>{/snippet}
   </Modal>
 {/if}
 
@@ -284,6 +297,9 @@
 {/if}
 
 <style>
+  .warnc { color: var(--warn); }
+  .bad { color: var(--bad); }
+  .grow { flex: 1; }
   .cols { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 18px; }
   .cmds { background: var(--code-bg); border: 1px solid var(--line); border-radius: 8px; padding: 10px; font: 11px/1.6 var(--mono); white-space: pre-wrap; margin-top: 8px; max-height: 60vh; overflow: auto; }
   details { margin-top: 6px; }
