@@ -1230,7 +1230,9 @@
    "identity": "Office switch",
    "platform": "MikroTik",
    "board": "CSS610-8G-2S+",
-   "version": "2.17"
+   "version": "2.17",
+   "uptime": "3w2d04:11:52",
+   "interface-name": "Port1"
   },
   {
    "interface": "ether4,bridge",
@@ -1239,7 +1241,9 @@
    "identity": "Garage AP",
    "platform": "MikroTik",
    "board": "hAP ax lite",
-   "version": "7.15.3 (stable)"
+   "version": "7.15.3 (stable)",
+   "uptime": "5d07:42:10",
+   "interface-name": "ether1"
   }
  ],
  "secProfiles": [

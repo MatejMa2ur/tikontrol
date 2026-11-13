@@ -42,6 +42,7 @@ Cross-cutting questions (dotted proplists, Safe apply under device mode or after
 - [ ] **Device restart / locate (blink LED)** 🟨: the LED blinks on a real RouterBOARD; restart through CMR
 - [ ] **Firmware update per device** 🟨: CMR upgrade of a real managed device
 - [ ] **Topology map (auto layout, wired + wireless links; MNDP/LLDP neighbours as intermediate switch/AP nodes with their port's clients)** 🟨: check with a real switch and AP behind the router, including a daisy chain
+- [ ] **Neighbour device panel (read-only `#/device/<MAC>` from Topology, Devices and search: name, model, IP, MAC, version, port, uptime, clients behind it, https WebFig link; no actions)** 🟨: check with a real switch behind the router
 - [ ] **Topology Spotlight (highlight/filter)** 🟨: check on a real multi-device topology
 - [ ] **Device LED control / Etherlighting** 🟨: `set-leds` turns the LEDs off on a real board
 - [ ] **Switch mode: turn a MikroTik router into a managed switch (every ethernet port on one bridge; DHCP, NAT, other addresses, WAN and optionally Wi-Fi turned off, not deleted; default route + DNS via the upstream router; LAN-only input firewall; management address kept; Leave switch mode restores)** 🟨: check on a real small router (hAP lite: legacy `wireless`)

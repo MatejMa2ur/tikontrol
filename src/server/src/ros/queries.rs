@@ -132,7 +132,7 @@ const QUERIES: &[Q] = &[
     q("listMembers", "/interface/list/member/print", &["list", "interface", "comment"]),
     q("netwatch", "/tool/netwatch/print", &["host", "status", "interval", "type", "comment"]),
     q("loggingRules", "/system/logging/print", &["topics", "action", "disabled"]).arrays(&["topics"]),
-    q("neighbors", "/ip/neighbor/print", &["interface", "address", "mac-address", "identity", "platform", "board", "version"]),
+    q("neighbors", "/ip/neighbor/print", &["interface", "address", "mac-address", "identity", "platform", "board", "version", "uptime", "interface-name"]),
     // no wpa/wpa2 pre-shared keys
     q("secProfiles", "/interface/wireless/security-profiles/print", &["name", "mode", "authentication-types", "management-protection"]).arrays(&["authentication-types"]),
     q("accessList", "/interface/wireless/access-list/print", &["mac-address", "interface", "signal-range", "authentication", "forwarding", "vlan-id", "comment"]),

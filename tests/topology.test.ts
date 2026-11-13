@@ -35,3 +35,18 @@ test('inSubnet: a switch finds its gateway inside its own bridge subnet', () => 
   assert.equal(inSubnet('192.0.2.130', '192.0.2.7/25'), false)
   assert.equal(inSubnet('192.0.2.7', '192.0.2.7/32'), true)
 })
+
+test('neighbour panel ids and WebFig links accept only well-formed values', async () => {
+  const { neighborHref, findNeighbor, webfigUrl } = await import('../src/ui/src/lib/topology.ts')
+  const nbs = [{ 'mac-address': '02:00:00:00:10:0a', identity: 'Switch' }, { 'mac-address': '"><script>', identity: 'Evil' }]
+  assert.equal(neighborHref(nbs[0]), '#/device/02:00:00:00:10:0A')
+  assert.equal(neighborHref(nbs[1]), undefined)
+  assert.equal(findNeighbor(nbs, '02:00:00:00:10:0A')?.identity, 'Switch')
+  assert.equal(findNeighbor(nbs, '"><script>'), undefined)
+  assert.equal(findNeighbor(nbs, 'router'), undefined)
+  assert.equal(webfigUrl('192.168.88.2'), 'https://192.168.88.2/')
+  assert.equal(webfigUrl('192.168.088.2'), 'https://192.168.88.2/')
+  assert.equal(webfigUrl('300.1.1.1'), undefined)
+  assert.equal(webfigUrl('evil.example/x'), undefined)
+  assert.equal(webfigUrl(undefined), undefined)
+})

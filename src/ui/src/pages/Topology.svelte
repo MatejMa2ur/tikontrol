@@ -28,7 +28,7 @@
   // switches and APs heard over MNDP/LLDP sit between this router and the clients on their port
   const grouped = groupByNeighbor(clients.filter((c) => c.online), raw.neighbors ?? [])
   const devNode = (d: Downstream<Client>): N => ({
-    id: d.id, label: d.label, sub: [d.board, d.sub].filter(Boolean).join(' · '), icon: 'devices', kind: 'dev',
+    id: d.id, label: d.label, sub: [d.board, d.sub].filter(Boolean).join(' · '), icon: 'devices', kind: 'dev', href: d.href,
     link: `Port ${d.port.replace('ether', '')}${speed(d.port) ? ` · ${speed(d.port)}` : ''}`,
     // the bridge only knows the router's port, which is the switch's uplink: no port label for clients behind it
     children: [...d.devices.map(devNode), ...withVms(d.clients).map((n) => ({ ...n, link: undefined }))],
@@ -47,7 +47,7 @@
   }
   const tree: N = internet.behind ? {
     id: 'internet', label: 'Internet', icon: 'globe', kind: 'net', children: [{
-      id: up?.id ?? 'upstream', label: up?.label ?? 'Upstream router', sub: [up?.board, internet.behind].filter(Boolean).join(' · '), icon: 'devices', kind: 'dev',
+      id: up?.id ?? 'upstream', label: up?.label ?? 'Upstream router', sub: [up?.board, internet.behind].filter(Boolean).join(' · '), icon: 'devices', kind: 'dev', href: up?.href,
       children: [{ ...self, link: up ? `Uplink · Port ${up.port.replace('ether', '')}${speed(up.port) ? ` · ${speed(up.port)}` : ''}` : 'Uplink' }],
     }],
   } : {
@@ -87,6 +87,8 @@
       let any = hit
       for (const c of n.children) if (up(c, [...path, n])) any = true
       if (any) { set.add(n.id); path.forEach((p) => set.add(p.id)) }
+      // hovering a device also lights what sits behind it, instead of dimming its whole subtree
+      if (hit && !q) { const down = (x: N) => { set.add(x.id); x.children.forEach(down) }; down(n) }
       return any
     }
     up(tree, [])
@@ -125,7 +127,7 @@
           </svg>
           {#each all as n}
             <a class="node {n.kind}" href={n.href} style="left:{n.x}px;top:{n.y}px" class:dim={lit && !lit.has(n.id)} class:hit={q && match(n)}
-              onmouseenter={() => (hover = n.id)} onmouseleave={() => (hover = null)}>
+              onmouseenter={() => (hover = n.id)} onmouseleave={() => (hover = null)} onclick={() => (hover = null)}>
               <span class="ic {n.level ?? ''}"><Icon name={n.icon} size={n.kind === 'client' ? 18 : 22} /></span>
               <b>{n.label}</b>
               {#if n.sub}<small>{n.sub}</small>{/if}
@@ -143,7 +145,7 @@
     <h3>All connected devices <span class="muted">{listed.length}</span></h3>
     {#each listed as c (c.mac)}
       {@const sq = signalQuality(c.signal)}
-      <a class="item row" href="#/clients/{c.mac}" onmouseenter={() => (hover = c.mac)} onmouseleave={() => (hover = null)}>
+      <a class="item row" href="#/clients/{c.mac}" onmouseenter={() => (hover = c.mac)} onmouseleave={() => (hover = null)} onclick={() => (hover = null)}>
         <span class="icon-box"><Icon name={c.kind} size={15} /></span>
         <span class="grow"><b>{displayName(c)}</b><small class="muted">{c.ip} · {c.wired ? `Port ${c.port?.replace('ether', '')}` : c.band}</small></span>
         <span class="dot {c.wired ? 'ok' : sq.level}" title={sq.label}></span>

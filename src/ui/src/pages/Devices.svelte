@@ -6,6 +6,7 @@
   import { cmr, loadCmr, cmrOk, type CmrDevice } from '../lib/cmr.svelte'
   import { cmpVersion } from '../lib/security'
   import { privateIp, setupSteps, tooOld } from '../lib/guide'
+  import { neighborHref } from '../lib/topology'
   import Icon from '../lib/Icon.svelte'
   import Tabs from '../lib/ui/Tabs.svelte'
   import Section from '../lib/ui/Section.svelte'
@@ -86,7 +87,8 @@
           {#each strangers as n}
             {@const ver = (n.version ?? '').split(' ')[0]}
             {@const known = sites.find((x) => x.host === n.address)}
-            <tr onclick={() => (known ? switchSite(known.id) : openGuide(n))}><td><b>{n.identity}</b></td><td>{n.board ?? n.platform}</td><td class="mono">{n.address}</td>
+            {@const href = neighborHref(n)}
+            <tr onclick={() => (href ? (location.hash = href) : known ? switchSite(known.id) : openGuide(n))}><td>{#if href}<a class="plain" {href} onclick={(e) => e.stopPropagation()}><b>{n.identity}</b></a>{:else}<b>{n.identity}</b>{/if}<div class="muted small">Not managed here</div></td><td>{n.board ?? n.platform}</td><td class="mono">{n.address}</td>
               <td>{ver}{#if tooOld(ver)}<br /><span class="pill bad" title="tikontrol needs RouterOS 7">RouterOS 7 needed</span>{:else if ver && cmpVersion(ver, '7.18') < 0}<br /><span class="pill warn" title="tikontrol reads routers over the API from RouterOS 7.18">update to 7.18+</span>{/if}</td>
               <td>—</td><td>—</td><td>—</td><td>—</td>
               <td>{#if known}<span class="pill ok">In tikontrol</span> <button class="btn small" onclick={(e) => { e.stopPropagation(); switchSite(known.id) }} aria-label="Open {n.identity}">Open</button>

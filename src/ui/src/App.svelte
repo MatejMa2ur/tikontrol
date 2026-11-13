@@ -1,6 +1,6 @@
 <script lang="ts">
   import { tick as settled } from 'svelte'
-  import { router, isSample, simulated, isBackend, load, clients } from './lib/data'
+  import { router, isSample, simulated, isBackend, load, clients, neighbors } from './lib/data'
   import { api, logout, session, site, switchSite, type Site } from './lib/backend'
   import { apply } from './lib/apply.svelte'
   import { prefs } from './lib/live.svelte'
@@ -10,6 +10,8 @@
   import Clients from './pages/Clients.svelte'
   import ClientDrawer from './pages/ClientDrawer.svelte'
   import DeviceDrawer from './pages/DeviceDrawer.svelte'
+  import NeighborDrawer from './pages/NeighborDrawer.svelte'
+  import { findNeighbor } from './lib/topology'
   import Topology from './pages/Topology.svelte'
   import Devices from './pages/Devices.svelte'
   import SafeApply from './lib/ui/SafeApply.svelte'
@@ -33,7 +35,7 @@
   // old/short links: #/ports and #/radios live under Devices
   const alias: Record<string, string[]> = { ports: ['devices', 'ports'], radios: ['devices', 'radios'] }
   const parse = (h: string) => { const x = h.replace(/^#\/?/, '').split('?')[0].split('/'); return alias[x[0]] ?? x } // ?query is for the page itself
-  // side panels: #/clients/<mac> and #/device/<id> (only 'router' so far)
+  // side panels: #/clients/<mac> and #/device/<id> ('router', or a neighbour's MAC)
   const isPanel = (x: string[]) => (x[0] === 'clients' && !!x[1] && !['offline', 'leases', 'groups'].includes(x[1])) || (x[0] === 'device' && !!x[1])
 
   // A panel route opens a side panel over the page you came from instead of switching pages.
@@ -62,6 +64,7 @@
   const closePanel = () => (panel ? history.go(-panel.depth) : (location.hash = home))
   const mac = $derived(route[0] === 'clients' && isPanel(route) ? route[1] : '')
   const device = $derived(route[0] === 'device' ? route[1] : '')
+  const nb = $derived(device && device !== 'router' ? findNeighbor(neighbors, device) : undefined)
   const r = $derived(isPanel(route) ? parse(panel?.page ?? home) : route) // the page shown (under the panel)
   const page = $derived(pages.find((p) => p.id === r[0]) ?? pages[0])
 
@@ -161,7 +164,7 @@
     {:else if page.id === 'hotspot'}<Hotspot tab={r[1] || 'portal'} />
     {:else if page.id === 'settings'}<Settings section={r[1] || 'wifi'} />{/if}
     {#each clients.filter((c) => c.mac === mac) as c (c.mac)}<ClientDrawer client={c} onclose={closePanel} />{/each}
-    {#if device === 'router'}<DeviceDrawer onclose={closePanel} />{/if}
+    {#if device === 'router'}<DeviceDrawer onclose={closePanel} />{:else if nb}{#key nb}<NeighborDrawer neighbor={nb} onclose={closePanel} />{/key}{/if}
     {/key}
   </main>
 </div>

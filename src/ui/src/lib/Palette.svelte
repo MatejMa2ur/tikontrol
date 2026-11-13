@@ -1,6 +1,7 @@
 <script lang="ts">
   // ⌘K / Ctrl+K: jump to any page, settings page, client, device or SSID
   import { clients, ssids, router, neighbors } from './data'
+  import { neighborHref } from './topology'
   import { displayName } from './live.svelte'
   import Icon from './Icon.svelte'
 
@@ -17,7 +18,7 @@
       ...settings.map(([id, label, icon]) => ({ label: `Settings › ${label}`, hint: 'Settings', icon, href: `#/settings/${id}`, extra: '' })),
       ...clients.map((c) => ({ label: displayName(c), hint: c.ip, icon: c.kind, href: `#/clients/${c.mac}`, extra: `${c.mac} ${c.name}` })),
       { label: router.identity, hint: `Device · ${router.board}`, icon: 'devices', href: '#/device/router', extra: router.model },
-      ...neighbors.map((n) => ({ label: String(n.identity ?? n['mac-address'] ?? ''), hint: `Device · ${n.address ?? ''}`, icon: 'devices', href: '#/devices/list', extra: `${n.board ?? ''} ${n['mac-address'] ?? ''}` })),
+      ...neighbors.map((n) => ({ label: String(n.identity ?? n['mac-address'] ?? ''), hint: `Device · ${n.address ?? ''}`, icon: 'devices', href: neighborHref(n) ?? '#/devices/list', extra: `${n.board ?? ''} ${n['mac-address'] ?? ''}` })),
       ...ssids.map((s) => ({ label: s.ssid, hint: `SSID · ${s.clients} clients`, icon: 'wifi', href: '#/settings/wifi', extra: '' })),
     ].filter((i) => !q || `${i.label} ${i.hint} ${i.extra}`.toLowerCase().includes(q.toLowerCase())).slice(0, 9),
   )

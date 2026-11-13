@@ -3,13 +3,15 @@
 // (RouterOS 7 writes "ether2,bridge": the first part is the port), and every wired client the
 // bridge host table puts on that same port sits behind it. Pure: tested in tests/topology.test.ts.
 
-export type NeighborRow = { interface?: string; address?: string; 'mac-address'?: string; identity?: string; platform?: string; board?: string; version?: string }
+export type NeighborRow = { interface?: string; address?: string; 'mac-address'?: string; identity?: string; platform?: string; board?: string; version?: string; uptime?: string; 'interface-name'?: string }
 export type Placeable = { mac: string; port?: string; wired: boolean }
 
 export type Downstream<C> = {
   id: string
   label: string
   sub: string
+  /** `#/device/<MAC>` side panel, only for a well-formed MAC (neighbour data is untrusted) */
+  href?: string
   port: string
   board?: string
   version?: string
@@ -31,7 +33,7 @@ export function groupByNeighbor<C extends Placeable>(clients: C[], neighbors: Ne
     if (!port || !mac || seen.has(mac)) continue
     seen.add(mac)
     const d: Downstream<C> = {
-      id: `nb:${mac}`, label: n.identity || n.board || n.platform || mac, sub: n.address ?? '',
+      id: `nb:${mac}`, label: n.identity || n.board || n.platform || mac, sub: n.address ?? '', href: neighborHref(n),
       port, board: n.board, version: n.version, devices: [], clients: [],
     }
     byPort.set(port, [...(byPort.get(port) ?? []), d])
@@ -50,6 +52,19 @@ export function groupByNeighbor<C extends Placeable>(clients: C[], neighbors: Ne
     devices.push(head)
   }
   return { devices, direct }
+}
+
+// A neighbour's side panel is keyed by its MAC: the hash is user-editable and the MAC comes from another device,
+// so both are checked against the strict form before use.
+const MAC = /^[0-9A-F]{2}(:[0-9A-F]{2}){5}$/i
+export const neighborHref = (n: NeighborRow) => (MAC.test(n['mac-address'] ?? '') ? `#/device/${norm(n['mac-address'])}` : undefined)
+export const findNeighbor = <N extends NeighborRow>(list: N[], id: string): N | undefined =>
+  MAC.test(id) ? list.find((n) => norm(n['mac-address']) === id.toUpperCase()) : undefined
+
+/** https WebFig link for a neighbour's announced IPv4 address; anything else gets no link */
+export function webfigUrl(address?: string): string | undefined {
+  const m = /^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/.exec(address ?? '')
+  return m && m.slice(1).every((o) => +o <= 255) ? `https://${m.slice(1).map(Number).join('.')}/` : undefined
 }
 
 /** IPv4 `ip` inside `cidr` ("192.0.2.1/24") */
