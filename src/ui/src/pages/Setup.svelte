@@ -147,6 +147,7 @@
     <div class="card" role="status" aria-live="polite">
       <h1>Reading your router…</h1>
       <p class="muted">Connected to <b>{me.router.host}</b>. The first read takes a few seconds on a small router; the dashboard opens by itself.</p>
+      {#if site}<button type="button" class="btn ghost" onclick={() => switchSite('')}>Back to the main router</button>{/if}
     </div>
   {:else}
     <form class="card wide" onsubmit={save}>
