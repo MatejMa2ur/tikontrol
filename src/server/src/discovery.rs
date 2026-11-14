@@ -14,7 +14,8 @@
 //! The optional DHCP listener (off by default) binds UDP 67 receive-only and keeps option 55/60/12/81 of
 //! broadcast DISCOVER/REQUEST packets per MAC. It never sends. Port 67 is privileged: as UID 65532 the bind
 //! only works where the network namespace allows it (Docker's own networks set
-//! `net.ipv4.ip_unprivileged_port_start=0`); otherwise the error is shown in Settings and nothing else changes.
+//! `net.ipv4.ip_unprivileged_port_start=0`) or where the image's permitted-only CAP_NET_BIND_SERVICE survives
+//! (`bind_cap`); otherwise the error is shown in Settings and nothing else changes.
 
 use crate::api::body;
 use crate::app::{lock, now, App};
@@ -509,6 +510,47 @@ fn wanted(app: &App) -> bool {
     sv.ident && sv.dhcp
 }
 
+/// Switches CAP_NET_BIND_SERVICE on or off in this thread's effective set, for the port 67 bind only. The image
+/// grants it as permitted-only (`setcap cap_net_bind_service=+p`), so a runtime that drops the capability still
+/// starts tikontrol; the bind then fails with the reason shown in Settings. No-op where it isn't permitted.
+#[cfg(target_os = "linux")]
+fn bind_cap(on: bool) {
+    #[repr(C)]
+    struct Header {
+        version: u32,
+        pid: i32,
+    }
+    #[repr(C)]
+    #[derive(Clone, Copy, Default)]
+    struct Data {
+        effective: u32,
+        permitted: u32,
+        inheritable: u32,
+    }
+    extern "C" {
+        fn capget(h: *mut Header, d: *mut Data) -> i32;
+        fn capset(h: *mut Header, d: *const Data) -> i32;
+    }
+    const CAP_NET_BIND_SERVICE: u32 = 1 << 10;
+    let mut h = Header { version: 0x2008_0522, pid: 0 }; // _LINUX_CAPABILITY_VERSION_3, this thread
+    let mut d = [Data::default(); 2];
+    // SAFETY: both pointers are valid for the duration of the call; version 3 uses two Data structs.
+    unsafe {
+        if capget(&mut h, d.as_mut_ptr()) != 0 || d[0].permitted & CAP_NET_BIND_SERVICE == 0 {
+            return;
+        }
+        if on {
+            d[0].effective |= CAP_NET_BIND_SERVICE
+        } else {
+            d[0].effective &= !CAP_NET_BIND_SERVICE
+        }
+        capset(&mut h, d.as_ptr());
+    }
+}
+
+#[cfg(not(target_os = "linux"))]
+fn bind_cap(_: bool) {}
+
 /// Binds UDP 67 while the setting is on and records what clients ask for. Receive-only: never sends.
 fn listen(app: &App) {
     loop {
@@ -519,7 +561,10 @@ fn listen(app: &App) {
             std::thread::sleep(Duration::from_secs(5));
             continue;
         }
-        let sock = match UdpSocket::bind("0.0.0.0:67") {
+        bind_cap(true);
+        let bound = UdpSocket::bind("0.0.0.0:67");
+        bind_cap(false);
+        let sock = match bound {
             Ok(s) => s,
             Err(e) => {
                 let mut g = lock(st());

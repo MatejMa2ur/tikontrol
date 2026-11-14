@@ -15,7 +15,7 @@ RUN rm -f src/lib/snapshot.json && npm run build
 FROM --platform=$BUILDPLATFORM rust:1-alpine AS server
 # prebuilt, checksum-pinned cargo-zigbuild on x86_64 build hosts (CI); compile it elsewhere
 ARG ZIGBUILD=0.24.1 ZIGBUILD_SHA256=f09b180a517af0e4dd4bffc921bb88e5ab705452a9dd948c61e489b3020c68c2
-RUN apk add --no-cache musl-dev zig xz && if [ "$(uname -m)" = x86_64 ]; then \
+RUN apk add --no-cache musl-dev zig xz libcap && if [ "$(uname -m)" = x86_64 ]; then \
       f=cargo-zigbuild-x86_64-unknown-linux-musl.tar.xz \
       && wget -q "https://github.com/rust-cross/cargo-zigbuild/releases/download/v$ZIGBUILD/$f" \
       && echo "$ZIGBUILD_SHA256  $f" | sha256sum -c - \
@@ -34,8 +34,11 @@ RUN case "$TARGETPLATFORM" in \
       *) T=x86_64-unknown-linux-musl ;; \
     esac && rustup target add $T && cargo zigbuild --release --locked --target $T \
     && cp target/$T/release/tikontrol /tikontrol \
+    && setcap cap_net_bind_service=+p /tikontrol \
     && mkdir -p /data && chown 65532:65532 /data
 
+# cap_net_bind_service is permitted only (no effective bit): tikontrol raises it just for the optional DHCP
+# listener's UDP 67 bind. Without the effective bit a runtime that drops the capability still starts the binary.
 FROM scratch
 COPY --from=server /tikontrol /tikontrol
 # tikontrol's own license, and the license texts of the third-party code inside the binary, travel with it
