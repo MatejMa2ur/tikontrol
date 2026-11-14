@@ -1,7 +1,7 @@
 // Run from the repo root: node --test tests/identify.test.ts
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
-import { catOf, fingerprintKey, guessDevice, guessModel, identOn, isPrivateMac, makerOf } from '../src/ui/src/lib/identify.ts'
+import { catOf, fingerprintKey, fromPrl, guessDevice, guessModel, identOn, isPrivateMac, makerOf } from '../src/ui/src/lib/identify.ts'
 
 test('maker from the MAC prefix, none for private addresses', () => {
   assert.equal(makerOf('00:03:93:12:34:56'), 'Apple')
@@ -63,4 +63,15 @@ test('fingerprint key: request list and vendor class first, else a host-name pat
   assert.equal(fingerprintKey({ hostname: 'cafe-office' }), '|||cafe-office') // words survive, only ids with a digit go
   assert.equal(fingerprintKey({ hostname: '12' }), undefined) // too weak to learn from
   assert.equal(fingerprintKey({ maker: 'Apple' }), undefined)
+})
+
+test('DHCP request lists, Apple services and the iMac boundary', () => {
+  const base = { priv: true, wired: false }
+  assert.equal(fromPrl('1,121,3,6,15,108,114,119,162,252')?.maker, 'Apple')
+  assert.equal(fromPrl('1,3,6,15,26,28,51,58,59,43')?.os, 'Android')
+  assert.equal(fromPrl('1,2,3'), undefined)
+  assert.deepEqual(guessDevice({ ...base, prl: '1,121,3,6,15,108,114,119,252' }), { kind: 'phone', type: 'Phone or laptop', os: 'iOS or macOS' })
+  assert.equal(guessDevice({ priv: false, wired: true, hostname: 'zimacube' })?.kind, 'server')
+  assert.equal(guessDevice({ priv: false, wired: true, hostname: 'sams-imac' })?.os, 'macOS')
+  assert.equal(guessModel([['mdns', 'service', '_apple-mobdev2._tcp']])?.os, 'iOS')
 })

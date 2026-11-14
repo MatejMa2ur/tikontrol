@@ -169,8 +169,8 @@
               <div class="row">
                 <div class="icon-box"><Icon name={iconOf(id)} /></div>
                 <div>
-                  <a class="name plain" href="#/clients/{c.mac}">{displayName(c)}</a>
-                  <div class="muted small">{subtitle(id, displayName(c))}</div>
+                  <a class="name plain" href="#/clients/{c.mac}">{displayName(id)}</a>
+                  <div class="muted small">{subtitle(id, displayName(id))}</div>
                 </div>
               </div>
             </td>

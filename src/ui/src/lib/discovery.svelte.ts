@@ -3,7 +3,7 @@
 // Every device value is untrusted text, shown as plain text only.
 import { api, preload } from './backend'
 import { clients, isBackend, raw, type Client, type Kind } from './data'
-import { fingerprintKey, guessDevice, guessModel, identOn } from './identify'
+import { fingerprintKey, fromPrl, guessDevice, guessModel, identOn } from './identify'
 import { prefs, displayName } from './live.svelte'
 
 export type Said = { ip: string; mac?: string; t: number; kv: [source: string, key: string, value: string][] }
@@ -48,9 +48,11 @@ function learned(c: Client) {
 /** The client with maker, model, type and kind improved by what the device said and what you taught, and where that came from. */
 export function identity(c: Client): Identity {
   const d = saidBy(c), f = heardFrom(c)
-  const maker = c.vendor ?? pick(d, ['manufacturer', 'usb_MFG', 'mfr'])
+  const maker = c.vendor ?? pick(d, ['manufacturer', 'usb_MFG', 'mfr']) ?? fromPrl(f?.prl)?.maker
   const model = pick(d, ['modelName', 'model', 'md', 'rpMd', 'am', 'ty', 'product', 'usb_MDL'])
-  const out: Identity = { ...c, vendor: maker, model }
+  // no lease comment or DHCP host name: the name the device announced (mDNS host, UPnP name, DHCP option 12/81)
+  const said = !c.hostname && c.name.endsWith(c.mac.slice(-5)) ? pick(d, ['host', 'friendlyName', 'fn']) || f?.host || f?.fqdn.split('.')[0] : undefined
+  const out: Identity = { ...c, vendor: maker, model, ...(said && { name: said }) }
   if (!disc.ident) return out
   const neighbor = Array.isArray(raw.neighbors) && raw.neighbors.some((n: any) => n?.['mac-address'] === c.mac)
   const own = (kind: string, source: Source, from?: string): Identity =>
@@ -64,7 +66,7 @@ export function identity(c: Client): Identity {
   // a device that said something, or a DHCP request the router doesn't keep: guess again with it
   if (d || (f && (!c.hostname || !c.classId))) {
     const hostname = [model, pick(d, ['friendlyName', 'fn']), c.hostname ?? (f?.host || f?.fqdn.split('.')[0])].filter(Boolean).join(' ')
-    const g = guessDevice({ hostname, classId: c.classId ?? (f?.class || undefined), maker, priv: c.privateMac, wired: c.wired })
+    const g = guessDevice({ hostname, classId: c.classId ?? (f?.class || undefined), prl: f?.prl, maker, priv: c.privateMac, wired: c.wired })
     return { ...out, type: g?.type || c.type, os: c.os ?? g?.os, kind: g && g.kind !== 'unknown' ? g.kind : c.kind, source: g || c.type ? 'name' : undefined }
   }
   return { ...out, source: c.type || c.os ? 'name' : undefined }

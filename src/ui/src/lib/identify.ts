@@ -28,7 +28,7 @@ const HOST: [RegExp, Guess][] = [
   [/apple-?tv/, g('speaker', 'TV', 'tvOS')],
   [/homepod/, g('speaker', 'Speaker', 'audioOS')],
   [/watch/, g('phone', 'Watch')],
-  [/macbook|imac|mac-?(mini|studio|pro)|\bmbp\b/, g('computer', 'Computer', 'macOS')],
+  [/macbook|\bimac|mac-?(mini|studio|pro)|\bmbp\b/, g('computer', 'Computer', 'macOS')],
   [/galaxy-?tab|\bsm-[tx]\d/, g('phone', 'Tablet', 'Android')],
   [/galaxy|\bsm-[a-z]\d|pixel|oneplus|redmi|poco|^android|huawei|honor|oppo|vivo|moto|xiaomi|nokia/, g('phone', 'Phone', 'Android')],
   [/^(desktop|laptop|win)-|windows/, g('computer', 'Computer', 'Windows')],
@@ -66,11 +66,20 @@ function osOfClass(cls: string): Guess | undefined {
   if (/linux/i.test(cls)) return g('unknown', '', 'Linux')
 }
 
+// DHCP option 55 (parameter request list) prefixes: the order is fixed per OS family, so it survives private MACs.
+// ponytail: three families only; add rows (or a public fingerprint list, see docs/research) when these fall short.
+const PRL: [RegExp, { maker?: string; os: string }][] = [
+  [/^1,121,3,6,15,(108,)?114,119,/, { maker: 'Apple', os: 'iOS or macOS' }],
+  [/^1,3,6,15,26,28,51,58,59/, { os: 'Android' }],
+  [/^1,3,6,15,31,33,43,44,46,47,119,121,249,252/, { os: 'Windows' }],
+]
+export const fromPrl = (prl?: string) => (prl ? PRL.find(([re]) => re.test(prl))?.[1] : undefined)
+
 /** Settings · System · Device identification. Off: no type/OS guesses, only what the router and the device report. */
 export const identOn = { v: true }
 
 export type Neighbor = { identity?: string; platform?: string; board?: string; version?: string }
-export function guessDevice(o: { hostname?: string; classId?: string; maker?: string; neighbor?: Neighbor; priv: boolean; wired: boolean }): Guess | undefined {
+export function guessDevice(o: { hostname?: string; classId?: string; prl?: string; maker?: string; neighbor?: Neighbor; priv: boolean; wired: boolean }): Guess | undefined {
   if (o.neighbor) {
     const n = o.neighbor
     return g('devices', n.board || 'Network gear', [n.platform, n.version].filter(Boolean).join(' ') || undefined)
@@ -79,7 +88,7 @@ export function guessDevice(o: { hostname?: string; classId?: string; maker?: st
   const h = (o.hostname ?? '').toLowerCase()
   const byClass = o.classId ? osOfClass(o.classId) : undefined
   const hit = HOST.find(([re]) => re.test(h))?.[1] ?? MAKER.find(([re]) => re.test(o.maker ?? ''))?.[1] ?? (byClass?.type ? byClass : undefined)
-  const os = byClass?.os ?? hit?.os ?? (o.maker === 'Apple' && hit?.kind === 'computer' ? 'macOS' : undefined)
+  const os = byClass?.os ?? hit?.os ?? fromPrl(o.prl)?.os ?? (o.maker === 'Apple' && hit?.kind === 'computer' ? 'macOS' : undefined)
   if (hit) return { ...hit, os }
   if (o.priv && !o.wired) return g('phone', 'Phone or laptop', os)
   if (os) return g('unknown', '', os)
@@ -110,6 +119,7 @@ const SERVICE: [string, Guess][] = [
   ['_ipp._tcp', g('iot', 'Printer')], ['_printer._tcp', g('iot', 'Printer')],
   ['_googlecast._tcp', g('speaker', 'Cast device')], ['_spotify-connect._tcp', g('speaker', 'Speaker')],
   ['_hap._tcp', g('iot', 'Smart home')],
+  ['_apple-mobdev2._tcp', g('phone', 'Phone or tablet', 'iOS')], ['_remotepairing._tcp', g('phone', 'Phone or tablet', 'iOS')],
 ]
 /** Kind from what a device said about itself: [source, key, value] rows from LAN discovery. */
 export function guessModel(kv: [string, string, string][]): Guess | undefined {

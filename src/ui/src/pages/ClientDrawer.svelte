@@ -136,9 +136,9 @@
           <!-- svelte-ignore a11y_autofocus -->
           <input type="text" bind:value={draft} autofocus onkeydown={(e) => e.key === 'Enter' && save()} onblur={save} placeholder={c.name} />
         {:else}
-          <button class="title" onclick={() => { draft = displayName(c); editing = true }} title="Rename">{displayName(c)} <Icon name="edit" size={13} /></button>
+          <button class="title" onclick={() => { draft = displayName(me); editing = true }} title="Rename">{displayName(me)} <Icon name="edit" size={13} /></button>
         {/if}
-        <div class="muted small">{subtitle(me, displayName(c))}</div>
+        <div class="muted small">{subtitle(me, displayName(me))}</div>
       </div>
     </div>
     <button class="btn ghost" onclick={close} aria-label="Close"><Icon name="close" /></button>
