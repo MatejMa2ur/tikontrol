@@ -52,8 +52,6 @@ Cross-cutting questions (dotted proplists, Safe apply under device mode or after
 
 - [ ] **Client list: name, IP, MAC, vendor, connection, uptime (leases + ARP verified on CHR; wireless rows need Wi-Fi hardware)** 🟨: wireless rows on a real AP
 - [ ] **Active LAN discovery, opt-in: mDNS/DNS-SD + SSDP/UPnP names and models ("What the device says"), improves maker and type** 🟨: mDNS/SSDP answers from real LAN devices (TV, printer, speaker)
-- [ ] **Model identifiers to kind: mDNS TXT `model`/`md`/`ty` and UPnP `modelName`/`deviceType` mapped with our own table (iPhone, AppleTV, AudioAccessory, Chromecast, printers…)** 🟨: real mDNS/SSDP answers
-- [ ] **Passive DHCP listener, opt-in: receive-only on UDP 67, options 55/60/12/81 per MAC, bounded parser with tests** 🟨: check the port-67 bind and broadcasts inside the RouterOS container (CHR) and on a Docker macvlan
 - [ ] **Wired: switch port · Wireless: SSID, band, signal, rate** 🟨: physical ports with clients and a real AP
 - [ ] **Live per-client throughput (wired via kid-control device counters)** 🟨: compare a wired client's rate with `/interface/monitor-traffic` on its port
 - [ ] **Per-client traffic history (hourly bytes, wired and Wi-Fi)** 🟨: a day of history on a real router with wired and Wi-Fi clients

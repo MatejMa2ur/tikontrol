@@ -184,7 +184,7 @@
       <dt>IP address</dt><dd class="mono">{c.ip} {c.fixedIp ? '(fixed)' : '(DHCP)'}</dd>
       <dt>MAC address</dt><dd class="mono">{c.mac}</dd>
       <dt>Maker</dt><dd>{me.vendor ?? (c.privateMac ? (c.wired ? 'Private address' : 'Private Wi-Fi address') : 'Unknown')}{#if c.privateMac && !me.vendor}<div class="tiny muted">The device made up this address for privacy, so it can't name its maker.</div>{/if}</dd>
-      {#if me.model}<dt>Model</dt><dd>{me.model}</dd>{/if}
+      {#if me.product || me.model}<dt>Model</dt><dd>{me.product ?? me.model}{#if me.product && me.model && me.product !== me.model} <span class="muted small mono">{me.model}</span>{/if}</dd>{/if}
       {#if me.type || me.os}<dt>Type</dt><dd>{[me.type, me.os].filter(Boolean).join(' · ')}{#if me.source}<div class="tiny muted">{SOURCES[me.source].label}{me.from ? ` for ${me.from}` : ''} · {SOURCES[me.source].confidence} confidence</div>{/if}</dd>{/if}
       {#if c.hostname && c.hostname !== displayName(c)}<dt>Hostname</dt><dd class="mono">{c.hostname}</dd>{/if}
       {#if c.classId}<dt>DHCP vendor class</dt><dd class="mono">{c.classId}</dd>{/if}

@@ -76,8 +76,11 @@ export const bps = (n: number) => {
   while (n >= 1000 && i < u.length - 1) { n /= 1000; i++ }
   return `${n < 10 && i ? n.toFixed(1) : Math.round(n)} ${u[i]}`
 }
-export const subtitle = (c: Client, shown: string) =>
-  [c.vendor ?? (c.privateMac ? (c.wired ? 'Private address' : 'Private Wi-Fi address') : c.hostname && c.hostname !== shown ? c.hostname : 'Unknown maker'), c.type].filter(Boolean).join(' · ')
+export const subtitle = (c: Client & { product?: string }, shown: string) => {
+  const maker = c.vendor ?? (c.privateMac ? (c.wired ? 'Private address' : 'Private Wi-Fi address') : c.hostname && c.hostname !== shown ? c.hostname : 'Unknown maker')
+  // "IKEA" + "IKEA TRÅDFRI" reads as just the product
+  return c.product?.toLowerCase().startsWith(maker.toLowerCase()) ? c.product : [maker, c.product ?? c.type].filter(Boolean).join(' · ')
+}
 
 export function signalQuality(dbm?: number) {
   if (dbm == null) return { label: 'Wired', level: 'ok' as const }

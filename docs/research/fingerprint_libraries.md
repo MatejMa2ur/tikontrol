@@ -128,3 +128,13 @@ crate `mac_oui` (non-standard licence), crate `oui` (stale `manuf` data).
   logos, consistent with the "Trademarks" section of the README.
 - **Privacy:** all of the above is offline and build-time. Nothing calls out at runtime; the Fingerbank API stays
   an opt-in idea only.
+
+## 5. Status
+
+- ✅ #1 and #2 adopted (2026-11-14): `src/scripts/devdata.py` extracts the Home Assistant DHCP, zeroconf, HomeKit and
+  SSDP matchers plus integration names and categories, and the Apple identifiers, into `src/ui/src/lib/devdata.ts`
+  (~50 KB, ~9 KB gzipped). `listed()` and `appleName()` in `identify.ts` use it; the source shows as "Public device
+  list" with medium confidence, below the user's choice, neighbours and announced models. Bare matches on protocols
+  many brands speak (`_companion-link`, `_hap`, `_ipp`, `_matter`, `_meshcop`, `_googlecast`, …) are dropped.
+  Licence texts are in `src/scripts/devdata/` and `THIRD_PARTY_LICENSES.txt`. Refresh by re-running the script with
+  newer commits.

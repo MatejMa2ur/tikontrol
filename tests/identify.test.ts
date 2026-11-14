@@ -1,7 +1,8 @@
 // Run from the repo root: node --test tests/identify.test.ts
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
-import { catOf, fingerprintKey, fromPrl, guessDevice, guessModel, identOn, isPrivateMac, makerOf } from '../src/ui/src/lib/identify.ts'
+import { DHCP } from '../src/ui/src/lib/devdata.ts'
+import { appleName, catOf, fingerprintKey, fromPrl, guessDevice, guessModel, identOn, isPrivateMac, listed, makerOf } from '../src/ui/src/lib/identify.ts'
 
 test('maker from the MAC prefix, none for private addresses', () => {
   assert.equal(makerOf('00:03:93:12:34:56'), 'Apple')
@@ -74,4 +75,16 @@ test('DHCP request lists, Apple services and the iMac boundary', () => {
   assert.equal(guessDevice({ priv: false, wired: true, hostname: 'zimacube' })?.kind, 'server')
   assert.equal(guessDevice({ priv: false, wired: true, hostname: 'sams-imac' })?.os, 'macOS')
   assert.equal(guessModel([['mdns', 'service', '_apple-mobdev2._tcp']])?.os, 'iOS')
+})
+
+test('public device lists: Apple names and Home Assistant matchers', () => {
+  assert.match(appleName('MacBookPro18,1') ?? '', /^MacBook Pro/)
+  assert.equal(appleName('toString'), undefined)
+  assert.equal(listed({ mac: '02:00:00:00:00:01', kv: [['mdns', 'service', '_sonos._tcp']] })?.name, 'Sonos')
+  assert.equal(listed({ mac: '02:00:00:00:00:01', kv: [['mdns', 'service', '_companion-link._tcp']] }), undefined)
+  assert.equal(listed({ mac: '02:00:00:00:00:01', host: 'nothing-here', kv: [] }), undefined)
+  // a DHCP rule with a host-name glob and a MAC prefix (both from the bundled list)
+  const [h, m, name] = DHCP.find(([host, mac]) => host !== '^.*$' && mac !== '^.*$' && /^\^[a-z]+\\-\.\*\$$/.test(host) && /^\^[0-9A-F]{6}\.\*\$$/.test(mac))!
+  const host = h.slice(1, -3).replace('\\-', '-') + 'abc', mac = m.slice(1, 7).match(/../g)!.join(':') + ':00:00:01'
+  assert.equal(listed({ mac, host, kv: [] })?.name, name)
 })

@@ -2,6 +2,7 @@
 // device type and OS from the DHCP hostname, the DHCP vendor class (option 60) and MNDP/LLDP/CDP neighbours.
 // Every input is untrusted text from the device: it is only matched here and shown as plain text.
 import { OUI } from './oui.ts'
+import { APPLE, DHCP, HOMEKIT, MDNS, SSDP } from './devdata.ts'
 
 export type Kind = 'phone' | 'computer' | 'server' | 'vm' | 'speaker' | 'iot' | 'devices' | 'unknown'
 export type Guess = { kind: Kind; type: string; os?: string }
@@ -125,6 +126,26 @@ const SERVICE: [string, Guess][] = [
 export function guessModel(kv: [string, string, string][]): Guess | undefined {
   for (const [, k, v] of kv) if (MODEL_KEYS.includes(k)) { const hit = MODEL.find(([re]) => re.test(v)); if (hit) return hit[1] }
   for (const [, k, v] of kv) if (k === 'service') { const hit = SERVICE.find(([t]) => v === t); if (hit) return hit[1] }
+}
+
+// ---------- public device lists (src/scripts/devdata.py: Home Assistant matchers, Apple model identifiers) ----------
+export type Listed = { name: string; brand?: string; kind?: Kind }
+const rxs = new Map<string, RegExp>()
+const rx = (s: string) => rxs.get(s) ?? rxs.set(s, new RegExp(s, 'i')).get(s)!
+const who = ([name, brand, kind]: string[]): Listed => ({ name, brand: brand || undefined, kind: (kind || undefined) as Kind | undefined })
+/** Apple product name for a model identifier ("MacBookPro18,1"), from the bundled list. */
+export const appleName = (id: string): string | undefined => (Object.hasOwn(APPLE, id) ? APPLE[id] : undefined)
+/** Brand/product from Home Assistant's discovery matchers: mDNS service + name/TXT, HomeKit model, UPnP fields,
+ *  DHCP host name + MAC prefix. First hit wins, most specific source first. Every input is untrusted device text. */
+export function listed(o: { host?: string; mac: string; kv: [string, string, string][] }): Listed | undefined {
+  const val = (k: string) => o.kv.filter(([, key]) => key === k).map(([, , v]) => v)
+  const services = val('service'), names = val('name'), md = val('md')
+  for (const [svc, name, props, ...w] of MDNS)
+    if (services.includes(svc) && (!name || names.some((n) => rx(name).test(n))) && props.every(([k, p]) => val(k).some((v) => rx(p).test(v)))) return who(w)
+  for (const [prefix, ...w] of HOMEKIT) if (md.some((m) => m.startsWith(prefix))) return who(w)
+  for (const [rules, ...w] of SSDP) if (rules.every(([k, p]) => val(k).some((v) => rx(p).test(v)))) return who(w)
+  const mac = o.mac.replace(/[^0-9A-Fa-f]/g, '').toUpperCase(), host = (o.host ?? '').toLowerCase()
+  for (const [h, m, ...w] of DHCP) if (rx(h).test(host) && rx(m).test(mac)) return who(w)
 }
 
 /** What makes two clients "the same kind of device" when the user picks an icon: the DHCP request list and

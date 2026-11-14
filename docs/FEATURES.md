@@ -12,7 +12,7 @@ Clean-room: we copy the behaviour, never the assets.
 **Backing:** `ROS` = RouterOS API on the router · `CMR` = MikroTik CMR server · `tik` = our own logic/DB · `✗` = nothing can back it
 
 <!-- progress:start -->
-**Progress:** 127 ✅ · 114 🟨 · 0 🎨 · 2 ⬜ · 9 ➖ (252 items, 52% done) · 114 🔌 waiting for a hardware test ([list](HARDWARE_TESTS.md))
+**Progress:** 130 ✅ · 112 🟨 · 0 🎨 · 2 ⬜ · 9 ➖ (253 items, 53% done) · 112 🔌 waiting for a hardware test ([list](HARDWARE_TESTS.md))
 <!-- progress:end -->
 
 ---
@@ -104,8 +104,9 @@ Clean-room: we copy the behaviour, never the assets.
 | Active LAN discovery, opt-in: mDNS/DNS-SD + SSDP/UPnP names and models ("What the device says"), improves maker and type 🔌 mDNS/SSDP answers from real LAN devices (TV, printer, speaker) | tik (server on the LAN, link-local multicast only) | 2 | 🟨 |
 | Device identification setting (Settings → System): guesses on by default; LAN queries and DHCP listening opt-in and labelled as listening on the network; off shows no guesses, refuses discovery and stops the listener. Source + confidence in the client panel | tik (`/api/v1/discovery`) | 2 | ✅ |
 | Learn from your icon choice: other clients with the same DHCP request list/vendor class or host-name pattern and maker get it as a suggestion ("Learned from your choice") | tik (prefs) | 2 | ✅ |
-| Model identifiers to kind: mDNS TXT `model`/`md`/`ty` and UPnP `modelName`/`deviceType` mapped with our own table (iPhone, AppleTV, AudioAccessory, Chromecast, printers…) 🔌 real mDNS/SSDP answers | tik | 2 | 🟨 |
-| Passive DHCP listener, opt-in: receive-only on UDP 67, options 55/60/12/81 per MAC, bounded parser with tests 🔌 check the port-67 bind and broadcasts inside the RouterOS container (CHR) and on a Docker macvlan | tik (server on the LAN) | 2 | 🟨 |
+| Model identifiers to kind: mDNS TXT `model`/`md`/`ty` and UPnP `modelName`/`deviceType` mapped with our own table (iPhone, AppleTV, AudioAccessory, Chromecast, printers…), Apple-only services (`_apple-mobdev2`, `_remotepairing`) and the name a device announces | tik | 2 | ✅ |
+| Public device lists, bundled at build time: Home Assistant discovery matchers (Apache-2.0) for brand/kind, Apple model identifiers (MIT) for product names (`src/scripts/devdata.py`) | tik (UI) | 2 | ✅ |
+| Passive DHCP listener, opt-in: receive-only on UDP 67, options 55/60/12/81 per MAC, bounded parser with tests; the image grants `cap_net_bind_service` permitted-only, raised just for the bind; option 55 prefixes give the OS family (Apple, Android, Windows) | tik (server on the LAN) | 2 | ✅ |
 | Wired: switch port · Wireless: SSID, band, signal, rate 🔌 physical ports with clients and a real AP | ROS bridge host + reg-table | 1 | 🟨 |
 | Live per-client throughput (wired via kid-control device counters) 🔌 compare a wired client's rate with `/interface/monitor-traffic` on its port | ROS kid-control / reg-table bytes | 1 | 🟨 |
 | Per-client traffic history (hourly bytes, wired and Wi-Fi) 🔌 a day of history on a real router with wired and Wi-Fi clients | tik SQLite | 2 | 🟨 |

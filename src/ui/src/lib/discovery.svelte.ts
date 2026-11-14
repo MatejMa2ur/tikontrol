@@ -3,7 +3,7 @@
 // Every device value is untrusted text, shown as plain text only.
 import { api, preload } from './backend'
 import { clients, isBackend, raw, type Client, type Kind } from './data'
-import { fingerprintKey, fromPrl, guessDevice, guessModel, identOn } from './identify'
+import { appleName, fingerprintKey, fromPrl, guessDevice, guessModel, identOn, listed } from './identify'
 import { prefs, displayName } from './live.svelte'
 
 export type Said = { ip: string; mac?: string; t: number; kv: [source: string, key: string, value: string][] }
@@ -19,16 +19,17 @@ export const saidBy = (c: { mac: string; ip: string }) => disc.devices.find((d) 
 export const heardFrom = (c: { mac: string }) => disc.fingerprints.find((f) => f.mac === c.mac.toUpperCase())
 const pick = (d: Said | undefined, keys: string[]) => d && keys.map((k) => d.kv.find(([, key]) => key === k)?.[2]).find(Boolean)
 
-export type Source = 'you' | 'neighbor' | 'model' | 'learned' | 'name'
+export type Source = 'you' | 'neighbor' | 'model' | 'learned' | 'list' | 'name'
 export const SOURCES: Record<Source, { label: string; confidence: 'high' | 'medium' | 'low' }> = {
   you: { label: 'Your choice', confidence: 'high' },
   neighbor: { label: 'Neighbour announcement (MNDP/LLDP)', confidence: 'high' },
   model: { label: 'Model the device announces (mDNS/SSDP)', confidence: 'high' },
   learned: { label: 'Learned from your choice', confidence: 'medium' },
+  list: { label: 'Public device list (Home Assistant discovery rules)', confidence: 'medium' },
   name: { label: 'Guess from host name, DHCP vendor class and maker', confidence: 'low' },
 }
 const LABEL: Record<string, string> = { phone: 'Phone', computer: 'Computer', server: 'Server', vm: 'Virtual machine', speaker: 'Media', iot: 'Smart home', devices: 'Network gear' }
-export type Identity = Client & { model?: string; source?: Source; from?: string }
+export type Identity = Client & { model?: string; product?: string; source?: Source; from?: string }
 
 const keyOf = (c: Client) => {
   const f = heardFrom(c)
@@ -45,8 +46,21 @@ function learned(c: Client) {
   }
 }
 
-/** The client with maker, model, type and kind improved by what the device said and what you taught, and where that came from. */
+/** The client with maker, model, type and kind improved by what the device said, the public device lists and what
+ *  you taught, and where that came from. */
 export function identity(c: Client): Identity {
+  const r = guessed(c)
+  if (!disc.ident) return r
+  const d = saidBy(c), f = heardFrom(c)
+  const product = d?.kv.filter(([, k]) => ['model', 'rpMd', 'am'].includes(k)).map(([, , v]) => appleName(v)).find(Boolean)
+  const hit = listed({ host: c.hostname ?? (f?.host || undefined), mac: c.mac, kv: d?.kv ?? [] })
+  const out: Identity = { ...r, vendor: r.vendor ?? hit?.brand ?? (product && 'Apple'), product: product ?? hit?.name }
+  // the list beats a host-name guess, never your choice, a neighbour or a model the device announced
+  if (hit?.kind && (!r.source || r.source === 'name')) return { ...out, kind: hit.kind, type: LABEL[hit.kind], source: 'list' }
+  return out
+}
+
+function guessed(c: Client): Identity {
   const d = saidBy(c), f = heardFrom(c)
   const maker = c.vendor ?? pick(d, ['manufacturer', 'usb_MFG', 'mfr']) ?? fromPrl(f?.prl)?.maker
   const model = pick(d, ['modelName', 'model', 'md', 'rpMd', 'am', 'ty', 'product', 'usb_MDL'])
