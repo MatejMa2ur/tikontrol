@@ -3,8 +3,9 @@
   // only the router it is connected to, so there are no actions here, just a link to the device's own WebFig.
   // Every field comes from that device: shown as plain text only, never put into a command.
   import { onMount } from 'svelte'
-  import { router, clients, neighbors, parseUptime, dur } from '../lib/data'
+  import { router, clients, neighbors, parseUptime, dur, isBackend } from '../lib/data'
   import { displayName } from '../lib/live.svelte'
+  import { api, switchSite, type Site } from '../lib/backend'
   import { groupByNeighbor, webfigUrl, type NeighborRow } from '../lib/topology'
   import Icon from '../lib/Icon.svelte'
 
@@ -27,6 +28,10 @@
   const via = $derived(head ? undefined : all.find((d) => d.devices.some((x) => x.id === `nb:${mac}`)))
   const up = $derived(parseUptime(n.uptime))
   const web = $derived(webfigUrl(n.address))
+  // the same box may be a site tikontrol reads (Settings → Control plane → Routers): then it opens there
+  let sites = $state<Site[]>([])
+  if (isBackend) api<Site[]>('/sites').then((r) => (sites = r)).catch(() => {})
+  const known = $derived(n.address ? sites.find((x) => x.id && x.host === n.address) : undefined)
   const swos = $derived(/^CSS/i.test(n.board ?? '')) // Cloud Smart Switches run SwOS, not RouterOS
 </script>
 
@@ -38,7 +43,12 @@
     <button class="btn ghost" onclick={close} aria-label="Close"><Icon name="close" /></button>
   </header>
 
-  <p class="note small"><Icon name="alert" size={14} /> <span>tikontrol manages <b>{router.identity}</b> only. This device is shown from what it announces over neighbour discovery (MNDP/LLDP); change it in its own WebFig or WinBox.</span></p>
+  {#if known}
+    <p class="note small"><Icon name="alert" size={14} /> <span>tikontrol reads this device as the site <b>{known.name}</b>.{#if known.error} Its last read failed: {known.error}{/if}</span></p>
+    <p><button class="btn primary" onclick={() => switchSite(known.id)}>Open {known.name}</button></p>
+  {:else}
+    <p class="note small"><Icon name="alert" size={14} /> <span>tikontrol manages <b>{router.identity}</b> only. This device is shown from what it announces over neighbour discovery (MNDP/LLDP); change it in its own WebFig or WinBox.</span></p>
+  {/if}
 
   <dl>
     <dt>Name</dt><dd>{n.identity || '—'}</dd>

@@ -31,11 +31,18 @@ fn valid_name(n: &str) -> bool {
 fn entry(a: &App, name: &str) -> Value {
     let cfg = a.router_cfg();
     let snap = a.snap.read().unwrap_or_else(|e| e.into_inner());
+    let d = snap.data.as_deref();
+    // the Devices list shows these for each router tikontrol reads; nothing else of the snapshot leaves here
+    let stats = d.map(|d| {
+        let r = &d["resource"];
+        let bound = d["leases"].as_array().map(|l| l.iter().filter(|x| x["status"] == "bound").count());
+        json!({ "cpu": r["cpu-load"], "memFree": r["free-memory"], "memTotal": r["total-memory"], "uptime": r["uptime"], "version": r["version"], "board": r["board-name"], "clients": bound })
+    });
     json!({
         "id": a.site, "name": name,
-        "identity": snap.data.as_deref().and_then(|d| d["identity"].as_str().map(str::to_string)),
+        "identity": d.and_then(|d| d["identity"].as_str().map(str::to_string)),
         "host": cfg.as_ref().map(|r| r.host.clone()), "mode": cfg.as_ref().map(|r| r.mode.clone()),
-        "error": snap.error,
+        "error": snap.error, "stats": stats,
     })
 }
 

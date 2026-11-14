@@ -29,7 +29,8 @@ export const session = { csrf: '', me: null as Me | null }
 /** The router this browser looks at ('' = the main one). Every request carries it; the server scopes
  *  live data, history and Safe apply to it. */
 export const site = localStorage.getItem('tik.site') ?? ''
-export type Site = { id: string; name: string; identity: string | null; host: string | null; mode: string | null; error: string | null }
+export type Site = { id: string; name: string; identity: string | null; host: string | null; mode: string | null; error: string | null
+  stats: { cpu?: number | string; memFree?: number; memTotal?: number; uptime?: string; version?: string; board?: string; clients?: number } | null }
 export function switchSite(id: string) {
   if (id) localStorage.setItem('tik.site', id)
   else localStorage.removeItem('tik.site')

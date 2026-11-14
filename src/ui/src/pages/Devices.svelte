@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { router, internet, clients, radios, raw, dur, isBackend, neighbors } from '../lib/data'
+  import { router, internet, clients, radios, raw, dur, isBackend, neighbors, parseUptime } from '../lib/data'
   import { api, switchSite, type Site } from '../lib/backend'
   import { live } from '../lib/live.svelte'
   import { review } from '../lib/apply.svelte'
@@ -87,11 +87,14 @@
           {#each strangers as n}
             {@const ver = (n.version ?? '').split(' ')[0]}
             {@const known = sites.find((x) => x.host === n.address)}
-            {@const href = neighborHref(n)}
-            <tr onclick={() => (href ? (location.hash = href) : known ? switchSite(known.id) : openGuide(n))}><td>{#if href}<a class="plain" {href} onclick={(e) => e.stopPropagation()}><b>{n.identity}</b></a>{:else}<b>{n.identity}</b>{/if}<div class="muted small">Not managed here</div></td><td>{n.board ?? n.platform}</td><td class="mono">{n.address}</td>
+            {@const href = known ? undefined : neighborHref(n)}<!-- a router tikontrol reads opens as its site, not the read-only neighbour panel -->
+            <tr onclick={() => (known ? switchSite(known.id) : href ? (location.hash = href) : openGuide(n))}><td>{#if href}<a class="plain" {href} onclick={(e) => e.stopPropagation()}><b>{n.identity}</b></a>{:else}<b>{n.identity}</b>{/if}<div class="muted small">{known ? `Site “${known.name}”` : 'Not managed here'}</div></td><td>{n.board ?? n.platform}</td><td class="mono">{n.address}</td>
               <td>{ver}{#if tooOld(ver)}<br /><span class="pill bad" title="tikontrol needs RouterOS 7">RouterOS 7 needed</span>{:else if ver && cmpVersion(ver, '7.18') < 0}<br /><span class="pill warn" title="tikontrol reads routers over the API from RouterOS 7.18">update to 7.18+</span>{/if}</td>
-              <td>—</td><td>—</td><td>—</td><td>—</td>
-              <td>{#if known}<span class="pill ok">In tikontrol</span> <button class="btn small" onclick={(e) => { e.stopPropagation(); switchSite(known.id) }} aria-label="Open {n.identity}">Open</button>
+              {#if known?.stats}{@const st = known.stats}{@const mem = st.memTotal ? Math.round((1 - (st.memFree ?? 0) / st.memTotal) * 100) : undefined}
+                <td>{dur(parseUptime(st.uptime))}</td><td>{st.cpu ?? '—'}{st.cpu != null ? '%' : ''}</td><td><span class={(mem ?? 0) > 75 ? 'warnc' : ''}>{mem ?? '—'}{mem != null ? '%' : ''}</span></td><td>{st.clients ?? '—'}</td>
+              {:else}<td>—</td><td>—</td><td>—</td><td>—</td>{/if}
+              <td>{#if known?.error}<span class="pill bad" title={known.error}>Can't read</span> <button class="btn small" onclick={(e) => { e.stopPropagation(); switchSite(known.id) }} aria-label="Open {n.identity}">Open</button><div class="err small">{known.error}</div>
+                {:else if known}<span class="pill ok">{known.stats ? 'In tikontrol' : 'Reading…'}</span> <button class="btn small" onclick={(e) => { e.stopPropagation(); switchSite(known.id) }} aria-label="Open {n.identity}">Open</button>
                 {:else}<span class="pill">Not adopted</span> <button class="btn small" onclick={(e) => { e.stopPropagation(); openGuide(n) }} aria-label="Set up {n.identity}">Set up</button>{/if}</td></tr>
           {/each}
         </tbody>
