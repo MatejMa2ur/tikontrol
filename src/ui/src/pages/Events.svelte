@@ -11,6 +11,8 @@
   import Field from '../lib/ui/Field.svelte'
   import Toggle from '../lib/ui/Toggle.svelte'
   import AlarmManager from '../lib/AlarmManager.svelte'
+  import { identity, type Identity } from '../lib/discovery.svelte'
+  import { displayName, iconOf } from '../lib/live.svelte'
 
   let { tab = 'events' }: { tab?: string } = $props()
 
@@ -30,10 +32,21 @@
   const sevs = [['all', 'Any level'], ['warning', 'Warnings'], ['error', 'Errors']] as const
   let sev = $state<(typeof sevs)[number][0]>(kept('events.sev', 'all'))
   const sevOk = (e: Event) => sev === 'all' || e.level === 'error' || (sev === 'warning' && e.level === 'warning')
-  const inCat = $derived(all.filter((e) => (cat === 'All' || e.cat === cat) && (!q || e.text.toLowerCase().includes(q.toLowerCase()))))
+  // each event about a client gets its icon, and its MAC or default name in the text becomes the name you see in Clients
+  const byMac = $derived(new Map(clients.map((c) => [c.mac.toUpperCase(), { raw: c.name, id: identity(c) }])))
+  const esc = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+  function named(text: string, raw: string, id: Identity) {
+    const n = displayName(id), t = text.replace(new RegExp(esc(id.mac), 'gi'), n)
+    return raw && raw !== n ? t.replaceAll(raw, n) : t
+  }
+  const view = $derived(all.map((e) => {
+    const who = macOf(e, clients), c = who ? byMac.get(who) : undefined
+    return { ...e, who, id: c?.id, text: c ? named(e.text, c.raw, c.id) : e.text }
+  }))
+  const inCat = $derived(view.filter((e) => (cat === 'All' || e.cat === cat) && (!q || e.text.toLowerCase().includes(q.toLowerCase()))))
   const rows = $derived(inCat.filter(sevOk))
   // repeats (one phone hopping bands all day) fold into one row with ×N; each row links to its client if it has one
-  const shown = $derived(fold(rows).map((e) => ({ ...e, who: macOf(e, clients) })))
+  const shown = $derived(fold(rows))
   const sevCount = (s: string) => inCat.filter((e) => s === 'all' || e.level === 'error' || (s === 'warning' && e.level === 'warning')).length
   const count = (c: string) => (c === 'All' ? all.length : all.filter((e) => e.cat === c).length)
   const lvl = (e: Event) => (e.level === 'error' ? 'bad' : e.level === 'warning' ? 'warn' : '')
@@ -87,7 +100,7 @@
         <thead><tr><th>Time</th><th>Category</th><th>Event</th></tr></thead>
         <tbody>
           {#each shown as e}<tr><td class="mono muted">{e.time.slice(5)}{#if e.n > 1}<div class="tiny">since {e.first.slice(5)}</div>{/if}</td><td><span class="pill {lvl(e)}">{e.cat}</span></td>
-            <td class="wrap">{#if e.who}<a href="#/clients/{e.who}">{e.text}</a>{:else}{e.text}{/if}{#if e.n > 1} <span class="pill" title="{e.n} times in a row">×{e.n}</span>{/if}</td></tr>
+            <td class="wrap">{#if e.who}<a class="who" href="#/clients/{e.who}">{#if e.id}<Icon name={iconOf(e.id)} size={14} />{/if}{e.text}</a>{:else}{e.text}{/if}{#if e.n > 1} <span class="pill" title="{e.n} times in a row">×{e.n}</span>{/if}</td></tr>
           {:else}<tr><td colspan="3" class="muted">No events match.</td></tr>{/each}
         </tbody>
       </table>
@@ -155,6 +168,8 @@
   .tiny { font-size: 11px; }
   .flush { padding: 4px 6px; overflow-x: auto; }
   .wrap { white-space: normal; }
+  .who { display: inline-flex; gap: 6px; align-items: center; }
+  .who :global(svg) { flex: none; }
   tbody tr { cursor: default; }
   tbody tr:hover { background: none; }
   .alarm { padding: 8px 0; border-top: 1px solid var(--line); gap: 10px; }
