@@ -9,7 +9,7 @@ Scope: `ClientDrawer.svelte`, `DeviceDrawer.svelte`, `NeighborDrawer.svelte` and
 `Clients.svelte` and `Devices.svelte`. App-wide navigation, page names and duplicate pages belong to
 `docs/research/ia_audit.md`. Multi-device and switch support belongs to `docs/research/multi_device.md`. This note
 only covers what goes inside a panel and keeps the device panel shell generic, so that a CMR device or a second
-router can fill it later. UniFi is used here only as the comparison (`docs/research/unifi_study.md`, section 3 notes
+router can fill it later. UniFi is used here only as the comparison (a local study kept out of the repo; its notes
 in the study's scratchpad). Nothing was copied: not its layout, icons, text or images.
 
 Method: we read the three drawers and the two list pages and ran the UI on `sample.json` (fictional data, no
@@ -62,7 +62,7 @@ like a different product from the router panel.
 7. **Device, the header has no status or numbers.** "Is it fine?" is answered only by reading facts and the issue
    list. Firmware appears twice (as an issue and as a fact row), and Model and Hardware overlap.
 8. **Device, the Ports tab doesn't fit a phone** (WCAG 1.4.10 reflow).
-9. **Neighbour and router panels have different shapes**, even though `unifi_study.md` P3 asks for one panel for
+9. **Neighbour and router panels have different shapes**, even though the local UniFi study asks for one panel for
    every device.
 10. **Tabs use different markup.** The device tabs have `role="tab"` but no arrow keys or `aria-controls`. The client
     tabs are plain buttons.
@@ -165,7 +165,7 @@ only when ≥ 75 °C, and it is already an issue). Neighbour: **Port**, **Client
 **Toolbar:** router: `Locate` · `Restart…` · `More ▾` (Use as a switch / Leave switch mode, Updates, Show in
 RouterOS). Locate keeps its port picker, which moves into a small popover from the button. Neighbour: `Open WebFig`
 (when there is an address) · `Set up…` (the existing guide, moved from the Devices modal into the panel, as P3 in
-`unifi_study.md` suggests).
+the local UniFi study suggests).
 
 **Tabs: Overview · Ports · Settings** for the router. Ports stays a tab: it is a different kind of content (a table)
 and the owner uses it. **Neighbour: no tabs**, just Overview.

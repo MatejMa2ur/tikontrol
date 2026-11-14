@@ -5,7 +5,7 @@ web protocol does it. There is no single protocol. UniFi combines several weak s
 fingerprint database matched on the gateway, with icons fetched from Ubiquiti's servers. This note covers what UniFi does, what tikontrol
 already does, and what RouterOS 7 lets us add without outbound calls.
 
-Sources: the stopped local `unifi-study` container (UniFi Network Application 10.6, see `unifi_study.md`). We listed
+Sources: the stopped local `unifi-study` container (UniFi Network Application 10.6, notes kept locally). We listed
 only file names and string constants of its jars. No code, data or icons were copied. The rest is public
 docs and forums, linked inline.
 

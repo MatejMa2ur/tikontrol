@@ -4,3 +4,4 @@ src/ui/src/lib/snapshot.json
 .DS_Store
 .claude/
 __pycache__/
+docs/research/unifi_study.md
