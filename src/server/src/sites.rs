@@ -35,8 +35,7 @@ fn entry(a: &App, name: &str) -> Value {
     // the Devices list shows these for each router tikontrol reads; nothing else of the snapshot leaves here
     let stats = d.map(|d| {
         let r = &d["resource"];
-        let bound = d["leases"].as_array().map(|l| l.iter().filter(|x| x["status"] == "bound").count());
-        json!({ "cpu": r["cpu-load"], "memFree": r["free-memory"], "memTotal": r["total-memory"], "uptime": r["uptime"], "version": r["version"], "board": r["board-name"], "clients": bound })
+        json!({ "cpu": r["cpu-load"], "memFree": r["free-memory"], "memTotal": r["total-memory"], "uptime": r["uptime"], "version": r["version"], "board": r["board-name"], "clients": client_count(d) })
     });
     json!({
         "id": a.site, "name": name,
@@ -44,6 +43,30 @@ fn entry(a: &App, name: &str) -> Value {
         "host": cfg.as_ref().map(|r| r.host.clone()), "mode": cfg.as_ref().map(|r| r.mode.clone()),
         "error": snap.error, "stats": stats,
     })
+}
+
+/// Clients of a site for the Devices list. A router counts its bound leases; a switch or AP (no DHCP
+/// server, default route to another box) hands out none, so it counts the MACs learned on its bridge
+/// ports, minus the uplink port where its gateway sits (that port carries the rest of the network).
+/// ponytail: a lighter version of the UI's uplinkOf (lib/topology.ts); share it if the two drift.
+fn client_count(d: &Value) -> usize {
+    let arr = |k: &str| d[k].as_array().cloned().unwrap_or_default();
+    let on = |x: &Value| x["disabled"] != true && x["disabled"] != "true";
+    if arr("dhcpServers").iter().any(on) {
+        return arr("leases").iter().filter(|x| x["status"] == "bound").count();
+    }
+    let gw = arr("routes").into_iter().find(|r| r["dst-address"] == "0.0.0.0/0" && on(r) && r["active"] != false && r["active"] != "false")
+        .and_then(|r| r["gateway"].as_str().map(|g| g.split('%').next().unwrap_or(g).to_string()));
+    let mac_of = |ip: &str| arr("arp").into_iter().find(|a| a["address"] == ip).and_then(|a| a["mac-address"].as_str().map(str::to_uppercase));
+    let hosts: Vec<Value> = arr("bridgeHosts").into_iter().filter(|h| h["local"] != true && h["local"] != "true").collect();
+    let up = gw.as_deref().and_then(|g| {
+        let heard = arr("neighbors").into_iter().find(|n| n["address"] == g).and_then(|n| n["interface"].as_str().map(|i| i.split(',').next().unwrap_or(i).to_string()));
+        heard.or_else(|| mac_of(g).and_then(|m| hosts.iter().find(|h| h["mac-address"].as_str().map(str::to_uppercase) == Some(m.clone())).and_then(|h| h["on-interface"].as_str().map(str::to_string))))
+    });
+    let mut macs: Vec<&str> = hosts.iter().filter(|h| up.is_none() || h["on-interface"].as_str() != up.as_deref()).filter_map(|h| h["mac-address"].as_str()).collect();
+    macs.sort_unstable();
+    macs.dedup();
+    macs.len()
 }
 
 pub fn route(app: &Arc<App>, req: &Req, s: &Session) -> Resp {
@@ -102,6 +125,24 @@ pub fn route(app: &Arc<App>, req: &Req, s: &Session) -> Resp {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn switch_counts_bridge_hosts_off_its_uplink() {
+        let d = serde_json::json!({
+            "routes": [{ "dst-address": "0.0.0.0/0", "gateway": "10.0.0.1", "active": true }],
+            "neighbors": [{ "address": "10.0.0.1", "interface": "ether1,bridge" }],
+            "bridgeHosts": [
+                { "mac-address": "02:00:00:00:00:01", "on-interface": "ether1", "local": false },
+                { "mac-address": "02:00:00:00:00:02", "on-interface": "ether2", "local": false },
+                { "mac-address": "02:00:00:00:00:03", "on-interface": "ether3", "local": false },
+                { "mac-address": "02:00:00:00:00:03", "on-interface": "ether3", "local": false },
+                { "mac-address": "02:00:00:00:00:04", "on-interface": "bridge", "local": true }
+            ]
+        });
+        assert_eq!(super::client_count(&d), 2);
+        let router = serde_json::json!({ "dhcpServers": [{ "disabled": false }], "leases": [{ "status": "bound" }, { "status": "waiting" }] });
+        assert_eq!(super::client_count(&router), 1);
+    }
+
     use crate::api::handle;
     use crate::api::tests::{admin_session, new_app, req, with_session};
     use crate::app::lock;
