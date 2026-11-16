@@ -75,7 +75,7 @@ Clean-room: we copy the behaviour, never the assets.
 ## UniFi Devices / Topology
 | Feature | Backing | Phase | Status |
 |---|---|---|---|
-| Device list (name, model, IP, version, uptime, state; other devices' stats need the CMR server) (this router and CMR-managed devices verified on CHR) | ROS this router + `/ip/neighbor` · CMR `/cmr/device` | 3 | ✅ |
+| Device list (name, model, IP, version, uptime, state; other devices' stats need the CMR server) (this router and CMR-managed devices verified on CHR); a neighbour that is also a tikontrol site shows that site's uptime, CPU, memory and clients (a switch counts the hosts on its ports off the uplink, server test), opens the site on click, and shows "Can't read" with the error when its read fails (verified with a real switch site) | ROS this router + `/ip/neighbor` · CMR `/cmr/device` | 3 | ✅ |
 | Device adoption (one-click; needs CMR server) | CMR pairing | 3 | ✅ |
 | Guided setup for a newly found MikroTik (update, API-SSL certificate, add as router; RouterOS 6/SwOS get a "RouterOS 7 needed" note) (API-SSL commands run on a fresh CHR, then added as a router; the firmware step needs a RouterBOARD) | tik + `policy::api_ssl_commands` · ROS `/ip/neighbor` | 3 | ✅ |
 | Auto-detect make, model, CPU, memory and WiFi capabilities | ROS `/system/resource`, `/system/routerboard` | 1 | ✅ |
@@ -85,7 +85,7 @@ Clean-room: we copy the behaviour, never the assets.
 | Firmware update per device 🔌 CMR upgrade of a real managed device | CMR / ROS | 3 | 🟨 |
 | Scheduled / rolling fleet updates (needs CMR server) | CMR upgrade rules | 3 | ✅ |
 | Topology map (auto layout, wired + wireless links; MNDP/LLDP neighbours as intermediate switch/AP nodes with their port's clients) 🔌 check with a real switch and AP behind the router, including a daisy chain | CMR layout · ROS neighbor + bridge host | 2 | 🟨 |
-| Neighbour device panel (read-only `#/device/<MAC>` from Topology, Devices and search: name, model, IP, MAC, version, port, uptime, clients behind it, https WebFig link; no actions) 🔌 check with a real switch behind the router | ROS `/ip/neighbor` + bridge host | 3 | 🟨 |
+| Neighbour device panel (read-only `#/device/<MAC>` from Topology, Devices and search: name, model, IP, MAC, version, port, uptime, clients behind it, https WebFig link; no actions; a device that is also a tikontrol site gets "Open <site>" instead) 🔌 check with a real switch behind the router | ROS `/ip/neighbor` + bridge host | 3 | 🟨 |
 | Switch/AP site: role detected read-only (default route into its own subnet, no DHCP server, no NAT), its upstream router drawn above it, bridge hosts off the uplink as its clients; never an invented Modem or "undefined" 🔌 check with a real switch behind the router | tik · ROS route, dhcp-server, nat, bridge host | 2 | 🟨 |
 | Adopted devices: switches/APs/caps inside one site, one merged topology and client list, clients named from the gateway (plan: docs/research/multi_device.md) | tik (sites with a parent) | 3 | ⬜ |
 | Topology Spotlight (highlight/filter) 🔌 check on a real multi-device topology | tik | 3 | 🟨 |
@@ -181,7 +181,7 @@ Clean-room: we copy the behaviour, never the assets.
 | Categories: clients, devices, admin activity, security, updates | tik (topic mapping) | 1 | ✅ |
 | Derived events (client joined/left, WAN flap) (shown from the server; joins need Wi-Fi clients, a WAN flap a real WAN) 🔌 real Wi-Fi joins and a real WAN flap | tik | 2 | 🟨 |
 | Search / filter / export CSV | tik | 2 | ✅ |
-| Severity filter, repeats folded into one row (×N), rows link to their client (`lib/events.ts`, tested) | tik | 2 | ✅ |
+| Severity filter, repeats folded into one row (×N), rows link to their client and show its icon and name instead of its MAC (`lib/events.ts`, tested) | tik | 2 | ✅ |
 | Sign-in audit: every sign-in, failed sign-in and lockout as an Admin event (server test) | tik | 2 | ✅ |
 | Remote syslog / SIEM forwarding | ROS logging action | 3 | ✅ |
 
